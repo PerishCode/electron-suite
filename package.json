@@ -1,0 +1,22 @@
+{
+  "name": "electron-suite",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "~24",
+    "pnpm": ">=10.33.2"
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.mjs",
+    "prepare": "git config core.hooksPath .githooks",
+    "build": "pnpm -r --if-present --workspace-concurrency=4 run build",
+    "guard": "node scripts/guard.mjs",
+    "test": "pnpm -r --if-present --workspace-concurrency=4 run test",
+    "typecheck": "pnpm -r --if-present --workspace-concurrency=4 run typecheck"
+  },
+  "devDependencies": {
+    "@perish/config": "workspace:*",
+    "@perish/guard": "workspace:*",
+    "@perish/release": "workspace:*"
+  }
+}

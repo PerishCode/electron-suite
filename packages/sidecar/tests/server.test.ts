@@ -1,0 +1,149 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createConnection } from "node:net";
+
+import { afterEach, describe, expect, it } from "vitest";
+
+import { channel, digest, namespace } from "@perish/protocol";
+
+import { Client, serve, type Service, type Spec } from "@";
+
+const roots: string[] = [];
+const services: Service[] = [];
+const children: ChildProcess[] = [];
+
+function spec(name: string): Spec {
+  return {
+    args: ["-e", "process.stdout.write('ready\\n');setInterval(()=>{},1000)"],
+    channel: channel("stable"),
+    command: process.execPath,
+    generation: digest(name),
+    grace: 200,
+    namespace: namespace("main"),
+    ready: "ready",
+    slot: "daemon",
+    timeout: 500,
+  };
+}
+
+async function socket(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "sidecar-"));
+  roots.push(root);
+  return join(root, "socket");
+}
+
+function ready(child: ChildProcess): Promise<void> {
+  return new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.stdout?.on("data", (chunk: Buffer) => {
+      if (chunk.toString("utf8").includes("ready")) resolve();
+    });
+  });
+}
+
+function exit(child: ChildProcess): Promise<void> {
+  return new Promise((resolve) => child.once("exit", () => resolve()));
+}
+
+function raw(endpoint: string, input: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection(endpoint);
+    let output = "";
+
+    socket.once("connect", () => socket.write(input));
+    socket.once("error", reject);
+    socket.on("data", (chunk: Buffer) => {
+      output += chunk.toString("utf8");
+      if (output.includes("\n")) {
+        socket.destroy();
+        resolve(output);
+      }
+    });
+  });
+}
+
+afterEach(async () => {
+  await Promise.all(services.splice(0).map((service) => service.close()));
+
+  for (const child of children.splice(0)) {
+    if (child.exitCode === null) child.kill("SIGTERM");
+    if (child.exitCode === null) await exit(child);
+  }
+
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
+});
+
+describe("server", () => {
+  it("isolates management authority from attachment capabilities", async () => {
+    const endpoint = await socket();
+    const service = await serve(endpoint);
+    services.push(service);
+    const client = new Client(endpoint, service.authority);
+    const first = await client.start(spec("ipc"));
+    const second = await client.attach(first);
+
+    expect(second.capability).not.toBe(first.capability);
+    await expect(new Client(endpoint, "forged").inspect()).rejects.toThrow("authority");
+    expect(await client.release(first)).toMatchObject({ status: "retained" });
+    await expect(client.attach(first)).rejects.toThrow("capability");
+    expect(await client.release(second)).toMatchObject({ status: "stopped" });
+  });
+
+  it("contains malformed requests", async () => {
+    const endpoint = await socket();
+    const service = await serve(endpoint);
+    services.push(service);
+
+    expect(JSON.parse(await raw(endpoint, "{broken}\n"))).toMatchObject({ ok: false });
+    expect(await new Client(endpoint, service.authority).inspect()).toEqual([]);
+  });
+
+  it("serves namespace resource truth over the management channel", async () => {
+    const endpoint = await socket();
+    const service = await serve(endpoint);
+    services.push(service);
+    const client = new Client(endpoint, service.authority);
+    const scope = namespace("main");
+    const grant = await client.grant(scope, {
+      kind: "staging",
+      name: "capsule",
+      owner: "attempt",
+      scope: "attempt",
+    });
+
+    expect((await client.resources(scope)).grants).toEqual([grant]);
+    await expect(new Client(endpoint, "forged").resources(scope)).rejects.toThrow("authority");
+    expect((await client.revoke(scope, grant.lease)).grants).toEqual([]);
+  });
+
+  it.runIf(process.platform !== "win32")("runs as an independent supervisor", async () => {
+    const endpoint = await socket();
+    const authority = randomBytes(32).toString("base64url");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const main = join(here, "../dist/main.mjs");
+    const child = spawn(process.execPath, [main], {
+      env: {
+        ...process.env,
+        PERISH_SIDECAR_AUTHORITY: authority,
+        PERISH_SIDECAR_ENDPOINT: endpoint,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    children.push(child);
+    await ready(child);
+    const mode = (await stat(endpoint)).mode & 0o777;
+    const client = new Client(endpoint, authority);
+    const lease = await client.start(spec("process"));
+
+    expect(mode).toBe(0o600);
+    expect(lease.pid).not.toBe(child.pid);
+    expect(await client.inspect()).toHaveLength(1);
+    child.kill("SIGTERM");
+    await exit(child);
+    expect(() => process.kill(lease.pid, 0)).toThrow();
+  });
+});
