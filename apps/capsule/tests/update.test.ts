@@ -1,20 +1,17 @@
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   channel,
-  digest,
   gates,
-  identify,
   namespace,
-  type Artifact,
-  type Envelope,
-  type Generation,
-  type Kind,
+  type Channel,
 } from "@perish/protocol";
-import { Authority, Feed, serve, type Asset, type Service } from "@perish/publish";
+import { Authority, Feed, serve, type Service } from "@perish/publish";
+import { compose, resolve } from "@perish/release";
 import { Client, serve as sidecar, type Service as Sidecar } from "@perish/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -24,25 +21,14 @@ const roots: string[] = [];
 const services: Service[] = [];
 const sidecars: Sidecar[] = [];
 
-function artifact(kind: Kind, slot: string, bytes: string): Artifact {
-  return { bytes: Buffer.byteLength(bytes), digest: digest(bytes), kind, slot };
-}
-
-function fixture(seed: string): { assets: Asset[]; envelope: Envelope } {
-  const values = ["capsule", "daemon", "web", "blob"].map((kind) => `${seed}${kind}`);
-  const generation: Generation = {
-    blobs: [artifact("blob", "model", values[3]!)],
-    capsule: artifact("capsule", "main", values[0]!),
+async function product(lane: Channel, version: string, model: string) {
+  return compose(resolve({}, { channel: lane, version }), {
+    blobs: [{ path: model, slot: "model" }],
+    capsule: dirname(fileURLToPath(import.meta.resolve("@perish/capsule"))),
     carrier: 1,
-    daemon: artifact("daemon", "main", values[1]!),
-    schema: 1,
-    web: artifact("web", "main", values[2]!),
-  };
-  return {
-    assets: [generation.capsule, generation.daemon, generation.web, generation.blobs[0]!]
-      .map((item, index) => ({ artifact: item, bytes: values[index]! })),
-    envelope: { digest: identify(generation), generation, schema: 1 },
-  };
+    daemon: dirname(fileURLToPath(import.meta.resolve("@perish/daemon"))),
+    web: dirname(fileURLToPath(import.meta.resolve("@perish/web"))),
+  });
 }
 
 async function commit(capsule: Capsule, feed: Feed): Promise<void> {
@@ -83,8 +69,10 @@ describe("update", () => {
     const feed = new Feed(port.value, publickey);
     const stable = channel("stable");
     const beta = channel("beta");
-    const first = fixture("first");
-    const preview = fixture("preview");
+    const model = join(root, "model.bin");
+    await writeFile(model, "model");
+    const first = await product(stable, "1.0.0", model);
+    const preview = await product(beta, "1.0.0-beta.1", model);
     await authority.publish(stable, 0, first.envelope, first.assets);
     await authority.publish(beta, 0, preview.envelope, preview.assets);
     const primary = new Capsule(client, namespace("primary"), stable);
@@ -96,7 +84,7 @@ describe("update", () => {
     expect((await client.binding(namespace("secondary"), beta)).state.current).toBe(preview.envelope.digest);
     expect(await primary.update(feed)).toBeUndefined();
 
-    const second = fixture("second");
+    const second = await product(stable, "2.0.0", model);
     await authority.publish(stable, 1, second.envelope, second.assets);
     const forged = generateKeyPairSync("ed25519").publicKey.export({ format: "pem", type: "spki" }).toString();
     await expect(primary.update(new Feed(port.value, forged))).rejects.toThrow("trust");
