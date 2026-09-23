@@ -143,6 +143,31 @@ describe("server", () => {
     expect(await client.retire(first)).toBe(false);
   });
 
+  it("serializes binding transitions behind management authority", async () => {
+    const endpoint = await socket();
+    const service = await serve(endpoint);
+    services.push(service);
+    const client = new Client(endpoint, service.authority);
+    const scope = namespace("main");
+    const lane = channel("beta");
+    const target = digest("generation");
+    const initial = await client.binding(scope, lane);
+    const changed = await client.transit(scope, lane, initial.revision, {
+      mode: "update",
+      target,
+      type: "arm",
+    });
+    const stale = await client.transit(scope, lane, initial.revision, {
+      nonce: "attempt",
+      target,
+      type: "begin",
+    });
+
+    expect(changed).toMatchObject({ changed: true, journal: { revision: 1 }, ok: true });
+    expect(stale).toMatchObject({ fault: "revision", journal: { revision: 1 }, ok: false });
+    await expect(new Client(endpoint, "forged").binding(scope, lane)).rejects.toThrow("authority");
+  });
+
   it.runIf(process.platform !== "win32")("runs as an independent supervisor", async () => {
     const endpoint = await socket();
     const authority = randomBytes(32).toString("base64url");

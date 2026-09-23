@@ -1,4 +1,9 @@
 export { Client } from "./client.js";
+export { Bindings } from "./binding.js";
+export type {
+  Change,
+  Journal,
+} from "./binding.js";
 export { Sidecar } from "./host.js";
 export type {
   Lease,

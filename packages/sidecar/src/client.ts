@@ -2,6 +2,8 @@ import { createConnection } from "node:net";
 
 import type {
   Capability,
+  Channel,
+  Event,
   Grant,
   Permit,
   Namespace,
@@ -10,6 +12,7 @@ import type {
 } from "@perish/protocol";
 
 import type { Lease, Release, Snapshot, Spec } from "./host.js";
+import type { Change, Journal } from "./binding.js";
 import { encode, type Request, type Response } from "./wire.js";
 
 const limit = 64 * 1024;
@@ -88,6 +91,31 @@ export class Client {
       authority: this.authority,
       type: "inspect",
     }, this.timeout) as Snapshot[];
+  }
+
+  async binding(namespace: Namespace, channel: Channel): Promise<Journal> {
+    return await call(this.endpoint, {
+      authority: this.authority,
+      channel,
+      namespace,
+      type: "binding",
+    }, this.timeout) as Journal;
+  }
+
+  async transit(
+    namespace: Namespace,
+    channel: Channel,
+    revision: number,
+    event: Event,
+  ): Promise<Change> {
+    return await call(this.endpoint, {
+      authority: this.authority,
+      channel,
+      event,
+      namespace,
+      revision,
+      type: "transit",
+    }, this.timeout) as Change;
   }
 
   async issue(permit: Permit): Promise<Capability> {

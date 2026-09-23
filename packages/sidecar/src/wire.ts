@@ -2,21 +2,36 @@ import {
   channel,
   namespace,
   resources,
+  gates,
   valid,
   type Capability,
+  type Channel,
+  type Event,
+  type Gate,
   type Grant,
   type Permit,
+  type Namespace,
   type Registry,
   type Request as ResourceRequest,
 } from "@perish/protocol";
 
 import type { Lease, Release, Snapshot, Spec } from "./host.js";
+import type { Change, Journal } from "./binding.js";
 
 export type Request =
   | { authority: string; spec: Spec; type: "start" }
   | { lease: Lease; type: "attach" }
   | { lease: Lease; type: "release" }
   | { authority: string; type: "inspect" }
+  | { authority: string; channel: Channel; namespace: Namespace; type: "binding" }
+  | {
+      authority: string;
+      channel: Channel;
+      event: Event;
+      namespace: Namespace;
+      revision: number;
+      type: "transit";
+    }
   | { authority: string; permit: Permit; type: "issue" }
   | { authority: string; capability: Capability; type: "retire" }
   | { authority: string; namespace: string; resource: ResourceRequest; type: "grant" }
@@ -25,7 +40,7 @@ export type Request =
   | { authority: string; namespace: string; type: "resources" };
 
 export type Response =
-  | { ok: true; value: boolean | Capability | Grant | Lease | Registry | Release | Snapshot[] }
+  | { ok: true; value: boolean | Capability | Change | Grant | Journal | Lease | Registry | Release | Snapshot[] }
   | { error: string; ok: false };
 
 function record(value: unknown, name: string): Record<string, unknown> {
@@ -143,6 +158,29 @@ function capability(value: unknown): Capability {
   };
 }
 
+function event(value: unknown): Event {
+  const data = record(value, "event");
+  const type = text(data.type, "event.type");
+  const identity = text(data.target, "event.target");
+  if (!valid(identity)) throw new TypeError("event.target is invalid");
+  if (type === "arm") {
+    if (data.mode !== "update" && data.mode !== "recovery") throw new TypeError("event.mode is invalid");
+    return { mode: data.mode, target: identity, type };
+  }
+  if (type === "recover") return { target: identity, type };
+  const nonce = text(data.nonce, "event.nonce");
+  if (type === "begin" || type === "commit") return { nonce, target: identity, type };
+  if (type === "fail") {
+    return { error: text(data.error, "event.error"), nonce, target: identity, type };
+  }
+  if (type === "ready") {
+    const gate = text(data.gate, "event.gate");
+    if (!gates.includes(gate as Gate)) throw new TypeError("event.gate is invalid");
+    return { gate: gate as Gate, nonce, target: identity, type };
+  }
+  throw new TypeError("event.type is invalid");
+}
+
 export function decode(value: string): Request {
   const data = record(JSON.parse(value), "request");
 
@@ -156,6 +194,26 @@ export function decode(value: string): Request {
 
   if (data.type === "inspect") {
     return { authority: text(data.authority, "authority"), type: "inspect" };
+  }
+
+  if (data.type === "binding") {
+    return {
+      authority: text(data.authority, "authority"),
+      channel: channel(text(data.channel, "channel")),
+      namespace: namespace(text(data.namespace, "namespace")),
+      type: "binding",
+    };
+  }
+
+  if (data.type === "transit") {
+    return {
+      authority: text(data.authority, "authority"),
+      channel: channel(text(data.channel, "channel")),
+      event: event(data.event),
+      namespace: namespace(text(data.namespace, "namespace")),
+      revision: number(data.revision, "revision"),
+      type: "transit",
+    };
   }
 
   if (data.type === "issue") {

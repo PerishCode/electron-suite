@@ -22,11 +22,13 @@ describe("blob", () => {
   it("stores immutable bytes once across logical slots", async () => {
     const current = await store();
     const [first, second] = await Promise.all([
-      current.store.put("model", "content"),
-      current.store.put("fixture", "content"),
+      current.store.put("blob", "model", "content"),
+      current.store.put("web", "fixture", "content"),
     ]);
 
     expect(first.digest).toBe(second.digest);
+    expect(first.kind).toBe("blob");
+    expect(second.kind).toBe("web");
     expect(first.slot).not.toBe(second.slot);
     expect(Buffer.from(await current.store.read(first)).toString()).toBe("content");
     expect(await readdir(join(current.root, "objects"))).toHaveLength(1);
@@ -34,7 +36,7 @@ describe("blob", () => {
 
   it("detects corruption at the content address", async () => {
     const current = await store();
-    const artifact = await current.store.put("model", "content");
+    const artifact = await current.store.put("daemon", "main", "content");
     await writeFile(join(current.root, "objects", artifact.digest.slice(7)), "changed");
 
     await expect(current.store.read(artifact)).rejects.toThrow("integrity");
@@ -43,6 +45,6 @@ describe("blob", () => {
 
   it("rejects ambiguous logical names", async () => {
     const current = await store();
-    await expect(current.store.put("../model", "content")).rejects.toThrow("single word");
+    await expect(current.store.put("capsule", "../model", "content")).rejects.toThrow("single word");
   });
 });

@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { link, mkdir, open, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import { digest, valid, verify, type Artifact, type Digest } from "@perish/protocol";
+import { digest, kinds, valid, verify, type Artifact, type Digest, type Kind } from "@perish/protocol";
 
 export interface Options {
   root: string;
 }
 
 function slot(value: string): string {
-  if (!/^[a-z][a-z0-9]*$/.test(value)) throw new TypeError("blob slot must be a single word");
+  if (!/^[a-z][a-z0-9]*$/.test(value)) throw new TypeError("artifact slot must be a single word");
   return value;
 }
 
@@ -30,13 +30,14 @@ export class Store {
     return store;
   }
 
-  async put(name: string, content: string | Uint8Array): Promise<Artifact> {
+  async put(kind: Kind, name: string, content: string | Uint8Array): Promise<Artifact> {
+    if (!kinds.includes(kind)) throw new TypeError("invalid artifact kind");
     const value = bytes(content);
     const identity = digest(value);
     const artifact: Artifact = {
       bytes: value.byteLength,
       digest: identity,
-      kind: "blob",
+      kind,
       slot: slot(name),
     };
     const target = this.#path(identity);
@@ -61,10 +62,10 @@ export class Store {
   }
 
   async read(artifact: Artifact): Promise<Uint8Array> {
-    if (artifact.kind !== "blob" || !valid(artifact.digest)) throw new TypeError("invalid blob artifact");
+    if (!kinds.includes(artifact.kind) || !valid(artifact.digest)) throw new TypeError("invalid artifact");
     slot(artifact.slot);
     const content = await readFile(this.#path(artifact.digest));
-    if (!verify(artifact, content)) throw new Error("blob integrity mismatch");
+    if (!verify(artifact, content)) throw new Error("artifact integrity mismatch");
     return content;
   }
 

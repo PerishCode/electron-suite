@@ -10,6 +10,7 @@ import {
   type Permit,
 } from "@perish/protocol";
 
+import { Bindings } from "./binding.js";
 import { Sidecar } from "./host.js";
 import { Resources } from "./resource.js";
 import { decode, encode, type Request, type Response } from "./wire.js";
@@ -29,6 +30,7 @@ function equal(left: string, right: string): boolean {
 }
 
 interface Runtime {
+  bindings: Bindings;
   capabilities: Map<string, Capability>;
   host: Sidecar;
   open(value: string): Promise<Resources>;
@@ -65,6 +67,10 @@ async function dispatch(runtime: Runtime, authority: string, request: Request) {
   if (request.type === "release") return runtime.host.release(request.lease);
   if (!equal(request.authority, authority)) throw new Error("invalid authority");
   if (request.type === "inspect") return runtime.host.inspect();
+  if (request.type === "binding") return runtime.bindings.read(request.namespace, request.channel);
+  if (request.type === "transit") {
+    return runtime.bindings.transit(request.namespace, request.channel, request.revision, request.event);
+  }
   if (request.type === "issue") return issue(runtime, request.permit);
   if (request.type === "retire") return retire(runtime, request.capability);
   const resources = await runtime.open(request.namespace);
@@ -131,6 +137,7 @@ export async function serve(
 ): Promise<Service> {
   const hosts = new Map<Namespace, Promise<Resources>>();
   const runtime: Runtime = {
+    bindings: new Bindings(root),
     capabilities: new Map(),
     host,
     open: (value) => {
