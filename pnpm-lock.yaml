@@ -26,6 +26,9 @@ importers:
       '@perish/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@perish/publish':
+        specifier: workspace:*
+        version: link:../../packages/publish
       '@perish/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
@@ -174,6 +177,31 @@ importers:
 
   packages/protocol:
     devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0))
+
+  packages/publish:
+    dependencies:
+      '@perish/blob':
+        specifier: workspace:*
+        version: link:../blob
+      '@perish/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@perish/sidecar':
+        specifier: workspace:*
+        version: link:../sidecar
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2

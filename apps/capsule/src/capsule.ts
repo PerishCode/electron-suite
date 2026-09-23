@@ -15,6 +15,7 @@ import {
   type Mode,
   type Namespace,
 } from "@perish/protocol";
+import { Feed } from "@perish/publish";
 import { type Change, Client, type Journal } from "@perish/sidecar";
 
 export interface Content {
@@ -61,6 +62,15 @@ export class Capsule {
     readonly namespace: Namespace,
     readonly channel: Channel,
   ) {}
+
+  async update(feed: Feed): Promise<Attempt | undefined> {
+    const distribution = await feed.head(this.channel);
+    if (!distribution.head) return undefined;
+    const binding = await this.client.binding(this.namespace, this.channel);
+    if (binding.state.current === distribution.head.generation && !binding.state.handoff) return undefined;
+    const release = await feed.release(this.channel, distribution.head);
+    return this.stage(release.envelope, release.assets);
+  }
 
   async stage(input: unknown, contents: Content[], mode: Mode = "update"): Promise<Attempt> {
     const manifest = envelope(input);

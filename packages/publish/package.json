@@ -1,5 +1,5 @@
 {
-  "name": "@perish/capsule",
+  "name": "@perish/publish",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,17 +14,15 @@
   ],
   "scripts": {
     "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
-    "pretest": "pnpm run build",
     "test": "vitest run -c vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
     "@perish/blob": "workspace:*",
-    "@perish/protocol": "workspace:*",
-    "@perish/publish": "workspace:*",
-    "@perish/sidecar": "workspace:*"
+    "@perish/protocol": "workspace:*"
   },
   "devDependencies": {
+    "@perish/sidecar": "workspace:*",
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
     "typescript": "6.0.3",

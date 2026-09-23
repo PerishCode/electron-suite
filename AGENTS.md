@@ -19,6 +19,7 @@
 - `config`: typed optional capability entry.
 - `guard`: repository structure and source-shape policy authority.
 - `protocol`: artifact identity, generation contract, and activation state model.
+- `publish`: trusted localhost distribution and channel head authority.
 - `release`: release identity resolution and manifest authority.
 - `sidecar`: capability-scoped process lifecycle reference implementation.
 
