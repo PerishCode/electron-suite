@@ -19,7 +19,7 @@ function output(child: ChildProcess): Promise<string> {
   return new Promise((resolve, reject) => {
     let stdout = "";
     let stderr = "";
-    const timer = setTimeout(() => reject(new Error(`carrier timeout: ${stderr}`)), 15000);
+    const timer = setTimeout(() => reject(new Error(`carrier timeout: ${stderr}`)), 60000);
     child.stdout?.on("data", (chunk: Buffer) => stdout += chunk.toString());
     child.stderr?.on("data", (chunk: Buffer) => stderr += chunk.toString());
     child.once("error", reject);

@@ -8,7 +8,11 @@ import { runtime } from "./runtime.js";
 
 const options = runtime();
 const identity = options.manifest.identity;
-if (options.probe) process.stderr.write("carrier:loaded\n");
+const mark = (state: string): void => {
+  if (options.probe) process.stderr.write(`carrier:${state}\n`);
+};
+
+mark("loaded");
 protocol.registerSchemesAsPrivileged([{
   privileges: {
     corsEnabled: true,
@@ -18,8 +22,10 @@ protocol.registerSchemesAsPrivileged([{
   },
   scheme: identity.scheme,
 }]);
+if (options.probe) app.disableHardwareAcceleration();
 app.setName(identity.name);
 app.setPath("userData", options.data);
+app.on("will-finish-launching", () => mark("launching"));
 
 ipcMain.on("bootstrap", (event) => {
   event.returnValue = { daemon: options.daemon, token: options.token };
@@ -42,7 +48,7 @@ async function probe(window: BrowserWindow): Promise<void> {
 }
 
 await app.whenReady();
-if (options.probe) process.stderr.write("carrier:ready\n");
+mark("ready");
 protocol.handle(identity.scheme, (request) => asset(options.web, request));
 const here = fileURLToPath(new URL(".", import.meta.url));
 const window = new BrowserWindow({
@@ -55,7 +61,7 @@ const window = new BrowserWindow({
   },
 });
 await window.loadURL(identity.origin);
-if (options.probe) process.stderr.write("carrier:loadedweb\n");
+mark("loadedweb");
 if (options.probe) {
   try {
     await probe(window);
