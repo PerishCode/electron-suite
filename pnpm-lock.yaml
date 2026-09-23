@@ -17,6 +17,9 @@ importers:
       '@perish/release':
         specifier: workspace:*
         version: link:packages/release
+      '@perish/testkit':
+        specifier: workspace:*
+        version: link:packages/testkit
 
   apps/capsule:
     dependencies:
@@ -255,6 +258,49 @@ importers:
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0))
+
+  packages/testkit:
+    dependencies:
+      '@perish/capsule':
+        specifier: workspace:*
+        version: link:../../apps/capsule
+      '@perish/guard':
+        specifier: workspace:*
+        version: link:../guard
+      '@perish/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@perish/publish':
+        specifier: workspace:*
+        version: link:../publish
+      '@perish/release':
+        specifier: workspace:*
+        version: link:../release
+      '@perish/sidecar':
+        specifier: workspace:*
+        version: link:../sidecar
+    devDependencies:
+      '@perish/daemon':
+        specifier: workspace:*
+        version: link:../../apps/daemon
+      '@perish/web':
+        specifier: workspace:*
+        version: link:../../apps/web
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      electron:
+        specifier: 41.3.0
+        version: 41.3.0
       esbuild:
         specifier: 0.28.0
         version: 0.28.0

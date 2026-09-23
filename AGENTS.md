@@ -22,8 +22,10 @@
 - `publish`: trusted localhost distribution and channel head authority.
 - `release`: release identity resolution and manifest authority.
 - `sidecar`: capability-scoped process lifecycle reference implementation.
+- `testkit`: typed acceptance matrix, qualification runner, and report schema.
 
 ## Scripts
 
 - `postinstall.mjs`: topological concurrent workspace build.
 - `guard.mjs`: thin `@perish/guard` command entry.
+- `acceptance.mjs`: thin `@perish/testkit` qualification entry.

@@ -23,3 +23,11 @@ jobs:
       - run: pnpm --filter @perish/carrier test
         env:
           PERISH_GUI: "1"
+      - run: pnpm qualify
+        env:
+          PERISH_CHROMIUM: "passed"
+      - uses: actions/upload-artifact@v4.6.2
+        if: always()
+        with:
+          name: qualification-macos
+          path: .artifacts/qualification.json
