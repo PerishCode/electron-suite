@@ -2,14 +2,18 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { cp } from "node:fs/promises";
 import { basename, join } from "node:path";
 
+import { type Mount } from "@perish/capsule";
 import { inspect, pack } from "@perish/pack";
-import { channel, digest, namespace } from "@perish/protocol";
+import { channel, digest, namespace, type Digest } from "@perish/protocol";
 import { distinct, resolve, type Manifest } from "@perish/release";
 import { type Client, type Lease } from "@perish/sidecar";
 
 export interface Installed {
+  artifacts: Digest[];
   built: string[];
   pids: number[];
+  restored: string[];
+  survivors: number[];
   transitions: string[];
 }
 
@@ -17,6 +21,16 @@ export interface Sources {
   carrier: string;
   daemon: string;
   web: string;
+}
+
+export interface Selections {
+  beta: Mount;
+  stable: Mount;
+}
+
+interface Launch {
+  pid: number;
+  survivors: number[];
 }
 
 function output(child: ChildProcess): Promise<Record<string, unknown>> {
@@ -35,7 +49,7 @@ function output(child: ChildProcess): Promise<Record<string, unknown>> {
   });
 }
 
-async function launch(client: Client, app: string, manifest: Manifest): Promise<number> {
+async function launch(client: Client, app: string, manifest: Manifest, mount: Mount): Promise<Launch> {
   const scope = namespace(`installed${manifest.channel}`);
   const owner = `installed${manifest.channel}`;
   const capability = await client.issue({ channel: manifest.channel, namespace: scope, owner, service: "daemon" });
@@ -49,10 +63,13 @@ async function launch(client: Client, app: string, manifest: Manifest): Promise<
   const resources = join(app, "Contents", "Resources");
   let lease: Lease | undefined;
   let child: ChildProcess | undefined;
+  let pid = 0;
+  let status = "stopped";
+  let survivors: number[] = [];
 
   try {
     lease = await client.start({
-      args: [join(resources, "daemon", "main.mjs")],
+      args: [join(mount.daemon, "main.mjs")],
       channel: manifest.channel,
       command: executable,
       env: {
@@ -77,7 +94,7 @@ async function launch(client: Client, app: string, manifest: Manifest): Promise<
         PERISH_PROBE: "1",
         PERISH_RELEASE: join(resources, "release.json"),
         PERISH_TOKEN: capability.token,
-        PERISH_WEB: join(resources, "web"),
+        PERISH_WEB: mount.web,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -85,18 +102,28 @@ async function launch(client: Client, app: string, manifest: Manifest): Promise<
     if (result.origin !== manifest.identity.origin || result.version !== manifest.identity.version) {
       throw new Error("installed identity mismatch");
     }
-    return lease.pid;
+    pid = lease.pid;
   } finally {
     if (child?.exitCode === null) child.kill("SIGTERM");
-    if (lease) await client.release(lease);
-    await client.retire(capability);
+    try {
+      if (lease) {
+        const released = await client.release(lease);
+        survivors = released.survivors;
+        status = released.status;
+      }
+    } finally {
+      await client.retire(capability);
+    }
+    if (status !== "stopped") throw new Error(`daemon retirement is ${status}`);
   }
+  return { pid, survivors };
 }
 
 export async function installed(
   client: Client,
   temporary: string,
   sources: Sources,
+  selections: Selections,
 ): Promise<Installed> {
   const manifests = [
     resolve({}, { channel: channel("stable"), version: "1.0.0" }),
@@ -106,8 +133,10 @@ export async function installed(
   const install = join(temporary, "install");
   const built: string[] = [];
   const pids: number[] = [];
+  const survivors: number[] = [];
 
   for (const manifest of manifests) {
+    const mount = manifest.channel === "stable" ? selections.stable : selections.beta;
     const result = await pack({
       ...sources,
       manifest,
@@ -124,7 +153,16 @@ export async function installed(
       throw new Error("installed bundle identity mismatch");
     }
     built.push(basename(app));
-    pids.push(await launch(client, app, manifest));
+    const launched = await launch(client, app, manifest, mount);
+    pids.push(launched.pid);
+    survivors.push(...launched.survivors);
   }
-  return { built, pids, transitions: ["pack", "install", "launch", "ready"] };
+  return {
+    artifacts: [selections.stable.target, selections.beta.target],
+    built,
+    pids,
+    restored: ["capsule", "daemon", "web", "model"],
+    survivors,
+    transitions: ["select", "mount", "pack", "install", "launch", "ready"],
+  };
 }

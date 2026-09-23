@@ -35,6 +35,9 @@ importers:
       '@perish/publish':
         specifier: workspace:*
         version: link:../../packages/publish
+      '@perish/release':
+        specifier: workspace:*
+        version: link:../../packages/release
       '@perish/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
@@ -42,9 +45,6 @@ importers:
       '@perish/daemon':
         specifier: workspace:*
         version: link:../daemon
-      '@perish/release':
-        specifier: workspace:*
-        version: link:../../packages/release
       '@perish/web':
         specifier: workspace:*
         version: link:../web
@@ -304,6 +304,9 @@ importers:
       '@perish/capsule':
         specifier: workspace:*
         version: link:../../apps/capsule
+      '@perish/carrier':
+        specifier: workspace:*
+        version: link:../../apps/carrier
       '@perish/guard':
         specifier: workspace:*
         version: link:../guard
@@ -323,9 +326,6 @@ importers:
         specifier: workspace:*
         version: link:../sidecar
     devDependencies:
-      '@perish/carrier':
-        specifier: workspace:*
-        version: link:../../apps/carrier
       '@perish/daemon':
         specifier: workspace:*
         version: link:../../apps/daemon

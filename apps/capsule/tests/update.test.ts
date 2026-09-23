@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -82,6 +82,16 @@ describe("update", () => {
     await commit(secondary, feed);
     expect((await client.binding(namespace("primary"), stable)).state.current).toBe(first.envelope.digest);
     expect((await client.binding(namespace("secondary"), beta)).state.current).toBe(preview.envelope.digest);
+    const mounted = await primary.mount();
+    expect(JSON.parse(await readFile(join(mounted.capsule, "release.json"), "utf8"))).toMatchObject({
+      channel: "stable",
+      identity: { version: "1.0.0" },
+    });
+    expect((await primary.mount()).target).toBe(mounted.target);
+    await writeFile(join(mounted.web, "index.html"), "tampered");
+    await expect(primary.mount()).rejects.toThrow("web mount integrity mismatch");
+    await rm(mounted.web, { recursive: true });
+    expect((await primary.mount()).target).toBe(mounted.target);
     expect(await primary.update(feed)).toBeUndefined();
 
     const second = await product(stable, "2.0.0", model);
@@ -90,9 +100,15 @@ describe("update", () => {
     await expect(primary.update(new Feed(port.value, forged))).rejects.toThrow("trust");
     const attempt = await primary.update(feed);
     if (!attempt) throw new Error("second update missing");
+    const candidate = await primary.prepare(attempt);
+    expect(JSON.parse(await readFile(join(candidate.capsule, "release.json"), "utf8"))).toMatchObject({
+      identity: { version: "2.0.0" },
+    });
+    await expect(primary.prepare({ ...attempt, nonce: "forged" })).rejects.toThrow("identity");
     await primary.fail(attempt, "daemon timeout");
 
     expect((await client.binding(namespace("primary"), stable)).state.current).toBe(first.envelope.digest);
     expect((await client.binding(namespace("secondary"), beta)).state.current).toBe(preview.envelope.digest);
+    await expect(primary.mount()).rejects.toThrow("blocked");
   });
 });

@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "main": "./dist/main.mjs",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    }
+  },
   "files": [
     "dist"
   ],

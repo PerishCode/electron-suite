@@ -22,11 +22,11 @@
     "@perish/blob": "workspace:*",
     "@perish/protocol": "workspace:*",
     "@perish/publish": "workspace:*",
+    "@perish/release": "workspace:*",
     "@perish/sidecar": "workspace:*"
   },
   "devDependencies": {
     "@perish/daemon": "workspace:*",
-    "@perish/release": "workspace:*",
     "@perish/web": "workspace:*",
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",

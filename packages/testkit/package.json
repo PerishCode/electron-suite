@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@perish/capsule": "workspace:*",
+    "@perish/carrier": "workspace:*",
     "@perish/guard": "workspace:*",
     "@perish/pack": "workspace:*",
     "@perish/protocol": "workspace:*",
@@ -27,7 +28,6 @@
     "@perish/sidecar": "workspace:*"
   },
   "devDependencies": {
-    "@perish/carrier": "workspace:*",
     "@perish/daemon": "workspace:*",
     "@perish/web": "workspace:*",
     "@types/node": "24.12.2",

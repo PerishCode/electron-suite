@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { Capsule } from "@perish/capsule";
+import { asset } from "@perish/carrier";
 import { guard } from "@perish/guard";
 import { channel, gates, namespace, startup, type Channel, type Digest } from "@perish/protocol";
 import { Authority, Feed, serve as publish, type Service as Publisher } from "@perish/publish";
@@ -15,7 +16,7 @@ import { compose, resolve as release, type Product } from "@perish/release";
 import { Client, serve as sidecar, type Service as Sidecar } from "@perish/sidecar";
 
 import { matrix, type Definition, type Id, type Status } from "./matrix.js";
-import { installed } from "./package.js";
+import { installed, type Selections } from "./package.js";
 import { encode, parse, type Evidence, type Report } from "./schema.js";
 
 export interface Options {
@@ -77,16 +78,23 @@ function path(name: "capsule" | "carrier" | "daemon" | "web"): string {
   return dirname(fileURLToPath(import.meta.resolve(`@perish/${name}`)));
 }
 
-async function installation(client: Client, temporary: string): Promise<Evidence> {
+async function installation(
+  client: Client,
+  temporary: string,
+  selections: Selections,
+): Promise<Evidence> {
   try {
     const qualified = await timed(() => installed(client, temporary, {
       carrier: path("carrier"),
       daemon: path("daemon"),
       web: path("web"),
-    }));
+    }, selections));
     return evidence("PKG-01", "passed", "two channel identities installed and launched", qualified.milliseconds, {
+      artifacts: qualified.value.artifacts,
       built: qualified.value.built,
       pids: qualified.value.pids,
+      restored: qualified.value.restored,
+      survivors: qualified.value.survivors,
       transitions: qualified.value.transitions,
     });
   } catch (fault) {
@@ -94,6 +102,100 @@ async function installation(client: Client, temporary: string): Promise<Evidence
     return evidence("PKG-01", "failed", error.message, 0, {
       diagnostics: [error.stack ?? error.message],
     });
+  }
+}
+
+async function delivery(
+  client: Client,
+  temporary: string,
+  primary: Capsule,
+  secondary: Capsule,
+  update: Product,
+): Promise<Evidence[]> {
+  let attempt = await primary.stage(update.envelope, update.assets);
+  let refused = false;
+  try {
+    await primary.commit(attempt);
+  } catch {
+    refused = true;
+  }
+  const selections = {
+    beta: await secondary.mount(),
+    stable: await primary.prepare(attempt),
+  };
+  const served = await asset(selections.stable.web, new Request("electronsuite://carrier/"));
+  const escaped = await asset(
+    selections.stable.web,
+    new Request("electronsuite://carrier/%2e%2e%2fsecret"),
+  );
+  const packaged = await installation(client, temporary, selections);
+  if (packaged.status !== "passed") {
+    await primary.fail(attempt, packaged.actual);
+    return [
+      packaged,
+      evidence("PKG-06", "failed", "mounted runtime did not reach protocol checks", 0),
+      evidence("PKG-07", "failed", "mounted runtime did not reach readiness", 0),
+      evidence("PKG-09", "failed", "mounted runtime did not retire", 0),
+      evidence("UPD-ALL", "failed", "candidate launch failed before commit", 0),
+    ];
+  }
+  for (const gate of gates) attempt = await primary.ready(attempt, gate);
+  const committed = await primary.commit(attempt);
+  const mounted = await primary.mount();
+  await writeFile(join(mounted.web, "index.html"), "tampered");
+  let tampered = false;
+  try {
+    await primary.mount();
+  } catch {
+    tampered = true;
+  }
+  await rm(mounted.web, { force: true, recursive: true });
+  const repaired = await primary.mount();
+  const activated = committed.state.current === update.envelope.digest
+    && repaired.target === update.envelope.digest;
+  const protectedpath = served.status === 200 && escaped.status === 403 && tampered;
+  return [
+    packaged,
+    evidence("PKG-06", protectedpath ? "passed" : "failed", "private root contained access and rejected tamper", 0, {
+      artifacts: [repaired.target],
+      transitions: ["serve", "escape", "tamper", "reject", "restore"],
+    }),
+    evidence("PKG-07", refused ? "passed" : "failed", "premature commit refused; mounted runtime acknowledged", 0, {
+      artifacts: [repaired.target],
+      transitions: ["prepare", "refuse", "ready", "commit"],
+    }),
+    evidence("PKG-09", packaged.survivors.length === 0 ? "passed" : "failed", "installed Daemons retired physically", 0, {
+      pids: packaged.pids,
+      survivors: packaged.survivors,
+      transitions: ["launch", "release", "retire"],
+    }),
+    evidence("UPD-ALL", activated ? "passed" : "failed", "four-piece candidate committed after readiness", 0, {
+      artifacts: [repaired.target],
+      restored: ["capsule", "daemon", "web", "model"],
+      transitions: ["stage", "prepare", "launch", "ready", "commit", "mount"],
+    }),
+  ];
+}
+
+async function qualification(
+  client: Client,
+  temporary: string,
+  primary: Capsule,
+  secondary: Capsule,
+  update: Product,
+): Promise<Evidence[]> {
+  try {
+    return await delivery(client, temporary, primary, secondary, update);
+  } catch (fault) {
+    const error = fault as Error;
+    const values = { diagnostics: [error.stack ?? error.message] };
+    return [
+      evidence("PKG-01", "failed", error.message, 0, values),
+      evidence("PKG-06", "failed", error.message, 0, values),
+      evidence("PKG-07", "failed", error.message, 0, values),
+      evidence("PKG-09", "failed", error.message, 0, values),
+      evidence("UPD-ALL", "failed", error.message, 0, values),
+    ];
   }
 }
 
@@ -178,7 +280,7 @@ export async function run(options: Options): Promise<Report> {
       const secondary = new Capsule(client, namespace("secondary"), beta);
       const current = await commit(primary, feed);
       const preview = await commit(secondary, feed);
-      return { current, preview, primary };
+      return { current, preview, primary, secondary };
     });
     scenarios.push(evidence("PUB-01", "passed", "two isolated channels restored and committed", published.milliseconds, {
       artifacts: [published.value.current, published.value.preview],
@@ -224,7 +326,15 @@ export async function run(options: Options): Promise<Report> {
       transitions: ["recover", "begin", "ready", "commit"],
     }));
     if (options.packaged) {
-      scenarios.push(await installation(client, temporary));
+      const primary = new Capsule(client, namespace("primary"), stable);
+      const secondary = new Capsule(client, namespace("secondary"), beta);
+      scenarios.push(...await qualification(
+        client,
+        temporary,
+        primary,
+        secondary,
+        update,
+      ));
     }
   } catch (fault) {
     failure = fault as Error;
@@ -244,12 +354,16 @@ export async function run(options: Options): Promise<Report> {
     }
   }
   add(evidence("PKG-01", "unqualified", "platform package not built", 0));
+  add(evidence("PKG-06", "unqualified", "private mounted protocol not supplied", 0));
+  add(evidence("PKG-07", "unqualified", "mounted runtime readiness not supplied", 0));
+  add(evidence("PKG-09", "unqualified", "installed runtime retirement not supplied", 0));
   add(evidence(
     "PKG-10",
     options.chromium ? "passed" : "unqualified",
     options.chromium ? "preceding Carrier qualification passed" : "real Chromium qualification not supplied",
     0,
   ));
+  add(evidence("UPD-ALL", "unqualified", "packaged four-piece activation not supplied", 0));
   add(evidence("G5-NATIVE", "unqualified", "native credentials and installers are out of scope", 0));
   add(evidence("G6-REMOTE", "unqualified", "remote object storage and CDN are out of scope", 0));
   for (const item of matrix) {
