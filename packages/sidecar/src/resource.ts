@@ -34,6 +34,7 @@ function same(left: Request, right: Request): boolean {
   return left.kind === right.kind
     && left.name === right.name
     && left.owner === right.owner
+    && left.scheme === right.scheme
     && left.scope === right.scope;
 }
 
@@ -47,7 +48,7 @@ function path(base: string, request: Request, lease: string): string {
   return join(base, request.kind, request.name, token);
 }
 
-async function reserve(): Promise<{ handle: Handle; value: string }> {
+async function reserve(scheme = "tcp"): Promise<{ handle: Handle; value: string }> {
   const server = createServer();
   await new Promise<void>((done, reject) => {
     server.once("error", reject);
@@ -60,7 +61,7 @@ async function reserve(): Promise<{ handle: Handle; value: string }> {
   if (!address || typeof address === "string") throw new Error("port reservation failed");
   return {
     handle: { kind: "server", value: server },
-    value: `tcp://${address.address}:${address.port}`,
+    value: `${scheme}://${address.address}:${address.port}`,
   };
 }
 
@@ -88,6 +89,10 @@ function registry(value: unknown, base: string, name: Namespace): Registry {
     if (!grant.lease || !grant.value || !/^[a-z][a-z0-9]*$/.test(grant.name)) {
       throw new TypeError("invalid registry grant");
     }
+    if (grant.kind === "port" && !["http", "tcp"].includes(grant.scheme ?? "tcp")) {
+      throw new TypeError("invalid registry scheme");
+    }
+    if (grant.kind !== "port" && grant.scheme !== undefined) throw new TypeError("invalid registry scheme");
     const scoped = grant.scope === "namespace" && grant.owner === undefined && durable.has(grant.kind);
     const attempted = grant.scope === "attempt" && Boolean(grant.owner) && transient.has(grant.kind);
     if (!scoped && !attempted) throw new TypeError("invalid registry scope");
@@ -217,7 +222,7 @@ export class Resources {
   }
 
   async #create(request: Request, lease: string): Promise<{ handle?: Handle; value: string }> {
-    if (request.kind === "port") return reserve();
+    if (request.kind === "port") return reserve(request.scheme);
     const value = path(this.#base, request, lease);
     if (request.kind === "lock") {
       await mkdir(resolve(value, ".."), { recursive: true });

@@ -35,8 +35,12 @@ async function probe(window: BrowserWindow): Promise<void> {
   const limit = Date.now() + 10000;
   let last: unknown;
   while (Date.now() < limit) {
-    const value = await window.webContents.executeJavaScript("document.querySelector('output')?.textContent");
-    if (value === "ready") {
+    const value = await window.webContents.executeJavaScript(`({
+      body: document.body.innerHTML,
+      status: document.querySelector('output')?.textContent,
+      bootstrap: typeof globalThis.perish,
+    })`);
+    if (value.status === "ready") {
       process.stdout.write(`${JSON.stringify({ origin: identity.origin, status: "ready" })}\n`);
       app.quit();
       return;
@@ -44,30 +48,34 @@ async function probe(window: BrowserWindow): Promise<void> {
     last = value;
     await new Promise((done) => setTimeout(done, 50));
   }
-  throw new Error(`renderer readiness timeout: ${String(last)}`);
+  throw new Error(`renderer readiness timeout: ${JSON.stringify(last)}`);
 }
 
-await app.whenReady();
-mark("ready");
-protocol.handle(identity.scheme, (request) => asset(options.web, request));
-const here = fileURLToPath(new URL(".", import.meta.url));
-const window = new BrowserWindow({
-  show: !options.probe,
-  webPreferences: {
-    contextIsolation: true,
-    nodeIntegration: false,
-    preload: join(here, "preload.cjs"),
-    sandbox: true,
-  },
-});
-await window.loadURL(identity.origin);
-mark("loadedweb");
-if (options.probe) {
-  try {
+async function launch(): Promise<void> {
+  mark("ready");
+  protocol.handle(identity.scheme, (request) => asset(options.web, request));
+  const here = fileURLToPath(new URL(".", import.meta.url));
+  const window = new BrowserWindow({
+    show: !options.probe,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: join(here, "preload.cjs"),
+      sandbox: true,
+    },
+  });
+  window.webContents.on("console-message", (details) => mark(`console:${details.message}`));
+  window.webContents.on("did-fail-load", (_event, code, text) => mark(`load:${code}:${text}`));
+  window.webContents.on("preload-error", (_event, _path, fault) => mark(`preload:${fault.message}`));
+  await window.loadURL(identity.origin);
+  mark("loadedweb");
+  if (options.probe) {
     await probe(window);
-  } catch (fault) {
-    process.stderr.write(`${(fault as Error).message}\n`);
-    app.exit(1);
   }
 }
+
+app.whenReady().then(launch).catch((fault: Error) => {
+  process.stderr.write(`${fault.message}\n`);
+  app.exit(1);
+});
 app.on("window-all-closed", () => app.quit());

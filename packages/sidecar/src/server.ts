@@ -3,7 +3,12 @@ import { chmod } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 
-import { namespace, type Namespace } from "@perish/protocol";
+import {
+  namespace,
+  type Capability,
+  type Namespace,
+  type Permit,
+} from "@perish/protocol";
 
 import { Sidecar } from "./host.js";
 import { Resources } from "./resource.js";
@@ -24,8 +29,30 @@ function equal(left: string, right: string): boolean {
 }
 
 interface Runtime {
+  capabilities: Map<string, Capability>;
   host: Sidecar;
   open(value: string): Promise<Resources>;
+}
+
+function key(permit: Permit): string {
+  return [permit.namespace, permit.channel, permit.owner, permit.service].join(":");
+}
+
+function issue(runtime: Runtime, permit: Permit): Capability {
+  const identity = key(permit);
+  let capability = runtime.capabilities.get(identity);
+  if (!capability) {
+    capability = { ...permit, token: randomBytes(32).toString("base64url") };
+    runtime.capabilities.set(identity, capability);
+  }
+  return capability;
+}
+
+function retire(runtime: Runtime, capability: Capability): boolean {
+  const identity = key(capability);
+  const current = runtime.capabilities.get(identity);
+  if (!current || !equal(current.token, capability.token)) return false;
+  return runtime.capabilities.delete(identity);
 }
 
 async function dispatch(runtime: Runtime, authority: string, request: Request) {
@@ -38,6 +65,8 @@ async function dispatch(runtime: Runtime, authority: string, request: Request) {
   if (request.type === "release") return runtime.host.release(request.lease);
   if (!equal(request.authority, authority)) throw new Error("invalid authority");
   if (request.type === "inspect") return runtime.host.inspect();
+  if (request.type === "issue") return issue(runtime, request.permit);
+  if (request.type === "retire") return retire(runtime, request.capability);
   const resources = await runtime.open(request.namespace);
   if (request.type === "grant") return resources.grant(request.resource);
   if (request.type === "forward") {
@@ -102,6 +131,7 @@ export async function serve(
 ): Promise<Service> {
   const hosts = new Map<Namespace, Promise<Resources>>();
   const runtime: Runtime = {
+    capabilities: new Map(),
     host,
     open: (value) => {
       const name = namespace(value);

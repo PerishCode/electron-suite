@@ -1,6 +1,13 @@
 import { createConnection } from "node:net";
 
-import type { Grant, Namespace, Registry, Request as ResourceRequest } from "@perish/protocol";
+import type {
+  Capability,
+  Grant,
+  Permit,
+  Namespace,
+  Registry,
+  Request as ResourceRequest,
+} from "@perish/protocol";
 
 import type { Lease, Release, Snapshot, Spec } from "./host.js";
 import { encode, type Request, type Response } from "./wire.js";
@@ -81,6 +88,22 @@ export class Client {
       authority: this.authority,
       type: "inspect",
     }, this.timeout) as Snapshot[];
+  }
+
+  async issue(permit: Permit): Promise<Capability> {
+    return await call(this.endpoint, {
+      authority: this.authority,
+      permit,
+      type: "issue",
+    }, this.timeout) as Capability;
+  }
+
+  async retire(capability: Capability): Promise<boolean> {
+    return await call(this.endpoint, {
+      authority: this.authority,
+      capability,
+      type: "retire",
+    }, this.timeout) as boolean;
   }
 
   async grant(namespace: Namespace, resource: ResourceRequest): Promise<Grant> {

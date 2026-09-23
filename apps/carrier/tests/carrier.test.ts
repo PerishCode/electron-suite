@@ -1,5 +1,4 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -19,7 +18,7 @@ function output(child: ChildProcess): Promise<string> {
   return new Promise((resolve, reject) => {
     let stdout = "";
     let stderr = "";
-    const timer = setTimeout(() => reject(new Error(`carrier timeout: ${stderr}`)), 60000);
+    const timer = setTimeout(() => reject(new Error(`carrier timeout: ${stderr}`)), 30000);
     child.stdout?.on("data", (chunk: Buffer) => stdout += chunk.toString());
     child.stderr?.on("data", (chunk: Buffer) => stderr += chunk.toString());
     child.once("error", reject);
@@ -59,18 +58,29 @@ describe("carrier", () => {
     const client = new Client(endpoint, service.authority);
     const scope = namespace("main");
     const owner = "attempt";
-    const token = randomBytes(32).toString("base64url");
+    const capability = await client.issue({
+      channel: channel("stable"),
+      namespace: scope,
+      owner,
+      service: "daemon",
+    });
     const data = await client.grant(scope, { kind: "data", name: "daemon", scope: "namespace" });
     const carrier = await client.grant(scope, { kind: "data", name: "carrier", scope: "namespace" });
     const socket = await client.grant(scope, { kind: "socket", name: "daemon", owner, scope: "attempt" });
-    const port = await client.grant(scope, { kind: "port", name: "daemon", owner, scope: "attempt" });
+    const port = await client.grant(scope, {
+      kind: "port",
+      name: "daemon",
+      owner,
+      scheme: "http",
+      scope: "attempt",
+    });
     const manifest = resolve({}, { channel: channel("stable"), version: "1.0.0" });
     const release = await emit(root, manifest);
     const daemonenv = {
       PERISH_DATA: data.value,
       PERISH_ORIGIN: manifest.identity.origin,
       PERISH_SOCKET: socket.value,
-      PERISH_TOKEN: token,
+      PERISH_TOKEN: capability.token,
     };
     const here = dirname(fileURLToPath(import.meta.url));
     const webroot = dirname(fileURLToPath(import.meta.resolve("@perish/web")));
@@ -81,7 +91,7 @@ describe("carrier", () => {
       PERISH_DATA: carrier.value,
       PERISH_PROBE: "1",
       PERISH_RELEASE: release,
-      PERISH_TOKEN: token,
+      PERISH_TOKEN: capability.token,
       PERISH_WEB: webroot,
     };
     let lease: Lease | undefined;
@@ -109,6 +119,7 @@ describe("carrier", () => {
     } finally {
       if (child?.exitCode === null) child.kill("SIGTERM");
       if (lease) await client.release(lease);
+      await client.retire(capability);
       await service.close();
       await rm(root, { force: true, recursive: true });
     }

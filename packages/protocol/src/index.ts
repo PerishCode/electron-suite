@@ -17,6 +17,10 @@ export {
   valid,
 } from "./json.js";
 export type { Digest } from "./json.js";
+export type {
+  Capability,
+  Permit,
+} from "./capability.js";
 export {
   channel,
   namespace,

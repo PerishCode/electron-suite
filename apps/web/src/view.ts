@@ -5,7 +5,11 @@ export interface Config {
   token: string;
 }
 
-export function mount(root: HTMLElement, config: Config, transport: Transport = fetch): Daemon {
+export function mount(
+  root: HTMLElement,
+  config: Config,
+  transport: Transport = (input, init) => fetch(input, init),
+): Daemon {
   const daemon = new Daemon(config.daemon, config.token, transport);
   const status = document.createElement("output");
   const refresh = document.createElement("button");

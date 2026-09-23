@@ -3,7 +3,9 @@ import {
   namespace,
   resources,
   valid,
+  type Capability,
   type Grant,
+  type Permit,
   type Registry,
   type Request as ResourceRequest,
 } from "@perish/protocol";
@@ -15,13 +17,15 @@ export type Request =
   | { lease: Lease; type: "attach" }
   | { lease: Lease; type: "release" }
   | { authority: string; type: "inspect" }
+  | { authority: string; permit: Permit; type: "issue" }
+  | { authority: string; capability: Capability; type: "retire" }
   | { authority: string; namespace: string; resource: ResourceRequest; type: "grant" }
   | { authority: string; namespace: string; port: string; socket: string; type: "forward" }
   | { authority: string; lease: string; namespace: string; survivors: number[]; type: "revoke" }
   | { authority: string; namespace: string; type: "resources" };
 
 export type Response =
-  | { ok: true; value: Grant | Lease | Registry | Release | Snapshot[] }
+  | { ok: true; value: boolean | Capability | Grant | Lease | Registry | Release | Snapshot[] }
   | { error: string; ok: false };
 
 function record(value: unknown, name: string): Record<string, unknown> {
@@ -107,7 +111,36 @@ function resource(value: unknown): ResourceRequest {
     scope,
   };
   if (data.owner !== undefined) result.owner = text(data.owner, "resource.owner");
+  if (data.scheme !== undefined) {
+    const scheme = text(data.scheme, "resource.scheme");
+    if (scheme !== "http" && scheme !== "tcp") throw new TypeError("resource.scheme is invalid");
+    result.scheme = scheme;
+  }
   return result;
+}
+
+function permit(value: unknown): Permit {
+  const data = record(value, "permit");
+  const word = (name: string) => {
+    const value = text(data[name], `permit.${name}`);
+    if (!/^[a-z][a-z0-9]*$/.test(value)) throw new TypeError(`permit.${name} must be a single word`);
+    return value;
+  };
+
+  return {
+    channel: channel(text(data.channel, "permit.channel")),
+    namespace: namespace(text(data.namespace, "permit.namespace")),
+    owner: word("owner"),
+    service: word("service"),
+  };
+}
+
+function capability(value: unknown): Capability {
+  const data = record(value, "capability");
+  return {
+    ...permit(data),
+    token: text(data.token, "capability.token"),
+  };
 }
 
 export function decode(value: string): Request {
@@ -123,6 +156,22 @@ export function decode(value: string): Request {
 
   if (data.type === "inspect") {
     return { authority: text(data.authority, "authority"), type: "inspect" };
+  }
+
+  if (data.type === "issue") {
+    return {
+      authority: text(data.authority, "authority"),
+      permit: permit(data.permit),
+      type: "issue",
+    };
+  }
+
+  if (data.type === "retire") {
+    return {
+      authority: text(data.authority, "authority"),
+      capability: capability(data.capability),
+      type: "retire",
+    };
   }
 
   if (data.type === "grant") {

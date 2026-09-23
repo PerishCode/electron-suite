@@ -120,6 +120,29 @@ describe("server", () => {
     expect((await client.revoke(scope, grant.lease)).grants).toEqual([]);
   });
 
+  it("issues attempt capabilities across channel and namespace boundaries", async () => {
+    const endpoint = await socket();
+    const service = await serve(endpoint);
+    services.push(service);
+    const client = new Client(endpoint, service.authority);
+    const permit = {
+      channel: channel("beta"),
+      namespace: namespace("main"),
+      owner: "attempt",
+      service: "daemon",
+    };
+    const first = await client.issue(permit);
+    const repeated = await client.issue(permit);
+    const isolated = await client.issue({ ...permit, namespace: namespace("preview") });
+
+    expect(repeated).toEqual(first);
+    expect(isolated.token).not.toBe(first.token);
+    await expect(new Client(endpoint, "forged").issue(permit)).rejects.toThrow("authority");
+    expect(await client.retire(first)).toBe(true);
+    expect((await client.issue(permit)).token).not.toBe(first.token);
+    expect(await client.retire(first)).toBe(false);
+  });
+
   it.runIf(process.platform !== "win32")("runs as an independent supervisor", async () => {
     const endpoint = await socket();
     const authority = randomBytes(32).toString("base64url");

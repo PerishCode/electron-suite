@@ -9,6 +9,7 @@ export interface Request {
   kind: Resource;
   name: string;
   owner?: string;
+  scheme?: "http" | "tcp";
   scope: Scope;
 }
 
@@ -35,12 +36,15 @@ function valid(request: Request): boolean {
   if (!resources.includes(request.kind)) return false;
   if (request.scope !== "namespace" && request.scope !== "attempt") return false;
   if (!/^[a-z][a-z0-9]*$/.test(request.name)) return false;
+  if (request.kind === "port" && request.scheme !== undefined) {
+    if (request.scheme !== "http" && request.scheme !== "tcp") return false;
+  } else if (request.scheme !== undefined) return false;
   if (request.scope === "attempt") return Boolean(request.owner);
   return request.owner === undefined;
 }
 
 function key(request: Request): string {
-  return [request.kind, request.name, request.owner ?? ""].join(":");
+  return [request.kind, request.name, request.owner ?? "", request.scheme ?? ""].join(":");
 }
 
 export function allocate(state: Registry, grant: Grant): Allocation {

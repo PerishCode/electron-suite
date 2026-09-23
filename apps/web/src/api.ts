@@ -19,7 +19,7 @@ export class Daemon {
   readonly #token: string;
   readonly #transport: Transport;
 
-  constructor(value: string, token: string, transport: Transport = fetch) {
+  constructor(value: string, token: string, transport: Transport = (input, init) => fetch(input, init)) {
     if (!token) throw new TypeError("daemon token is required");
     this.#endpoint = endpoint(value);
     this.#token = token;
