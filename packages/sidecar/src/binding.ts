@@ -93,6 +93,7 @@ function attempt(value: unknown): NonNullable<Binding["attempt"]> {
 export class Bindings {
   readonly #root: string;
   readonly #pending = new Map<string, Promise<void>>();
+  readonly #seen = new Set<string>();
 
   constructor(root: string) {
     this.#root = resolve(root, "bindings");
@@ -116,12 +117,28 @@ export class Bindings {
   }
 
   async #load(scope: Namespace, lane: Channel): Promise<Journal> {
+    const identity = `${lane}:${scope}`;
+    let journal: Journal;
     try {
-      return parse(JSON.parse(await readFile(this.#path(scope, lane), "utf8")), scope, lane);
+      journal = parse(JSON.parse(await readFile(this.#path(scope, lane), "utf8")), scope, lane);
     } catch (fault) {
       if ((fault as NodeJS.ErrnoException).code !== "ENOENT") throw fault;
-      return { revision: 0, state: { channel: lane, namespace: scope } };
+      journal = { revision: 0, state: { channel: lane, namespace: scope } };
     }
+    if (this.#seen.has(identity)) return journal;
+    this.#seen.add(identity);
+    if (journal.state.attempt?.status !== "running") return journal;
+    const attempt = journal.state.attempt;
+    const transition = reduce(journal.state, {
+      error: "sidecar restart",
+      nonce: attempt.nonce,
+      target: attempt.target,
+      type: "fail",
+    });
+    if (!transition.ok) throw new Error(`binding recovery ${transition.fault}`);
+    const recovered = { revision: journal.revision + 1, state: transition.state };
+    await this.#save(scope, lane, recovered);
+    return recovered;
   }
 
   #path(scope: Namespace, lane: Channel): string {

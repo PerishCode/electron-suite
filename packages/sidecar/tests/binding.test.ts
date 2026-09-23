@@ -39,4 +39,27 @@ describe("bindings", () => {
     expect(first).toMatchObject({ changed: true, journal: { revision: 2 }, ok: true });
     expect(stale).toMatchObject({ fault: "revision", journal: { revision: 2 }, ok: false });
   });
+
+  it("turns an interrupted running attempt into explicit recovery state", async () => {
+    const root = await mkdtemp(join(tmpdir(), "binding-"));
+    roots.push(root);
+    const scope = namespace("main");
+    const lane = channel("stable");
+    const target = digest("interrupted");
+    const bindings = new Bindings(root);
+    const armed = await bindings.transit(scope, lane, 0, { mode: "update", target, type: "arm" });
+    if (!armed.ok) throw new Error(armed.fault);
+    const begun = await bindings.transit(scope, lane, armed.journal.revision, {
+      nonce: "attempt",
+      target,
+      type: "begin",
+    });
+    if (!begun.ok) throw new Error(begun.fault);
+
+    const recovered = await new Bindings(root).read(scope, lane);
+    expect(recovered).toMatchObject({
+      revision: begun.journal.revision + 1,
+      state: { attempt: { error: "sidecar restart", status: "failed" } },
+    });
+  });
 });
