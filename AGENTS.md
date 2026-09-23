@@ -18,6 +18,7 @@
 - `blob`: immutable content-addressed artifact storage.
 - `config`: typed optional capability entry.
 - `guard`: repository structure and source-shape policy authority.
+- `pack`: unsigned platform package construction for installation qualification.
 - `protocol`: artifact identity, generation contract, and activation state model.
 - `publish`: trusted localhost distribution and channel head authority.
 - `release`: release identity resolution and manifest authority.
@@ -28,4 +29,5 @@
 
 - `postinstall.mjs`: topological concurrent workspace build.
 - `guard.mjs`: thin `@perish/guard` command entry.
+- `package.mjs`: thin `@perish/pack` platform package entry.
 - `acceptance.mjs`: thin `@perish/testkit` qualification entry.

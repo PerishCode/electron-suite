@@ -1,5 +1,5 @@
 {
-  "name": "@perish/testkit",
+  "name": "@perish/pack",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -18,20 +18,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@perish/capsule": "workspace:*",
-    "@perish/guard": "workspace:*",
-    "@perish/pack": "workspace:*",
-    "@perish/protocol": "workspace:*",
-    "@perish/publish": "workspace:*",
-    "@perish/release": "workspace:*",
-    "@perish/sidecar": "workspace:*"
+    "@perish/release": "workspace:*"
   },
   "devDependencies": {
-    "@perish/carrier": "workspace:*",
-    "@perish/daemon": "workspace:*",
-    "@perish/web": "workspace:*",
+    "@perish/protocol": "workspace:*",
     "@types/node": "24.12.2",
     "electron": "41.3.0",
+    "electron-builder": "26.8.1",
     "esbuild": "0.28.0",
     "typescript": "6.0.3",
     "vitest": "4.1.6"

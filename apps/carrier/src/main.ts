@@ -41,7 +41,11 @@ async function probe(window: BrowserWindow): Promise<void> {
       bootstrap: typeof globalThis.perish,
     })`);
     if (value.status === "ready") {
-      process.stdout.write(`${JSON.stringify({ origin: identity.origin, status: "ready" })}\n`);
+      process.stdout.write(`${JSON.stringify({
+        origin: identity.origin,
+        status: "ready",
+        version: identity.version,
+      })}\n`);
       app.quit();
       return;
     }

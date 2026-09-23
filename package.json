@@ -9,6 +9,7 @@
   "scripts": {
     "postinstall": "node scripts/postinstall.mjs",
     "prepare": "git config core.hooksPath .githooks",
+    "package": "node scripts/package.mjs",
     "qualify": "node scripts/acceptance.mjs",
     "build": "pnpm -r --if-present --workspace-concurrency=4 run build",
     "guard": "node scripts/guard.mjs",
@@ -18,6 +19,7 @@
   "devDependencies": {
     "@perish/config": "workspace:*",
     "@perish/guard": "workspace:*",
+    "@perish/pack": "workspace:*",
     "@perish/release": "workspace:*",
     "@perish/testkit": "workspace:*"
   }

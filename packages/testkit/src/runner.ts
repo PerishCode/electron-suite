@@ -15,11 +15,13 @@ import { compose, resolve as release, type Product } from "@perish/release";
 import { Client, serve as sidecar, type Service as Sidecar } from "@perish/sidecar";
 
 import { matrix, type Definition, type Id, type Status } from "./matrix.js";
+import { installed } from "./package.js";
 import { encode, parse, type Evidence, type Report } from "./schema.js";
 
 export interface Options {
   chromium?: boolean;
   output: string;
+  packaged?: boolean;
   root: string;
 }
 
@@ -71,8 +73,28 @@ function pem() {
   };
 }
 
-function path(name: "capsule" | "daemon" | "web"): string {
+function path(name: "capsule" | "carrier" | "daemon" | "web"): string {
   return dirname(fileURLToPath(import.meta.resolve(`@perish/${name}`)));
+}
+
+async function installation(client: Client, temporary: string): Promise<Evidence> {
+  try {
+    const qualified = await timed(() => installed(client, temporary, {
+      carrier: path("carrier"),
+      daemon: path("daemon"),
+      web: path("web"),
+    }));
+    return evidence("PKG-01", "passed", "two channel identities installed and launched", qualified.milliseconds, {
+      built: qualified.value.built,
+      pids: qualified.value.pids,
+      transitions: qualified.value.transitions,
+    });
+  } catch (fault) {
+    const error = fault as Error;
+    return evidence("PKG-01", "failed", error.message, 0, {
+      diagnostics: [error.stack ?? error.message],
+    });
+  }
 }
 
 async function product(lane: Channel, version: string, model: string): Promise<Product> {
@@ -201,6 +223,9 @@ export async function run(options: Options): Promise<Report> {
       restored: ["capsule", "daemon", "web", "model"],
       transitions: ["recover", "begin", "ready", "commit"],
     }));
+    if (options.packaged) {
+      scenarios.push(await installation(client, temporary));
+    }
   } catch (fault) {
     failure = fault as Error;
   } finally {
@@ -211,6 +236,13 @@ export async function run(options: Options): Promise<Report> {
   const add = (item: Evidence) => {
     if (!scenarios.some((current) => current.id === item.id)) scenarios.push(item);
   };
+  if (failure) {
+    for (const item of matrix.slice(0, 7)) {
+      add(evidence(item.id, "failed", failure.message, 0, {
+        diagnostics: [failure.stack ?? failure.message],
+      }));
+    }
+  }
   add(evidence("PKG-01", "unqualified", "platform package not built", 0));
   add(evidence(
     "PKG-10",
@@ -221,9 +253,7 @@ export async function run(options: Options): Promise<Report> {
   add(evidence("G5-NATIVE", "unqualified", "native credentials and installers are out of scope", 0));
   add(evidence("G6-REMOTE", "unqualified", "remote object storage and CDN are out of scope", 0));
   for (const item of matrix) {
-    add(evidence(item.id, "failed", failure?.message ?? "scenario did not execute", 0, {
-      diagnostics: failure ? [failure.stack ?? failure.message] : [],
-    }));
+    add(evidence(item.id, "failed", "scenario did not execute", 0));
   }
   scenarios.sort((left, right) => matrix.findIndex((item) => item.id === left.id)
     - matrix.findIndex((item) => item.id === right.id));
