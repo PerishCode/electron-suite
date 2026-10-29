@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { encode, type Manifest, parse } from "@pesuite/release";
+import { encode, type Manifest, parse } from "@perishcode/release";
 
 export interface Input {
   carrier: string;

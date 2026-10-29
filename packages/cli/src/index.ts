@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
-import { format, guard } from "@pesuite/guard";
+import { format, guard } from "@perishcode/guard";
 
 const version = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string })
   .version;

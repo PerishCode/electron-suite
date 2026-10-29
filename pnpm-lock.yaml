@@ -11,22 +11,22 @@ importers:
       '@biomejs/biome':
         specifier: 2.6.4
         version: 2.6.4
-      '@pesuite/cli':
+      '@perishcode/cli':
         specifier: workspace:*
         version: link:packages/cli
-      '@pesuite/config':
+      '@perishcode/config':
         specifier: workspace:*
         version: link:packages/config
-      '@pesuite/guard':
+      '@perishcode/guard':
         specifier: workspace:*
         version: link:packages/guard
-      '@pesuite/pack':
+      '@perishcode/pack':
         specifier: workspace:*
         version: link:packages/pack
-      '@pesuite/release':
+      '@perishcode/release':
         specifier: workspace:*
         version: link:packages/release
-      '@pesuite/testkit':
+      '@perishcode/testkit':
         specifier: workspace:*
         version: link:packages/testkit
       typescript:
@@ -38,26 +38,26 @@ importers:
 
   apps/capsule:
     dependencies:
-      '@pesuite/blob':
+      '@perishcode/blob':
         specifier: workspace:*
         version: link:../../packages/blob
-      '@pesuite/protocol':
+      '@perishcode/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@pesuite/publish':
+      '@perishcode/publish':
         specifier: workspace:*
         version: link:../../packages/publish
-      '@pesuite/release':
+      '@perishcode/release':
         specifier: workspace:*
         version: link:../../packages/release
-      '@pesuite/sidecar':
+      '@perishcode/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
     devDependencies:
-      '@pesuite/daemon':
+      '@perishcode/daemon':
         specifier: workspace:*
         version: link:../daemon
-      '@pesuite/web':
+      '@perishcode/web':
         specifier: workspace:*
         version: link:../web
       '@types/node':
@@ -75,20 +75,20 @@ importers:
 
   apps/carrier:
     dependencies:
-      '@pesuite/release':
+      '@perishcode/release':
         specifier: workspace:*
         version: link:../../packages/release
     devDependencies:
-      '@pesuite/daemon':
+      '@perishcode/daemon':
         specifier: workspace:*
         version: link:../daemon
-      '@pesuite/protocol':
+      '@perishcode/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@pesuite/sidecar':
+      '@perishcode/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
-      '@pesuite/web':
+      '@perishcode/web':
         specifier: workspace:*
         version: link:../web
       '@types/node':
@@ -109,10 +109,10 @@ importers:
 
   apps/daemon:
     devDependencies:
-      '@pesuite/protocol':
+      '@perishcode/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@pesuite/sidecar':
+      '@perishcode/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
       '@types/node':
@@ -151,7 +151,7 @@ importers:
 
   packages/blob:
     dependencies:
-      '@pesuite/protocol':
+      '@perishcode/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -170,7 +170,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@pesuite/guard':
+      '@perishcode/guard':
         specifier: workspace:*
         version: link:../guard
     devDependencies:
@@ -189,7 +189,7 @@ importers:
 
   packages/config:
     dependencies:
-      '@pesuite/protocol':
+      '@perishcode/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -239,11 +239,11 @@ importers:
 
   packages/pack:
     dependencies:
-      '@pesuite/release':
+      '@perishcode/release':
         specifier: workspace:*
         version: link:../release
     devDependencies:
-      '@pesuite/protocol':
+      '@perishcode/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@types/node':
@@ -282,14 +282,14 @@ importers:
 
   packages/publish:
     dependencies:
-      '@pesuite/blob':
+      '@perishcode/blob':
         specifier: workspace:*
         version: link:../blob
-      '@pesuite/protocol':
+      '@perishcode/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
-      '@pesuite/sidecar':
+      '@perishcode/sidecar':
         specifier: workspace:*
         version: link:../sidecar
       '@types/node':
@@ -307,10 +307,10 @@ importers:
 
   packages/release:
     dependencies:
-      '@pesuite/config':
+      '@perishcode/config':
         specifier: workspace:*
         version: link:../config
-      '@pesuite/protocol':
+      '@perishcode/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -329,7 +329,7 @@ importers:
 
   packages/sidecar:
     dependencies:
-      '@pesuite/protocol':
+      '@perishcode/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -348,35 +348,35 @@ importers:
 
   packages/testkit:
     dependencies:
-      '@pesuite/capsule':
+      '@perishcode/capsule':
         specifier: workspace:*
         version: link:../../apps/capsule
-      '@pesuite/carrier':
+      '@perishcode/carrier':
         specifier: workspace:*
         version: link:../../apps/carrier
-      '@pesuite/guard':
+      '@perishcode/guard':
         specifier: workspace:*
         version: link:../guard
-      '@pesuite/pack':
+      '@perishcode/pack':
         specifier: workspace:*
         version: link:../pack
-      '@pesuite/protocol':
+      '@perishcode/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@pesuite/publish':
+      '@perishcode/publish':
         specifier: workspace:*
         version: link:../publish
-      '@pesuite/release':
+      '@perishcode/release':
         specifier: workspace:*
         version: link:../release
-      '@pesuite/sidecar':
+      '@perishcode/sidecar':
         specifier: workspace:*
         version: link:../sidecar
     devDependencies:
-      '@pesuite/daemon':
+      '@perishcode/daemon':
         specifier: workspace:*
         version: link:../../apps/daemon
-      '@pesuite/web':
+      '@perishcode/web':
         specifier: workspace:*
         version: link:../../apps/web
       '@types/node':

@@ -1,5 +1,5 @@
 {
-  "name": "@pesuite/publish",
+  "name": "@perishcode/publish",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -18,11 +18,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@pesuite/blob": "workspace:*",
-    "@pesuite/protocol": "workspace:*"
+    "@perishcode/blob": "workspace:*",
+    "@perishcode/protocol": "workspace:*"
   },
   "devDependencies": {
-    "@pesuite/sidecar": "workspace:*",
+    "@perishcode/sidecar": "workspace:*",
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
     "typescript": "7.0.2",

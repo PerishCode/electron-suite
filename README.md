@@ -1,12 +1,14 @@
 # electron-suite
 
-可独立分发的 Electron 工程能力，npm scope 统一为 `@pesuite`。
+可独立分发的 Electron 工程能力，npm scope 统一为 `@perishcode`。
 长期目标见 [#1](https://github.com/PerishCode/electron-suite/issues/1)，guard 实施与验收见 [#3](https://github.com/PerishCode/electron-suite/issues/3)。
 
 ## 命令与交付
 
-唯一可执行入口为 `pesuite`，检查命令为 `pesuite guard`。`@pesuite/cli` 负责路由，`@pesuite/guard` 提供检测库；不发布独立 `guard` 命令。
-源码实现已合入主线；正式 registry 发布及 open-design-slim 的 registry 接入以 #3 中的验收记录为准。
+唯一可执行入口为 `pesuite`，检查命令为 `pesuite guard`。`@perishcode/cli` 负责路由，`@perishcode/guard` 提供检测库；不发布独立 `guard` 命令。
+源码实现已合入主线；发布与 open-design-slim 的消费验收见 #3。
+
+分发 registry 为 GitHub Packages：`https://npm.pkg.github.com`。仓库 `.npmrc` 仅声明 `@perishcode` 的 registry 路由，token 保留在用户级 `~/.npmrc`，不得提交。其他第三方依赖继续使用 npmjs。消费机器需要有 GitHub Packages 读取权限的登录态。
 
 ```sh
 pesuite guard

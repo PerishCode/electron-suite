@@ -1,10 +1,10 @@
-# @pesuite/guard
+# @perishcode/guard
 
-Directory and file engineering policies, consumed through `pesuite guard` from `@pesuite/cli`.
+Directory and file engineering policies, consumed through `pesuite guard` from `@perishcode/cli`.
 This package exports the checking API and has no executable.
 
 ```js
-import { guard } from "@pesuite/guard";
+import { guard } from "@perishcode/guard";
 
 const report = await guard({ root: process.cwd() });
 console.log(report.ok, report.findings);

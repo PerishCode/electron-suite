@@ -1,5 +1,5 @@
 {
-  "name": "@pesuite/testkit",
+  "name": "@perishcode/testkit",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -18,18 +18,18 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@pesuite/capsule": "workspace:*",
-    "@pesuite/carrier": "workspace:*",
-    "@pesuite/guard": "workspace:*",
-    "@pesuite/pack": "workspace:*",
-    "@pesuite/protocol": "workspace:*",
-    "@pesuite/publish": "workspace:*",
-    "@pesuite/release": "workspace:*",
-    "@pesuite/sidecar": "workspace:*"
+    "@perishcode/capsule": "workspace:*",
+    "@perishcode/carrier": "workspace:*",
+    "@perishcode/guard": "workspace:*",
+    "@perishcode/pack": "workspace:*",
+    "@perishcode/protocol": "workspace:*",
+    "@perishcode/publish": "workspace:*",
+    "@perishcode/release": "workspace:*",
+    "@perishcode/sidecar": "workspace:*"
   },
   "devDependencies": {
-    "@pesuite/daemon": "workspace:*",
-    "@pesuite/web": "workspace:*",
+    "@perishcode/daemon": "workspace:*",
+    "@perishcode/web": "workspace:*",
     "@types/node": "24.12.2",
     "electron": "41.3.0",
     "esbuild": "0.28.0",

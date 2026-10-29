@@ -1,5 +1,5 @@
 {
-  "name": "@pesuite/release",
+  "name": "@perishcode/release",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -18,8 +18,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@pesuite/config": "workspace:*",
-    "@pesuite/protocol": "workspace:*"
+    "@perishcode/config": "workspace:*",
+    "@perishcode/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

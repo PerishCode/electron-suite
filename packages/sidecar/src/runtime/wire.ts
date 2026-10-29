@@ -13,7 +13,7 @@ import {
   type Request as ResourceRequest,
   resources,
   valid,
-} from "@pesuite/protocol";
+} from "@perishcode/protocol";
 import type { Change, Journal } from "../binding.js";
 import type { Lease, Release, Snapshot, Spec } from "../host.js";
 

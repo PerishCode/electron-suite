@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import { type Artifact, digest, type Envelope, type Generation, identify, type Kind } from "@pesuite/protocol";
+import { type Artifact, digest, type Envelope, type Generation, identify, type Kind } from "@perishcode/protocol";
 
 import { bundle } from "./bundle.js";
 import { encode, type Manifest } from "./manifest.js";

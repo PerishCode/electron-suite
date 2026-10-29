@@ -16,7 +16,7 @@ import {
   type Resource,
   resources,
   revoke,
-} from "@pesuite/protocol";
+} from "@perishcode/protocol";
 
 const durable = new Set<Resource>(["cache", "cas", "data", "logs"]);
 const transient = new Set<Resource>(["lock", "port", "socket", "staging"]);

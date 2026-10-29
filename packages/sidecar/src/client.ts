@@ -9,7 +9,7 @@ import type {
   Permit,
   Registry,
   Request as ResourceRequest,
-} from "@pesuite/protocol";
+} from "@perishcode/protocol";
 import type { Change, Journal } from "./binding.js";
 import type { Lease, Release, Snapshot, Spec } from "./host.js";
 import { encode, type Request, type Response } from "./runtime/wire.js";

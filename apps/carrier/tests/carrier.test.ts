@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { channel, digest, namespace } from "@pesuite/protocol";
-import { emit, resolve } from "@pesuite/release";
-import { Client, type Lease, serve } from "@pesuite/sidecar";
+import { channel, digest, namespace } from "@perishcode/protocol";
+import { emit, resolve } from "@perishcode/release";
+import { Client, type Lease, serve } from "@perishcode/sidecar";
 import { describe, expect, it } from "vitest";
 
 import { asset } from "@";
@@ -83,7 +83,7 @@ describe("carrier", () => {
         PERISH_TOKEN: capability.token,
       };
       const here = dirname(fileURLToPath(import.meta.url));
-      const webroot = dirname(fileURLToPath(import.meta.resolve("@pesuite/web")));
+      const webroot = dirname(fileURLToPath(import.meta.resolve("@perishcode/web")));
       const carrierenv = {
         ...process.env,
         ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
@@ -98,7 +98,7 @@ describe("carrier", () => {
       let child: ChildProcess | undefined;
 
       try {
-        const daemonroot = dirname(fileURLToPath(import.meta.resolve("@pesuite/daemon")));
+        const daemonroot = dirname(fileURLToPath(import.meta.resolve("@perishcode/daemon")));
         lease = await client.start({
           args: [join(daemonroot, "main.mjs")],
           channel: channel("stable"),

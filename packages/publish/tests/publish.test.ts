@@ -12,8 +12,8 @@ import {
   identify,
   type Kind,
   namespace,
-} from "@pesuite/protocol";
-import { Client, type Service as Sidecar, serve as sidecar } from "@pesuite/sidecar";
+} from "@perishcode/protocol";
+import { Client, type Service as Sidecar, serve as sidecar } from "@perishcode/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { type Asset, Authority, Feed, type Service, serve } from "@";

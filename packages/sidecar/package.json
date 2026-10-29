@@ -1,5 +1,5 @@
 {
-  "name": "@pesuite/sidecar",
+  "name": "@perishcode/sidecar",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -22,7 +22,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@pesuite/protocol": "workspace:*"
+    "@perishcode/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

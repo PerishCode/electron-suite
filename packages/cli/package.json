@@ -1,5 +1,5 @@
 {
-  "name": "@pesuite/cli",
+  "name": "@perishcode/cli",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -32,13 +32,14 @@
     "directory": "packages/cli"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
   },
   "engines": {
     "node": ">=24"
   },
   "dependencies": {
-    "@pesuite/guard": "workspace:*"
+    "@perishcode/guard": "workspace:*"
   },
   "bin": {
     "pesuite": "./src/pesuite.mjs"

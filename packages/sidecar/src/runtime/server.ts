@@ -3,7 +3,7 @@ import { chmod } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 
-import { type Capability, type Namespace, namespace, type Permit } from "@pesuite/protocol";
+import { type Capability, type Namespace, namespace, type Permit } from "@perishcode/protocol";
 
 import { Bindings } from "../binding.js";
 import { Sidecar } from "../host.js";

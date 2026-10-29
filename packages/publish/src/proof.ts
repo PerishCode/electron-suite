@@ -6,7 +6,7 @@ import {
   verify as verifybytes,
 } from "node:crypto";
 
-import { type Channel, canonical, type Digest, digest, type Pointer, valid } from "@pesuite/protocol";
+import { type Channel, canonical, type Digest, digest, type Pointer, valid } from "@perishcode/protocol";
 
 export interface Proof {
   algorithm: "ed25519";

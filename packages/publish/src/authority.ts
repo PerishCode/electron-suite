@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import { Store } from "@pesuite/blob";
+import { Store } from "@perishcode/blob";
 import {
   type Artifact,
   type Channel,
@@ -16,7 +16,7 @@ import {
   publish,
   valid,
   verify,
-} from "@pesuite/protocol";
+} from "@perishcode/protocol";
 
 import { type Proof, parse as parseproof, sign } from "./proof.js";
 

@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { channel, digest, namespace } from "@pesuite/protocol";
+import { channel, digest, namespace } from "@perishcode/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Sidecar, type Spec } from "@";
