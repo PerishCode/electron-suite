@@ -97,7 +97,7 @@ export async function launch(spec: Launch): Promise<Running> {
     cwd: spec.cwd,
     detached: process.platform !== "win32",
     env,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["pipe", "pipe", "pipe"],
   });
   const grace = spec.grace ?? 1000;
 

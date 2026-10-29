@@ -5,6 +5,9 @@ import { describe, expect, it } from "vitest";
 import { configuration, load } from "@";
 
 describe("configuration", () => {
+  it("leaves the runtime namespace to its own authority", () => {
+    expect(configuration({ schemaVersion: 1, guard: {}, runtime: { carrier: 1 } }).rules["file.lines"]?.max).toBe(500);
+  });
   it("merges fields and replaces arrays without changing defaults", () => {
     const value = configuration({ schemaVersion: 1, guard: { exclude: [], rules: { "file.lines": { max: 12 } } } });
     expect(value.exclude).toEqual([]);

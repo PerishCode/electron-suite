@@ -1,7 +1,6 @@
 {
   "name": "@perishcode/publish",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "exports": {
     ".": {
@@ -27,5 +26,16 @@
     "esbuild": "0.28.0",
     "typescript": "7.0.2",
     "vitest": "4.1.6"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PerishCode/electron-suite.git",
+    "directory": "packages/publish"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   }
 }

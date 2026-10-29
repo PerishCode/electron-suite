@@ -8,7 +8,7 @@ import { object, rules, strings } from "./schema.js";
 export function configuration(input: unknown): Policy {
   const policy = structuredClone(defaults);
   if (input === null || input === undefined) return policy;
-  const top = object(input, ["schemaVersion", "guard"], "pesuite");
+  const top = object(input, ["schemaVersion", "guard", "runtime"], "pesuite");
   if (top.schemaVersion !== 1) throw new Error("pesuite.schemaVersion must be 1");
   if (!("guard" in top)) return policy;
   const guard = object(

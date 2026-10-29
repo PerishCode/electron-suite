@@ -1,6 +1,3 @@
-export type {
-  Attempt,
-  Content,
-  Mount,
-} from "./capsule.js";
-export { Capsule } from "./capsule.js";
+export async function activate(): Promise<{ title: string }> {
+  return { title: "electron-suite fixture" };
+}

@@ -19,7 +19,7 @@ const sidecars: Sidecar[] = [];
 async function product(lane: Channel, version: string, model: string) {
   return compose(resolve({}, { channel: lane, version }), {
     blobs: [{ path: model, slot: "model" }],
-    capsule: dirname(fileURLToPath(import.meta.resolve("@perishcode/capsule"))),
+    capsule: dirname(fileURLToPath(import.meta.resolve("@perishcode/runtime"))),
     carrier: 1,
     daemon: dirname(fileURLToPath(import.meta.resolve("@perishcode/daemon"))),
     web: dirname(fileURLToPath(import.meta.resolve("@perishcode/web"))),

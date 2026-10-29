@@ -13,6 +13,7 @@ export interface Input {
   manifest: Manifest;
   output: string;
   web: string;
+  seed?: string;
 }
 
 export interface Package {
@@ -87,6 +88,7 @@ export async function pack(input: Input): Promise<Package> {
       { from: resolve(input.daemon), to: "daemon" },
       { from: release, to: "release.json" },
       { from: resolve(input.web), to: "web" },
+      ...(input.seed ? [{ from: resolve(input.seed), to: "seed" }] : []),
     ],
     files: ["dist/**/*", "package.json"],
     mac: {

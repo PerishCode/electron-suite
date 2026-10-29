@@ -90,3 +90,26 @@ pnpm guard
 ```
 
 `apps/` 为运行载体与能力验证应用，`packages/` 为共享能力；包职责见 [AGENTS.md](./AGENTS.md)。
+
+## 四运行单元 SDK
+
+`@perishcode/runtime` 提供 Capsule 代际编排、内容目录读写、运行会话及最小 Daemon 服务；
+`@perishcode/electron` 提供安装宿主适配、沙箱 preload 和窄 IPC 接口。
+浏览器仅通过 `@perishcode/electron/bridge` 导入纯类型契约，不加载 Node 协议实现。
+`@perishcode/pack` 构建 unsigned macOS `.app`，可嵌入初始 seed。
+协议、CAS、发布、资源和身份等依赖包随 SDK 发布，产品不依赖 suite 的参考 apps 或 testkit。
+
+产品在 `pesuite.yaml` 的 `runtime:` 中声明 appid、carrier（最低宿主 ABI）、channel、name、namespace、scheme 和 version。
+Electron 在固定 userData 根持有单实例锁，调用 `startElectron`；SDK 读取初始 seed 或显式本地 candidate，校验与物化内容，
+执行 Capsule 的 `activate(context)`，使用安装 Electron 的 Node 模式运行 Daemon，再等待实际 Web/Daemon 就绪后提交代际。
+renderer 只有 health/read/write 接口，不取得服务 token、任意 URL 或管理器权限。
+
+Daemon 使用父进程管道作为存活信号；正常停止先收敛进程，再退休凭据和释放临时资源。
+启动失败保留阻塞状态，需要显式 recover 最近 committed generation；不隐式声称自动回退。
+持久资源按 namespace 隔离，产品应为不同渠道选择不同 userData 根；不要将此理解为自动跨渠道隔离。
+
+此 SDK 首版服务于四单元骨架，不迁移 OpenDesign 功能。本地 candidate 是调用者明确选择的可信目录，
+不构成公网更新授权；完整远端信任、签名安装器、跨平台进程树与提交中断恢复仍需独立验收。
+参考 qualify 不再凭调用方布尔值或手动就绪将完整更新判为 passed。
+进展和验收见 [#7](https://github.com/PerishCode/electron-suite/issues/7)、[#8](https://github.com/PerishCode/electron-suite/issues/8)
+及 [slim #2](https://github.com/PerishCode/open-design-slim/issues/2)。

@@ -67,6 +67,20 @@ Use pnpm from the repository root. Follow the user's instructions incrementally.
 - `release`: release identity resolution and manifest authority.
 - `sidecar`: capability-scoped process lifecycle reference implementation.
 - `testkit`: typed acceptance matrix, qualification runner, and report schema.
+- `runtime`: published generation orchestration, product receipts, daemon probe and session lifecycle.
+- `electron`: published installed-host adapter, restricted renderer IPC and sandboxed preload.
+
+## Skeleton delivery
+
+Read issues #6, #7 and #8 for the mechanism audit and runtime delivery.
+The current slim phase only establishes electron/capsule/web/daemon skeletons;
+do not migrate any OpenDesign features, business API or data models.
+Runtime product declarations use `runtime:` in `pesuite.yaml`.
+The old electron.config.mjs and Carrier app remain reference fixtures.
+The new host executes a mounted Capsule entry and keeps daemon tokens in the main process.
+Local candidate directories are explicitly supplied trusted inputs, not an authenticated remote update feed.
+Keep signing, remote distribution, platform coverage and crash-during-commit unqualified
+until their own acceptance evidence exists.
 
 ## Scripts
 
