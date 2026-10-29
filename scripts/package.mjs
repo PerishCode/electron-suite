@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
-import { pack } from "@perish/pack";
-import { resolve } from "@perish/release";
+import { pack } from "@pesuite/pack";
+import { resolve } from "@pesuite/release";
 
 import config from "../electron.config.mjs";
 

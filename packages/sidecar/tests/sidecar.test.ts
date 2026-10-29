@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { channel, digest, namespace } from "@perish/protocol";
+import { channel, digest, namespace } from "@pesuite/protocol";
 
 import { Sidecar, type Spec } from "@";
 

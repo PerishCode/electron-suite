@@ -8,7 +8,7 @@ import {
   type Capability,
   type Namespace,
   type Permit,
-} from "@perish/protocol";
+} from "@pesuite/protocol";
 
 import { Bindings } from "./binding.js";
 import { Sidecar } from "./host.js";

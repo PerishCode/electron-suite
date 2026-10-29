@@ -1,4 +1,4 @@
-import { format, guard } from "@perish/guard";
+import { format, guard } from "@pesuite/guard";
 
 const args = new Set(process.argv.slice(2));
 const report = await guard({

@@ -9,7 +9,7 @@ import type {
   Namespace,
   Registry,
   Request as ResourceRequest,
-} from "@perish/protocol";
+} from "@pesuite/protocol";
 
 import type { Lease, Release, Snapshot, Spec } from "./host.js";
 import type { Change, Journal } from "./binding.js";

@@ -8,6 +8,7 @@ It records the vision, evidence, ownership boundaries, and completion criteria f
 electron-suite and [open-design-slim](https://github.com/PerishCode/open-design-slim).
 electron-suite distributes reusable engineering capabilities as npm packages;
 open-design-slim consumes published packages and owns product composition and policy.
+All workspace packages use the npm scope `@pesuite` (for example, `@pesuite/guard`).
 Link incremental work and validation evidence to issue #1 using `Refs #1`.
 Keep it Open until the full product lifecycle and recorded completion criteria are
 fulfilled with reviewable evidence. Partial deliveries must not close it; do not
@@ -51,6 +52,6 @@ Use pnpm from the repository root. Follow the user's instructions incrementally.
 ## Scripts
 
 - `postinstall.mjs`: topological concurrent workspace build.
-- `guard.mjs`: thin `@perish/guard` command entry.
-- `package.mjs`: thin `@perish/pack` platform package entry.
-- `acceptance.mjs`: thin `@perish/testkit` qualification entry.
+- `guard.mjs`: thin `@pesuite/guard` command entry.
+- `package.mjs`: thin `@pesuite/pack` platform package entry.
+- `acceptance.mjs`: thin `@pesuite/testkit` qualification entry.

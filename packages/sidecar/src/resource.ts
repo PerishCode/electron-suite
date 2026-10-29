@@ -16,7 +16,7 @@ import {
   type Registry,
   type Request,
   type Resource,
-} from "@perish/protocol";
+} from "@pesuite/protocol";
 
 const durable = new Set<Resource>(["cache", "cas", "data", "logs"]);
 const transient = new Set<Resource>(["lock", "port", "socket", "staging"]);

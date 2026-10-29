@@ -1,5 +1,5 @@
 {
-  "name": "@perish/capsule",
+  "name": "@pesuite/capsule",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -19,15 +19,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@perish/blob": "workspace:*",
-    "@perish/protocol": "workspace:*",
-    "@perish/publish": "workspace:*",
-    "@perish/release": "workspace:*",
-    "@perish/sidecar": "workspace:*"
+    "@pesuite/blob": "workspace:*",
+    "@pesuite/protocol": "workspace:*",
+    "@pesuite/publish": "workspace:*",
+    "@pesuite/release": "workspace:*",
+    "@pesuite/sidecar": "workspace:*"
   },
   "devDependencies": {
-    "@perish/daemon": "workspace:*",
-    "@perish/web": "workspace:*",
+    "@pesuite/daemon": "workspace:*",
+    "@pesuite/web": "workspace:*",
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
     "typescript": "6.0.3",

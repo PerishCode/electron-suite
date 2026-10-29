@@ -1,6 +1,6 @@
 import { createServer, type ServerResponse } from "node:http";
 
-import { canonical, channel, valid, type Digest } from "@perish/protocol";
+import { canonical, channel, valid, type Digest } from "@pesuite/protocol";
 
 import { Authority } from "./authority.js";
 

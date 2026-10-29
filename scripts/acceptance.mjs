@@ -1,4 +1,4 @@
-import { run } from "@perish/testkit";
+import { run } from "@pesuite/testkit";
 
 const report = await run({
   chromium: process.env.PERISH_CHROMIUM === "passed",

@@ -8,7 +8,7 @@ import { createConnection } from "node:net";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { channel, digest, namespace } from "@perish/protocol";
+import { channel, digest, namespace } from "@pesuite/protocol";
 
 import { Client, serve, type Service, type Spec } from "@";
 

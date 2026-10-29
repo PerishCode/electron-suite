@@ -1,5 +1,5 @@
 {
-  "name": "@perish/pack",
+  "name": "@pesuite/pack",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -18,10 +18,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@perish/release": "workspace:*"
+    "@pesuite/release": "workspace:*"
   },
   "devDependencies": {
-    "@perish/protocol": "workspace:*",
+    "@pesuite/protocol": "workspace:*",
     "@types/node": "24.12.2",
     "electron": "41.3.0",
     "electron-builder": "26.8.1",

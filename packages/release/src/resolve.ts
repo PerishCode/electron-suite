@@ -1,5 +1,5 @@
-import type { Config, Context, Provider } from "@perish/config";
-import { channel } from "@perish/protocol";
+import type { Config, Context, Provider } from "@pesuite/config";
+import { channel } from "@pesuite/protocol";
 
 import { parse, type Manifest } from "./manifest.js";
 

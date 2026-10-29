@@ -7,13 +7,13 @@ import { dirname, join, resolve as resolvepath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { Capsule } from "@perish/capsule";
-import { asset } from "@perish/carrier";
-import { guard } from "@perish/guard";
-import { channel, gates, namespace, startup, type Channel, type Digest } from "@perish/protocol";
-import { Authority, Feed, serve as publish, type Service as Publisher } from "@perish/publish";
-import { compose, resolve as release, type Product } from "@perish/release";
-import { Client, serve as sidecar, type Service as Sidecar } from "@perish/sidecar";
+import { Capsule } from "@pesuite/capsule";
+import { asset } from "@pesuite/carrier";
+import { guard } from "@pesuite/guard";
+import { channel, gates, namespace, startup, type Channel, type Digest } from "@pesuite/protocol";
+import { Authority, Feed, serve as publish, type Service as Publisher } from "@pesuite/publish";
+import { compose, resolve as release, type Product } from "@pesuite/release";
+import { Client, serve as sidecar, type Service as Sidecar } from "@pesuite/sidecar";
 
 import { matrix, type Definition, type Id, type Status } from "./matrix.js";
 import { installed, type Selections } from "./package.js";
@@ -75,7 +75,7 @@ function pem() {
 }
 
 function path(name: "capsule" | "carrier" | "daemon" | "web"): string {
-  return dirname(fileURLToPath(import.meta.resolve(`@perish/${name}`)));
+  return dirname(fileURLToPath(import.meta.resolve(`@pesuite/${name}`)));
 }
 
 async function installation(

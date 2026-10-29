@@ -29,7 +29,7 @@ describe("guard", () => {
       "packages/guard/src/index.ts": "export const guard = true;\n",
       "packages/guard/tests/guard.test.ts": "export const test = true;\n",
       "pnpm-workspace.yaml": "packages: []\n",
-      "scripts/guard.mjs": "import '@perish/guard';\n",
+      "scripts/guard.mjs": "import '@pesuite/guard';\n",
     });
 
     await expect(inspect(files)).resolves.toEqual([]);

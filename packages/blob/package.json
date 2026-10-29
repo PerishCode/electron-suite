@@ -1,5 +1,5 @@
 {
-  "name": "@perish/blob",
+  "name": "@pesuite/blob",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -18,7 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@perish/protocol": "workspace:*"
+    "@pesuite/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

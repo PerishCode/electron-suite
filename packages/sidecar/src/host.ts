@@ -9,7 +9,7 @@ import {
   type Digest,
   type Namespace,
   valid,
-} from "@perish/protocol";
+} from "@pesuite/protocol";
 
 import { launch, type Launch, type Running, type Stop } from "./runner.js";
 

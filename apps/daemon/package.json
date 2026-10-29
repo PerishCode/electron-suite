@@ -1,5 +1,5 @@
 {
-  "name": "@perish/daemon",
+  "name": "@pesuite/daemon",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -22,8 +22,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "devDependencies": {
-    "@perish/protocol": "workspace:*",
-    "@perish/sidecar": "workspace:*",
+    "@pesuite/protocol": "workspace:*",
+    "@pesuite/sidecar": "workspace:*",
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
     "typescript": "6.0.3",

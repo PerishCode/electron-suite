@@ -3,7 +3,7 @@ import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { namespace } from "@perish/protocol";
+import { namespace } from "@pesuite/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Resources } from "@";

@@ -14,7 +14,7 @@ import {
   type Event,
   type Fault,
   type Namespace,
-} from "@perish/protocol";
+} from "@pesuite/protocol";
 
 export interface Journal {
   revision: number;

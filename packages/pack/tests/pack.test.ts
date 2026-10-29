@@ -1,5 +1,5 @@
-import { channel } from "@perish/protocol";
-import { resolve } from "@perish/release";
+import { channel } from "@pesuite/protocol";
+import { resolve } from "@pesuite/release";
 import { describe, expect, it } from "vitest";
 
 import { plan } from "@";

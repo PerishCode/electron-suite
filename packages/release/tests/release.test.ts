@@ -2,8 +2,8 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { define } from "@perish/config";
-import { channel } from "@perish/protocol";
+import { define } from "@pesuite/config";
+import { channel } from "@pesuite/protocol";
 import { describe, expect, it } from "vitest";
 
 import { decode, distinct, emit, encode, parse, resolve } from "@";

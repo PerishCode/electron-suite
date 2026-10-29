@@ -1,4 +1,4 @@
-import type { Channel } from "@perish/protocol";
+import type { Channel } from "@pesuite/protocol";
 
 export interface Context {
   channel: Channel;

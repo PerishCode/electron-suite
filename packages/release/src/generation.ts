@@ -7,7 +7,7 @@ import {
   type Envelope,
   type Generation,
   type Kind,
-} from "@perish/protocol";
+} from "@pesuite/protocol";
 
 import { bundle } from "./bundle.js";
 import { encode, type Manifest } from "./manifest.js";

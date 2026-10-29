@@ -6,7 +6,7 @@ import {
   type KeyObject,
 } from "node:crypto";
 
-import { canonical, digest, valid, type Channel, type Digest, type Pointer } from "@perish/protocol";
+import { canonical, digest, valid, type Channel, type Digest, type Pointer } from "@pesuite/protocol";
 
 export interface Proof {
   algorithm: "ed25519";

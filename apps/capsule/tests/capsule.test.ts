@@ -12,8 +12,8 @@ import {
   type Envelope,
   type Generation,
   type Kind,
-} from "@perish/protocol";
-import { Client, serve, type Service } from "@perish/sidecar";
+} from "@pesuite/protocol";
+import { Client, serve, type Service } from "@pesuite/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Capsule, type Content } from "@";

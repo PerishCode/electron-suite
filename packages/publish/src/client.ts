@@ -8,7 +8,7 @@ import {
   type Distribution,
   type Envelope,
   type Pointer,
-} from "@perish/protocol";
+} from "@pesuite/protocol";
 
 import type { Asset } from "./authority.js";
 import { trust } from "./proof.js";

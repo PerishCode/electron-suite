@@ -9,10 +9,10 @@ import {
   gates,
   namespace,
   type Channel,
-} from "@perish/protocol";
-import { Authority, Feed, serve, type Service } from "@perish/publish";
-import { compose, resolve } from "@perish/release";
-import { Client, serve as sidecar, type Service as Sidecar } from "@perish/sidecar";
+} from "@pesuite/protocol";
+import { Authority, Feed, serve, type Service } from "@pesuite/publish";
+import { compose, resolve } from "@pesuite/release";
+import { Client, serve as sidecar, type Service as Sidecar } from "@pesuite/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Capsule } from "@";
@@ -24,10 +24,10 @@ const sidecars: Sidecar[] = [];
 async function product(lane: Channel, version: string, model: string) {
   return compose(resolve({}, { channel: lane, version }), {
     blobs: [{ path: model, slot: "model" }],
-    capsule: dirname(fileURLToPath(import.meta.resolve("@perish/capsule"))),
+    capsule: dirname(fileURLToPath(import.meta.resolve("@pesuite/capsule"))),
     carrier: 1,
-    daemon: dirname(fileURLToPath(import.meta.resolve("@perish/daemon"))),
-    web: dirname(fileURLToPath(import.meta.resolve("@perish/web"))),
+    daemon: dirname(fileURLToPath(import.meta.resolve("@pesuite/daemon"))),
+    web: dirname(fileURLToPath(import.meta.resolve("@pesuite/web"))),
   });
 }
 

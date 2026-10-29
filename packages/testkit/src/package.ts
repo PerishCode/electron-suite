@@ -2,11 +2,11 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { cp } from "node:fs/promises";
 import { basename, join } from "node:path";
 
-import { type Mount } from "@perish/capsule";
-import { inspect, pack } from "@perish/pack";
-import { channel, digest, namespace, type Digest } from "@perish/protocol";
-import { distinct, resolve, type Manifest } from "@perish/release";
-import { type Client, type Lease } from "@perish/sidecar";
+import { type Mount } from "@pesuite/capsule";
+import { inspect, pack } from "@pesuite/pack";
+import { channel, digest, namespace, type Digest } from "@pesuite/protocol";
+import { distinct, resolve, type Manifest } from "@pesuite/release";
+import { type Client, type Lease } from "@pesuite/sidecar";
 
 export interface Installed {
   artifacts: Digest[];

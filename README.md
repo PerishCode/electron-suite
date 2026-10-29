@@ -2,6 +2,8 @@
 
 以 pnpm workspace 组织的 Electron 工程。
 
+npm 包统一使用 `@pesuite` scope，例如 `@pesuite/guard`。
+
 ## 目录结构
 
 ```text

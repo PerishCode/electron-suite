@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { link, mkdir, open, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import { digest, kinds, valid, verify, type Artifact, type Digest, type Kind } from "@perish/protocol";
+import { digest, kinds, valid, verify, type Artifact, type Digest, type Kind } from "@pesuite/protocol";
 
 export interface Options {
   root: string;

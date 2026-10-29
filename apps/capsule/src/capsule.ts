@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { Store } from "@perish/blob";
+import { Store } from "@pesuite/blob";
 import {
   envelope,
   gates,
@@ -16,10 +16,10 @@ import {
   type Gate,
   type Mode,
   type Namespace,
-} from "@perish/protocol";
-import { Feed } from "@perish/publish";
-import { bundle, materialize } from "@perish/release";
-import { type Change, Client, type Journal } from "@perish/sidecar";
+} from "@pesuite/protocol";
+import { Feed } from "@pesuite/publish";
+import { bundle, materialize } from "@pesuite/release";
+import { type Change, Client, type Journal } from "@pesuite/sidecar";
 
 export interface Content {
   artifact: Artifact;
