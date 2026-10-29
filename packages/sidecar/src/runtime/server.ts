@@ -2,10 +2,10 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { chmod } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
-
 import { type Capability, type Namespace, namespace, type Permit } from "@perishcode/protocol";
-
 import { Bindings } from "../binding.js";
+import { Hosted } from "../control/hosted.js";
+import type { Attachment, Expose } from "../control/types.js";
 import { Sidecar } from "../host.js";
 import { Resources } from "./resource.js";
 import { decode, encode, type Request, type Response } from "./wire.js";
@@ -14,6 +14,7 @@ export interface Service {
   authority: string;
   close(): Promise<void>;
   endpoint: string;
+  expose<M>(options: Expose<M>): Promise<Attachment>;
 }
 
 const limit = 64 * 1024;
@@ -28,6 +29,8 @@ interface Runtime {
   bindings: Bindings;
   capabilities: Map<string, Capability>;
   host: Sidecar;
+  hosted: Hosted;
+  closing: boolean;
   open(value: string): Promise<Resources>;
 }
 
@@ -53,6 +56,15 @@ function retire(runtime: Runtime, capability: Capability): boolean {
 }
 
 async function dispatch(runtime: Runtime, authority: string, request: Request) {
+  if (runtime.closing && ["start", "attach", "issue", "grant", "forward", "transit"].includes(request.type)) {
+    throw new Error("sidecar is closing");
+  }
+  if (request.type === "invoke")
+    return runtime.hosted.invoke(request.descriptor, request.operation, request.method, request.input);
+  if (request.type === "connect") {
+    if (!equal(request.authority, authority)) throw new Error("invalid authority");
+    return runtime.hosted.connect(request.identity);
+  }
   if (request.type === "start") {
     if (!equal(request.authority, authority)) throw new Error("invalid authority");
     return runtime.host.start(request.spec);
@@ -131,7 +143,10 @@ export async function serve(
   root = dirname(endpoint),
 ): Promise<Service> {
   const hosts = new Map<Namespace, Promise<Resources>>();
+  const hosted = new Hosted(async (name) => runtime.open(name));
   const runtime: Runtime = {
+    hosted,
+    closing: false,
     bindings: new Bindings(root),
     capabilities: new Map(),
     host,
@@ -151,13 +166,25 @@ export async function serve(
   await listen(server, endpoint);
   if (process.platform !== "win32") await chmod(endpoint, 0o600);
 
+  let shutdown: Promise<void> | undefined;
+  const stop = async () => {
+    runtime.closing = true;
+    await hosted.close();
+    const results = await host.close();
+    if (results.some((result) => result.status !== "stopped")) throw new Error("sidecar processes remain alive");
+    await close(server);
+    await Promise.all([...hosts.values()].map(async (pending) => (await pending).close()));
+  };
   return {
     authority,
     endpoint,
-    close: async () => {
-      await close(server);
-      await host.close();
-      await Promise.all([...hosts.values()].map(async (pending) => (await pending).close()));
+    expose: (options) => hosted.expose(options),
+    close: () => {
+      shutdown ??= stop().catch((fault) => {
+        shutdown = undefined;
+        throw fault;
+      });
+      return shutdown;
     },
   };
 }

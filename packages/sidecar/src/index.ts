@@ -4,6 +4,8 @@ export type {
 } from "./binding.js";
 export { Bindings } from "./binding.js";
 export { Client } from "./client.js";
+export { Peer } from "./control/peer.js";
+export type { Attachment, Context, Expose, Identity } from "./control/types.js";
 export type {
   Lease,
   Release,
