@@ -1,12 +1,12 @@
 import {
   createPrivateKey,
   createPublicKey,
+  type KeyObject,
   sign as signbytes,
   verify as verifybytes,
-  type KeyObject,
 } from "node:crypto";
 
-import { canonical, digest, valid, type Channel, type Digest, type Pointer } from "@pesuite/protocol";
+import { type Channel, canonical, type Digest, digest, type Pointer, valid } from "@pesuite/protocol";
 
 export interface Proof {
   algorithm: "ed25519";
@@ -54,7 +54,8 @@ export function trust(publickey: string, channel: Channel, pointer: Pointer, inp
   const proof = parse(input);
   const key = createPublicKey(publickey);
   if (proof.channel !== channel || proof.generation !== pointer.generation) throw new Error("proof target mismatch");
-  if (proof.key !== identity(key) || pointer.proof !== digest(canonical(proof))) throw new Error("proof trust mismatch");
+  if (proof.key !== identity(key) || pointer.proof !== digest(canonical(proof)))
+    throw new Error("proof trust mismatch");
   const validproof = verifybytes(
     null,
     Buffer.from(message(channel, pointer.generation)),

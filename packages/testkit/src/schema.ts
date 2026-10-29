@@ -1,6 +1,6 @@
-import { canonical, valid, type Digest } from "@pesuite/protocol";
+import { canonical, type Digest, valid } from "@pesuite/protocol";
 
-import { gates, ids, matrix, type Gate, type Id, type Status } from "./matrix.js";
+import { type Gate, gates, type Id, ids, matrix, type Status } from "./matrix.js";
 
 export interface Evidence {
   actual: string;
@@ -49,23 +49,42 @@ function keys(value: Record<string, unknown>, expected: string[], name: string):
 function evidence(value: unknown): Evidence {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("evidence is invalid");
   const data = value as Record<string, unknown>;
-  keys(data, [
-    "actual", "artifacts", "built", "diagnostics", "downloaded", "expected", "gate", "id",
-    "milliseconds", "pids", "restored", "status", "survivors", "transitions",
-  ], "evidence");
+  keys(
+    data,
+    [
+      "actual",
+      "artifacts",
+      "built",
+      "diagnostics",
+      "downloaded",
+      "expected",
+      "gate",
+      "id",
+      "milliseconds",
+      "pids",
+      "restored",
+      "status",
+      "survivors",
+      "transitions",
+    ],
+    "evidence",
+  );
   const status = data.status as Status;
-  if (!ids.includes(data.id as Id) || !gates.includes(data.gate as Gate)) throw new TypeError("evidence identity is invalid");
+  if (!ids.includes(data.id as Id) || !gates.includes(data.gate as Gate))
+    throw new TypeError("evidence identity is invalid");
   if (!["passed", "failed", "unqualified"].includes(status)) throw new TypeError("evidence status is invalid");
-  if (!Number.isFinite(data.milliseconds) || Number(data.milliseconds) < 0) throw new TypeError("evidence time is invalid");
+  if (!Number.isFinite(data.milliseconds) || Number(data.milliseconds) < 0)
+    throw new TypeError("evidence time is invalid");
   const artifacts = strings(data.artifacts, "evidence.artifacts");
   if (artifacts.some((item) => !valid(item))) throw new TypeError("evidence artifacts are invalid");
   const pids = data.pids;
   const survivors = data.survivors;
-  const processes = (items: unknown): items is number[] => Array.isArray(items)
-    && items.every((item) => Number.isSafeInteger(item) && Number(item) >= 0);
+  const processes = (items: unknown): items is number[] =>
+    Array.isArray(items) && items.every((item) => Number.isSafeInteger(item) && Number(item) >= 0);
   if (!processes(pids) || !processes(survivors)) throw new TypeError("evidence processes are invalid");
   const item = matrix.find((current) => current.id === data.id);
-  if (!item || item.gate !== data.gate || item.expected !== data.expected) throw new TypeError("evidence definition drift");
+  if (!item || item.gate !== data.gate || item.expected !== data.expected)
+    throw new TypeError("evidence definition drift");
   if (typeof data.actual !== "string" || !data.actual) throw new TypeError("evidence actual is invalid");
   return {
     actual: String(data.actual),
@@ -98,10 +117,13 @@ export function parse(value: unknown): Report {
     throw new TypeError("report scenarios are incomplete");
   }
   const result = data.result;
-  if (result !== "passed" && result !== "partial" && result !== "failed") throw new TypeError("report result is invalid");
+  if (result !== "passed" && result !== "partial" && result !== "failed")
+    throw new TypeError("report result is invalid");
   const expected = scenarios.some((item) => item.status === "failed")
     ? "failed"
-    : scenarios.some((item) => item.status === "unqualified") ? "partial" : "passed";
+    : scenarios.some((item) => item.status === "unqualified")
+      ? "partial"
+      : "passed";
   if (result !== expected) throw new TypeError("report result is inconsistent");
   const identity = [data.architecture, data.platform, data.revision];
   const tooling = [tools.electron, tools.node, tools.pnpm];

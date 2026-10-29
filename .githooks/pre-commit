@@ -1,2 +1,2 @@
 #!/bin/sh
-exec node scripts/guard.mjs --staged
+exec pnpm guard

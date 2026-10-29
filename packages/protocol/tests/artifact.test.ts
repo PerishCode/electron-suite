@@ -1,14 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  canonical,
-  digest,
-  envelope,
-  identify,
-  parse,
-  type Generation,
-  verify,
-} from "@";
+import { canonical, digest, envelope, type Generation, identify, parse, verify } from "@";
 
 function generation(): Generation {
   const item = (kind: "capsule" | "web" | "daemon" | "blob", slot: string, value: string) => ({

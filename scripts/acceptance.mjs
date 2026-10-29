@@ -7,10 +7,12 @@ const report = await run({
   root: process.cwd(),
 });
 
-process.stdout.write(`${JSON.stringify({
-  report: process.env.PERISH_REPORT ?? ".artifacts/qualification.json",
-  result: report.result,
-  scenarios: report.scenarios.length,
-})}\n`);
+process.stdout.write(
+  `${JSON.stringify({
+    report: process.env.PERISH_REPORT ?? ".artifacts/qualification.json",
+    result: report.result,
+    scenarios: report.scenarios.length,
+  })}\n`,
+);
 
 if (report.result === "failed") process.exitCode = 1;

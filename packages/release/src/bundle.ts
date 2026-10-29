@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import { canonical } from "@pesuite/protocol";
@@ -28,7 +28,7 @@ async function walk(root: string, base = ""): Promise<Entry[]> {
   const files: Entry[] = [];
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     const name = base ? `${base}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) files.push(...await walk(root, name));
+    if (entry.isDirectory()) files.push(...(await walk(root, name)));
     else if (entry.isFile()) {
       const source = join(root, name);
       const mode = (await stat(source)).mode & 0o111 ? 0o755 : 0o644;
@@ -48,7 +48,8 @@ function parse(input: string | Uint8Array): Bundle {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new TypeError("bundle file is invalid");
     const file = item as Record<string, unknown>;
     const fields = Object.keys(file).sort().join(":");
-    const encoded = typeof file.bytes === "string" && Buffer.from(file.bytes, "base64").toString("base64") === file.bytes;
+    const encoded =
+      typeof file.bytes === "string" && Buffer.from(file.bytes, "base64").toString("base64") === file.bytes;
     if (fields !== "bytes:mode:path" || !encoded || typeof file.path !== "string") {
       throw new TypeError("bundle file is invalid");
     }

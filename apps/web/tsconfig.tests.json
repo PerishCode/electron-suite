@@ -1,22 +1,15 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "declaration": false,
-    "ignoreDeprecations": "6.0",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "noEmit": true,
     "paths": {
-      "@": [
-        "src"
-      ]
+      "@": ["./src"],
+      "@/*": ["./src/*"]
     },
     "rootDir": "."
   },
-  "include": [
-    "src",
-    "tests",
-    "vitest.config.ts"
-  ]
+  "include": ["src", "tests", "vitest.config.ts"]
 }

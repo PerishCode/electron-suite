@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, open, readFile, rename, rm, writeFile, type FileHandle } from "node:fs/promises";
+import { chmod, type FileHandle, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -8,14 +8,14 @@ import {
   allocate,
   canonical,
   digest,
-  namespace,
-  resources,
-  revoke,
   type Grant,
   type Namespace,
+  namespace,
   type Registry,
   type Request,
   type Resource,
+  resources,
+  revoke,
 } from "@pesuite/protocol";
 
 const durable = new Set<Resource>(["cache", "cas", "data", "logs"]);
@@ -26,16 +26,16 @@ export interface ResourceOptions {
   root: string;
 }
 
-type Handle =
-  | { kind: "file"; value: FileHandle }
-  | { kind: "server"; value: Server };
+type Handle = { kind: "file"; value: FileHandle } | { kind: "server"; value: Server };
 
 function same(left: Request, right: Request): boolean {
-  return left.kind === right.kind
-    && left.name === right.name
-    && left.owner === right.owner
-    && left.scheme === right.scheme
-    && left.scope === right.scope;
+  return (
+    left.kind === right.kind &&
+    left.name === right.name &&
+    left.owner === right.owner &&
+    left.scheme === right.scheme &&
+    left.scope === right.scope
+  );
 }
 
 function path(base: string, request: Request, lease: string): string {
@@ -71,7 +71,7 @@ async function close(handle: Handle): Promise<void> {
     return;
   }
   await new Promise<void>((done, reject) => {
-    handle.value.close((fault) => fault ? reject(fault) : done());
+    handle.value.close((fault) => (fault ? reject(fault) : done()));
   });
 }
 
@@ -254,7 +254,10 @@ export class Resources {
 
   async #run<T>(action: () => Promise<T>): Promise<T> {
     const result = this.#pending.then(action, action);
-    this.#pending = result.then(() => undefined, () => undefined);
+    this.#pending = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   }
 

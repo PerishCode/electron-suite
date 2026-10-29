@@ -2,7 +2,7 @@ import type { Namespace } from "./identity.js";
 
 export const resources = ["port", "socket", "data", "cache", "logs", "cas", "staging", "lock"] as const;
 
-export type Resource = typeof resources[number];
+export type Resource = (typeof resources)[number];
 export type Scope = "namespace" | "attempt";
 
 export interface Request {

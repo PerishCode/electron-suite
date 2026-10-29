@@ -1,5 +1,5 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { timingSafeEqual } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
 
@@ -116,8 +116,9 @@ async function handle(options: Options, request: IncomingMessage, response: Serv
 
 function handler(options: Options) {
   return (request: IncomingMessage, response: ServerResponse) => {
-    void handle(options, request, response)
-      .catch((fault: Error) => reply(response, 400, { error: fault.message }, origin(options, request)));
+    void handle(options, request, response).catch((fault: Error) =>
+      reply(response, 400, { error: fault.message }, origin(options, request)),
+    );
   };
 }
 
@@ -137,8 +138,9 @@ export async function serve(options: Options): Promise<Service> {
   await listen(server, options.socket);
   return {
     socket: options.socket,
-    close: () => new Promise((resolve, reject) => {
-      server.close((fault) => fault ? reject(fault) : resolve());
-    }),
+    close: () =>
+      new Promise((resolve, reject) => {
+        server.close((fault) => (fault ? reject(fault) : resolve()));
+      }),
   };
 }

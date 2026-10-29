@@ -31,15 +31,17 @@ export function canonical(value: unknown): string {
 
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
-    const entries = Object.keys(record).sort().map((key) => {
-      const item = record[key];
+    const entries = Object.keys(record)
+      .sort()
+      .map((key) => {
+        const item = record[key];
 
-      if (item === undefined) {
-        throw new TypeError(`undefined value at ${key}`);
-      }
+        if (item === undefined) {
+          throw new TypeError(`undefined value at ${key}`);
+        }
 
-      return `${JSON.stringify(key)}:${canonical(item)}`;
-    });
+        return `${JSON.stringify(key)}:${canonical(item)}`;
+      });
 
     return `{${entries.join(",")}}`;
   }

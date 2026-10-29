@@ -1,13 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import {
-  digest,
-  identify,
-  type Artifact,
-  type Envelope,
-  type Generation,
-  type Kind,
-} from "@pesuite/protocol";
+import { type Artifact, digest, type Envelope, type Generation, identify, type Kind } from "@pesuite/protocol";
 
 import { bundle } from "./bundle.js";
 import { encode, type Manifest } from "./manifest.js";
@@ -49,10 +42,12 @@ export async function compose(manifest: Manifest, source: Source): Promise<Produ
   const capsule = artifact("capsule", "main", contents.capsule);
   const daemon = artifact("daemon", "main", contents.daemon);
   const web = artifact("web", "main", contents.web);
-  const blobassets = await Promise.all((source.blobs ?? []).map(async (blob) => {
-    const bytes = await readFile(blob.path);
-    return { artifact: artifact("blob", blob.slot, bytes), bytes };
-  }));
+  const blobassets = await Promise.all(
+    (source.blobs ?? []).map(async (blob) => {
+      const bytes = await readFile(blob.path);
+      return { artifact: artifact("blob", blob.slot, bytes), bytes };
+    }),
+  );
   blobassets.sort((left, right) => left.artifact.slot.localeCompare(right.artifact.slot));
   const generation: Generation = {
     blobs: blobassets.map((asset) => asset.artifact),

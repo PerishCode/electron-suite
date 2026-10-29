@@ -13,5 +13,5 @@ await mkdir("dist", { recursive: true });
 await Promise.all([
   build({ ...shared, entryPoints: ["src/index.ts"], outfile: "dist/index.mjs" }),
   build({ ...shared, entryPoints: ["src/main.ts"], outfile: "dist/main.js" }),
-  copyFile("index.html", "dist/index.html"),
+  copyFile("src/index.html", "dist/index.html"),
 ]);

@@ -1,18 +1,13 @@
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import {
-  channel,
-  gates,
-  namespace,
-  type Channel,
-} from "@pesuite/protocol";
-import { Authority, Feed, serve, type Service } from "@pesuite/publish";
+import { type Channel, channel, gates, namespace } from "@pesuite/protocol";
+import { Authority, Feed, type Service, serve } from "@pesuite/publish";
 import { compose, resolve } from "@pesuite/release";
-import { Client, serve as sidecar, type Service as Sidecar } from "@pesuite/sidecar";
+import { Client, type Service as Sidecar, serve as sidecar } from "@pesuite/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Capsule } from "@";
@@ -54,10 +49,17 @@ describe("update", () => {
     const release = namespace("release");
     const data = await client.grant(release, { kind: "data", name: "publish", scope: "namespace" });
     const socket = await client.grant(release, {
-      kind: "socket", name: "publish", owner: "server", scope: "attempt",
+      kind: "socket",
+      name: "publish",
+      owner: "server",
+      scope: "attempt",
     });
     const port = await client.grant(release, {
-      kind: "port", name: "publish", owner: "server", scheme: "http", scope: "attempt",
+      kind: "port",
+      name: "publish",
+      owner: "server",
+      scheme: "http",
+      scope: "attempt",
     });
     const pair = generateKeyPairSync("ed25519");
     const privatekey = pair.privateKey.export({ format: "pem", type: "pkcs8" }).toString();

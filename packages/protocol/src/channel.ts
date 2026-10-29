@@ -1,5 +1,5 @@
-import type { Digest } from "./json.js";
 import type { Channel } from "./identity.js";
+import type { Digest } from "./json.js";
 
 export interface Pointer {
   generation: Digest;

@@ -5,15 +5,14 @@ import type {
   Channel,
   Event,
   Grant,
-  Permit,
   Namespace,
+  Permit,
   Registry,
   Request as ResourceRequest,
 } from "@pesuite/protocol";
-
-import type { Lease, Release, Snapshot, Spec } from "./host.js";
 import type { Change, Journal } from "./binding.js";
-import { encode, type Request, type Response } from "./wire.js";
+import type { Lease, Release, Snapshot, Spec } from "./host.js";
+import { encode, type Request, type Response } from "./runtime/wire.js";
 
 const limit = 64 * 1024;
 
@@ -71,103 +70,138 @@ export class Client {
   ) {}
 
   async start(spec: Spec): Promise<Lease> {
-    return await call(this.endpoint, {
-      authority: this.authority,
-      spec,
-      type: "start",
-    }, this.timeout) as Lease;
+    return (await call(
+      this.endpoint,
+      {
+        authority: this.authority,
+        spec,
+        type: "start",
+      },
+      this.timeout,
+    )) as Lease;
   }
 
   async attach(lease: Lease): Promise<Lease> {
-    return await call(this.endpoint, { lease, type: "attach" }, this.timeout) as Lease;
+    return (await call(this.endpoint, { lease, type: "attach" }, this.timeout)) as Lease;
   }
 
   async release(lease: Lease): Promise<Release> {
-    return await call(this.endpoint, { lease, type: "release" }, this.timeout) as Release;
+    return (await call(this.endpoint, { lease, type: "release" }, this.timeout)) as Release;
   }
 
   async inspect(): Promise<Snapshot[]> {
-    return await call(this.endpoint, {
-      authority: this.authority,
-      type: "inspect",
-    }, this.timeout) as Snapshot[];
+    return (await call(
+      this.endpoint,
+      {
+        authority: this.authority,
+        type: "inspect",
+      },
+      this.timeout,
+    )) as Snapshot[];
   }
 
   async binding(namespace: Namespace, channel: Channel): Promise<Journal> {
-    return await call(this.endpoint, {
-      authority: this.authority,
-      channel,
-      namespace,
-      type: "binding",
-    }, this.timeout) as Journal;
+    return (await call(
+      this.endpoint,
+      {
+        authority: this.authority,
+        channel,
+        namespace,
+        type: "binding",
+      },
+      this.timeout,
+    )) as Journal;
   }
 
-  async transit(
-    namespace: Namespace,
-    channel: Channel,
-    revision: number,
-    event: Event,
-  ): Promise<Change> {
-    return await call(this.endpoint, {
-      authority: this.authority,
-      channel,
-      event,
-      namespace,
-      revision,
-      type: "transit",
-    }, this.timeout) as Change;
+  async transit(namespace: Namespace, channel: Channel, revision: number, event: Event): Promise<Change> {
+    return (await call(
+      this.endpoint,
+      {
+        authority: this.authority,
+        channel,
+        event,
+        namespace,
+        revision,
+        type: "transit",
+      },
+      this.timeout,
+    )) as Change;
   }
 
   async issue(permit: Permit): Promise<Capability> {
-    return await call(this.endpoint, {
-      authority: this.authority,
-      permit,
-      type: "issue",
-    }, this.timeout) as Capability;
+    return (await call(
+      this.endpoint,
+      {
+        authority: this.authority,
+        permit,
+        type: "issue",
+      },
+      this.timeout,
+    )) as Capability;
   }
 
   async retire(capability: Capability): Promise<boolean> {
-    return await call(this.endpoint, {
-      authority: this.authority,
-      capability,
-      type: "retire",
-    }, this.timeout) as boolean;
+    return (await call(
+      this.endpoint,
+      {
+        authority: this.authority,
+        capability,
+        type: "retire",
+      },
+      this.timeout,
+    )) as boolean;
   }
 
   async grant(namespace: Namespace, resource: ResourceRequest): Promise<Grant> {
-    return await call(this.endpoint, {
-      authority: this.authority,
-      namespace,
-      resource,
-      type: "grant",
-    }, this.timeout) as Grant;
+    return (await call(
+      this.endpoint,
+      {
+        authority: this.authority,
+        namespace,
+        resource,
+        type: "grant",
+      },
+      this.timeout,
+    )) as Grant;
   }
 
   async revoke(namespace: Namespace, lease: string, survivors: number[] = []): Promise<Registry> {
-    return await call(this.endpoint, {
-      authority: this.authority,
-      lease,
-      namespace,
-      survivors,
-      type: "revoke",
-    }, this.timeout) as Registry;
+    return (await call(
+      this.endpoint,
+      {
+        authority: this.authority,
+        lease,
+        namespace,
+        survivors,
+        type: "revoke",
+      },
+      this.timeout,
+    )) as Registry;
   }
 
   async forward(namespace: Namespace, port: string, socket: string): Promise<Registry> {
-    return await call(this.endpoint, {
-      authority: this.authority,
-      namespace,
-      port,
-      socket,
-      type: "forward",
-    }, this.timeout) as Registry;
+    return (await call(
+      this.endpoint,
+      {
+        authority: this.authority,
+        namespace,
+        port,
+        socket,
+        type: "forward",
+      },
+      this.timeout,
+    )) as Registry;
   }
 
   async resources(namespace: Namespace): Promise<Registry> {
-    return await call(this.endpoint, {
-      authority: this.authority,
-      namespace,
-      type: "resources",
-    }, this.timeout) as Registry;
+    return (await call(
+      this.endpoint,
+      {
+        authority: this.authority,
+        namespace,
+        type: "resources",
+      },
+      this.timeout,
+    )) as Registry;
   }
 }

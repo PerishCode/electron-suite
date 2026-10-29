@@ -1,0 +1,46 @@
+{
+  "name": "@pesuite/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "src/pesuite.mjs",
+    "dist"
+  ],
+  "scripts": {
+    "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "vitest run -c vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json",
+    "prepack": "pnpm run build"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.28.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.6"
+  },
+  "description": "Unified pesuite command line",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PerishCode/electron-suite.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@pesuite/guard": "workspace:*"
+  },
+  "bin": {
+    "pesuite": "./src/pesuite.mjs"
+  }
+}

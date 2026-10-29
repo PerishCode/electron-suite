@@ -1,7 +1,6 @@
 {
   "name": "@pesuite/guard",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "exports": {
     ".": {
@@ -15,12 +14,33 @@
   "scripts": {
     "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
     "test": "vitest run -c vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json",
+    "prepack": "pnpm run build"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
-    "typescript": "6.0.3",
-    "vitest": "4.1.6"
+    "typescript": "7.0.2",
+    "vitest": "4.1.6",
+    "@types/picomatch": "4.0.2"
+  },
+  "description": "Directory and file engineering policies for pesuite",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PerishCode/electron-suite.git",
+    "directory": "packages/guard"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@babel/parser": "8.0.8",
+    "parse5": "8.0.1",
+    "picomatch": "4.0.7",
+    "yaml": "2.9.1"
   }
 }

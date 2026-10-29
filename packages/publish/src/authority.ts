@@ -4,21 +4,21 @@ import { join, resolve } from "node:path";
 
 import { Store } from "@pesuite/blob";
 import {
+  type Artifact,
+  type Channel,
   canonical,
   channel,
+  type Digest,
+  type Distribution,
   digest,
+  type Envelope,
   envelope,
   publish,
   valid,
   verify,
-  type Artifact,
-  type Channel,
-  type Digest,
-  type Distribution,
-  type Envelope,
 } from "@pesuite/protocol";
 
-import { parse as parseproof, sign, type Proof } from "./proof.js";
+import { type Proof, parse as parseproof, sign } from "./proof.js";
 
 export interface Asset {
   artifact: Artifact;
@@ -133,7 +133,10 @@ export class Authority {
   #run<T>(lane: Channel, action: () => Promise<T>): Promise<T> {
     const prior = this.#pending.get(lane) ?? Promise.resolve();
     const result = prior.then(action, action);
-    const pending = result.then(() => undefined, () => undefined);
+    const pending = result.then(
+      () => undefined,
+      () => undefined,
+    );
     this.#pending.set(lane, pending);
     pending.finally(() => {
       if (this.#pending.get(lane) === pending) this.#pending.delete(lane);

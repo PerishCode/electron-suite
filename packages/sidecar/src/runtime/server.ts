@@ -3,15 +3,10 @@ import { chmod } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 
-import {
-  namespace,
-  type Capability,
-  type Namespace,
-  type Permit,
-} from "@pesuite/protocol";
+import { type Capability, type Namespace, namespace, type Permit } from "@pesuite/protocol";
 
-import { Bindings } from "./binding.js";
-import { Sidecar } from "./host.js";
+import { Bindings } from "../binding.js";
+import { Sidecar } from "../host.js";
 import { Resources } from "./resource.js";
 import { decode, encode, type Request, type Response } from "./wire.js";
 
@@ -125,7 +120,7 @@ function listen(server: Server, endpoint: string): Promise<void> {
 
 function close(server: Server): Promise<void> {
   return new Promise((resolve, reject) => {
-    server.close((error) => error ? reject(error) : resolve());
+    server.close((error) => (error ? reject(error) : resolve()));
   });
 }
 

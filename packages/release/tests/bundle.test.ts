@@ -60,7 +60,9 @@ describe("bundle", () => {
     expect(initial.envelope.generation.web).toEqual(update.envelope.generation.web);
     expect(initial.envelope.generation.capsule.digest).not.toBe(update.envelope.generation.capsule.digest);
     const target = await root();
-    await materialize(initial.assets[0]!.bytes, target);
+    const asset = initial.assets[0];
+    if (!asset) throw new Error("asset missing");
+    await materialize(asset.bytes, target);
     expect(decode(await readFile(join(target, "release.json"), "utf8"))).toEqual(first);
   });
 

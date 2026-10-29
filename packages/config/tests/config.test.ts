@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vitest";
-
 import { channel } from "@pesuite/protocol";
+import { describe, expect, it } from "vitest";
 
 import { define } from "@";
 

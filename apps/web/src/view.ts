@@ -24,20 +24,20 @@ export function mount(
   refresh.addEventListener("click", () => {
     status.textContent = "loading";
     void daemon.read().then(
-      (value) => status.textContent = JSON.stringify(value),
-      (fault: Error) => status.textContent = fault.message,
+      (value) => (status.textContent = JSON.stringify(value)),
+      (fault: Error) => (status.textContent = fault.message),
     );
   });
   save.addEventListener("click", () => {
     status.textContent = "saving";
     void daemon.write({ value: input.value }).then(
-      (value) => status.textContent = JSON.stringify(value),
-      (fault: Error) => status.textContent = fault.message,
+      (value) => (status.textContent = JSON.stringify(value)),
+      (fault: Error) => (status.textContent = fault.message),
     );
   });
   void daemon.health().then(
-    () => status.textContent = "ready",
-    (fault: Error) => status.textContent = fault.message,
+    () => (status.textContent = "ready"),
+    (fault: Error) => (status.textContent = fault.message),
   );
   return daemon;
 }

@@ -17,8 +17,8 @@ export const ids = [
   "G6-REMOTE",
 ] as const;
 
-export type Gate = typeof gates[number];
-export type Id = typeof ids[number];
+export type Gate = (typeof gates)[number];
+export type Id = (typeof ids)[number];
 export type Status = "passed" | "failed" | "unqualified";
 
 export interface Definition {

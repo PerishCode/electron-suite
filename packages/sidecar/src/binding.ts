@@ -2,18 +2,18 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import {
-  canonical,
-  channel,
-  gates,
-  namespace,
-  reduce,
-  valid,
   type Binding,
   type Channel,
+  canonical,
+  channel,
   type Digest,
   type Event,
   type Fault,
+  gates,
   type Namespace,
+  namespace,
+  reduce,
+  valid,
 } from "@pesuite/protocol";
 
 export interface Journal {
@@ -149,7 +149,10 @@ export class Bindings {
     const identity = `${lane}:${scope}`;
     const prior = this.#pending.get(identity) ?? Promise.resolve();
     const result = prior.then(action, action);
-    const pending = result.then(() => undefined, () => undefined);
+    const pending = result.then(
+      () => undefined,
+      () => undefined,
+    );
     this.#pending.set(identity, pending);
     pending.finally(() => {
       if (this.#pending.get(identity) === pending) this.#pending.delete(identity);

@@ -1,7 +1,7 @@
 import type { Config, Context, Provider } from "@pesuite/config";
 import { channel } from "@pesuite/protocol";
 
-import { parse, type Manifest } from "./manifest.js";
+import { type Manifest, parse } from "./manifest.js";
 
 function evaluate(provider: Provider | undefined, fallback: string, context: Readonly<Context>, name: string): string {
   if (!provider) return fallback;

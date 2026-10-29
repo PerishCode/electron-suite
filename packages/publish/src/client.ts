@@ -1,13 +1,13 @@
 import {
-  channel,
-  envelope,
-  valid,
-  verify,
   type Artifact,
   type Channel,
+  channel,
   type Distribution,
   type Envelope,
+  envelope,
   type Pointer,
+  valid,
+  verify,
 } from "@pesuite/protocol";
 
 import type { Asset } from "./authority.js";
@@ -62,13 +62,15 @@ export class Feed {
     trust(this.#publickey, lane, pointer, proof);
     const manifest = envelope(await this.#json(`/generations/${pointer.generation.slice(7)}`));
     if (manifest.digest !== pointer.generation) throw new Error("generation pointer mismatch");
-    const assets = await Promise.all(list(manifest).map(async (artifact) => {
-      const response = await fetch(`${this.#endpoint}/objects/${artifact.digest.slice(7)}`);
-      if (!response.ok) throw new Error(`object request failed:${response.status}`);
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (!verify(artifact, bytes)) throw new Error("object integrity mismatch");
-      return { artifact, bytes };
-    }));
+    const assets = await Promise.all(
+      list(manifest).map(async (artifact) => {
+        const response = await fetch(`${this.#endpoint}/objects/${artifact.digest.slice(7)}`);
+        if (!response.ok) throw new Error(`object request failed:${response.status}`);
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (!verify(artifact, bytes)) throw new Error("object integrity mismatch");
+        return { artifact, bytes };
+      }),
+    );
     return { assets, envelope: manifest };
   }
 

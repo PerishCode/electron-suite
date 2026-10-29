@@ -49,7 +49,17 @@ describe("release", () => {
     let call = 0;
     const input = { channel: channel("stable"), version: "1.0.0" };
 
-    expect(() => resolve(define({ name: () => String(call += 1) }), input)).toThrow("deterministic");
+    expect(() =>
+      resolve(
+        define({
+          name: () => {
+            call += 1;
+            return String(call);
+          },
+        }),
+        input,
+      ),
+    ).toThrow("deterministic");
     expect(() => resolve(define({ scheme: () => "Bad Scheme" }), input)).toThrow("scheme");
     expect(() => resolve(define(), { ...input, version: "latest" })).toThrow("version");
   });
@@ -58,14 +68,18 @@ describe("release", () => {
     const manifest = resolve(define(), { channel: channel("stable"), version: "1.0.0" });
 
     expect(() => parse({ ...manifest, extra: true })).toThrow("fields");
-    expect(() => parse({
-      ...manifest,
-      identity: { ...manifest.identity, origin: "other://carrier" },
-    })).toThrow("inconsistent");
-    expect(() => parse({
-      ...manifest,
-      identity: { ...manifest.identity, version: "latest" },
-    })).toThrow("version");
+    expect(() =>
+      parse({
+        ...manifest,
+        identity: { ...manifest.identity, origin: "other://carrier" },
+      }),
+    ).toThrow("inconsistent");
+    expect(() =>
+      parse({
+        ...manifest,
+        identity: { ...manifest.identity, version: "latest" },
+      }),
+    ).toThrow("version");
     expect(() => distinct([manifest, manifest])).toThrow("collision");
   });
 

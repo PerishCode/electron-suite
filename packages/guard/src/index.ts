@@ -1,88 +1,68 @@
-import { execFile } from "node:child_process";
-import { access } from "node:fs/promises";
-import { join } from "node:path";
-import { promisify } from "node:util";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { extname, join } from "node:path";
+import { sources } from "./config/defaults.js";
+import { load } from "./config/index.js";
+import { rule } from "./config/match.js";
+import { file } from "./rules/files.js";
+import { moduleRules } from "./rules/module.js";
+import { style } from "./rules/style.js";
+import { tree } from "./rules/tree.js";
+import { files } from "./scan/files.js";
+import { modules } from "./scan/modules.js";
+import type { Context, Finding, Policy, Report } from "./types.js";
 
-import { inspect, type Finding } from "./inspect.js";
-
-export { inspect } from "./inspect.js";
-export type { Finding, InspectOptions } from "./inspect.js";
-export { policy } from "./policy.js";
+export { defaults } from "./config/defaults.js";
+export { configuration, load } from "./config/index.js";
+export { format } from "./report.js";
+export type { Context, Entry, Exception, Finding, Module, Policy, Report } from "./types.js";
 
 export interface GuardOptions {
   root: string;
-  staged?: boolean;
-}
-
-export interface Report {
-  findings: Finding[];
-  mode: "full" | "staged";
-  ok: boolean;
-  paths: number;
-}
-
-const execute = promisify(execFile);
-
-async function git(root: string, args: string[]): Promise<string[]> {
-  const { stdout } = await execute("git", args, {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 16 * 1024 * 1024,
-  });
-
-  return stdout.split("\0").filter(Boolean);
-}
-
-async function present(root: string, paths: string[]): Promise<string[]> {
-  const states = await Promise.all(paths.map(async (path) => {
-    try {
-      await access(join(root, path));
-      return path;
-    } catch {
-      return undefined;
-    }
-  }));
-
-  return states.filter((path): path is string => path !== undefined);
+  policy?: Policy;
 }
 
 export async function guard(options: GuardOptions): Promise<Report> {
-  const listed = await git(options.root, [
-    "ls-files",
-    "--cached",
-    "--others",
-    "--exclude-standard",
-    "-z",
-  ]);
-  const paths = await present(options.root, listed);
-  const targets = options.staged
-    ? new Set(await git(options.root, [
-      "diff",
-      "--cached",
-      "--name-only",
-      "--diff-filter=ACMR",
-      "-z",
-    ]))
-    : undefined;
-  const findings = await inspect({ paths, root: options.root, targets });
-
-  return {
-    findings,
-    mode: options.staged ? "staged" : "full",
-    ok: findings.length === 0,
-    paths: targets?.size ?? paths.length,
-  };
-}
-
-export function format(report: Report, json = false): string {
-  if (json) {
-    return JSON.stringify(report, null, 2);
+  const root = await realpath(options.root);
+  if (!(await stat(root)).isDirectory()) throw new Error("guard root must be a directory");
+  const policy = options.policy ?? (await load(root));
+  const entries = await files(root, policy);
+  const context: Context = { root, entries, policy, modules: await modules(root, entries, policy) };
+  const findings: Finding[] = [...tree(context), ...(await moduleRules(context))];
+  for (const entry of entries) {
+    if (entry.kind === "directory") continue;
+    const source = sources.has(extname(entry.path).slice(1).toLowerCase());
+    if (entry.kind === "link" || !source) {
+      findings.push(...file(context, entry.path));
+      if (entry.kind === "link" && source) {
+        if (["css", "less", "scss", "sass", "styl"].includes(extname(entry.path).slice(1).toLowerCase()))
+          findings.push(...style(context, entry.path, ""));
+        if (rule(policy, entry.path, "file.coverage").enabled)
+          findings.push({ path: entry.path, rule: "file.coverage", message: "source symlink target is not inspected" });
+      }
+      continue;
+    }
+    const bytes = await readFile(join(root, entry.path));
+    const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    findings.push(...file(context, entry.path, content), ...style(context, entry.path, content));
   }
-
-  const summary = `guard ${report.mode}: ${report.ok ? "ok" : "failed"} (${report.paths} files)`;
-  const findings = report.findings.map((item) =>
-    `${item.path}: ${item.message} [${item.rule}]`,
+  findings.sort(
+    (left, right) =>
+      left.path.localeCompare(right.path, "en") ||
+      left.rule.localeCompare(right.rule, "en") ||
+      (left.line ?? 0) - (right.line ?? 0) ||
+      (left.column ?? 0) - (right.column ?? 0) ||
+      left.message.localeCompare(right.message, "en"),
   );
-
-  return [summary, ...findings].join("\n");
+  return {
+    schemaVersion: 1,
+    root,
+    mode: "full",
+    ok: findings.length === 0,
+    paths: entries.length,
+    files: entries.filter((entry) => entry.kind === "file").length,
+    links: entries.filter((entry) => entry.kind === "link").map((entry) => entry.path),
+    excluded: [...policy.exclude],
+    exceptions: structuredClone(policy.exceptions),
+    findings,
+  };
 }

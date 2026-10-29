@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { serve } from "./server.js";
+import { serve } from "./runtime/server.js";
 
 const endpoint = process.env.PERISH_SIDECAR_ENDPOINT;
 const authority = process.env.PERISH_SIDECAR_AUTHORITY;

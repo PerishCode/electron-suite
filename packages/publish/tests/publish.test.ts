@@ -4,19 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  type Artifact,
   channel,
   digest,
-  identify,
-  namespace,
-  type Artifact,
   type Envelope,
   type Generation,
+  identify,
   type Kind,
+  namespace,
 } from "@pesuite/protocol";
-import { Client, serve as sidecar, type Service as Sidecar } from "@pesuite/sidecar";
+import { Client, type Service as Sidecar, serve as sidecar } from "@pesuite/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { Authority, Feed, serve, type Asset, type Service } from "@";
+import { type Asset, Authority, Feed, type Service, serve } from "@";
 
 const roots: string[] = [];
 const services: Service[] = [];
@@ -41,12 +41,14 @@ function fixture(seed: string): { assets: Asset[]; envelope: Envelope } {
     schema: 1,
     web: artifact("web", "main", values.web),
   };
+  const blob = generation.blobs[0];
+  if (!blob) throw new Error("blob missing");
   return {
     assets: [
       { artifact: generation.capsule, bytes: values.capsule },
       { artifact: generation.daemon, bytes: values.daemon },
       { artifact: generation.web, bytes: values.web },
-      { artifact: generation.blobs[0]!, bytes: values.blob },
+      { artifact: blob, bytes: values.blob },
     ],
     envelope: { digest: identify(generation), generation, schema: 1 },
   };
