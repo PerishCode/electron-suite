@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { type Channel, channel, gates, namespace } from "@pesuite/protocol";
-import { Authority, Feed, type Service, serve } from "@pesuite/publish";
-import { compose, resolve } from "@pesuite/release";
-import { Client, type Service as Sidecar, serve as sidecar } from "@pesuite/sidecar";
+import { type Channel, channel, gates, namespace } from "@perishcode/protocol";
+import { Authority, Feed, type Service, serve } from "@perishcode/publish";
+import { compose, resolve } from "@perishcode/release";
+import { Client, type Service as Sidecar, serve as sidecar } from "@perishcode/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Capsule } from "@";
@@ -19,10 +19,10 @@ const sidecars: Sidecar[] = [];
 async function product(lane: Channel, version: string, model: string) {
   return compose(resolve({}, { channel: lane, version }), {
     blobs: [{ path: model, slot: "model" }],
-    capsule: dirname(fileURLToPath(import.meta.resolve("@pesuite/capsule"))),
+    capsule: dirname(fileURLToPath(import.meta.resolve("@perishcode/capsule"))),
     carrier: 1,
-    daemon: dirname(fileURLToPath(import.meta.resolve("@pesuite/daemon"))),
-    web: dirname(fileURLToPath(import.meta.resolve("@pesuite/web"))),
+    daemon: dirname(fileURLToPath(import.meta.resolve("@perishcode/daemon"))),
+    web: dirname(fileURLToPath(import.meta.resolve("@perishcode/web"))),
   });
 }
 

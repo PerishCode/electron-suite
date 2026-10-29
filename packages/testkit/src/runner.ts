@@ -7,13 +7,13 @@ import { dirname, join, resolve as resolvepath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { Capsule } from "@pesuite/capsule";
-import { asset } from "@pesuite/carrier";
-import { guard } from "@pesuite/guard";
-import { type Channel, channel, type Digest, gates, namespace, startup } from "@pesuite/protocol";
-import { Authority, Feed, type Service as Publisher, serve as publish } from "@pesuite/publish";
-import { compose, type Product, resolve as release } from "@pesuite/release";
-import { Client, type Service as Sidecar, serve as sidecar } from "@pesuite/sidecar";
+import { Capsule } from "@perishcode/capsule";
+import { asset } from "@perishcode/carrier";
+import { guard } from "@perishcode/guard";
+import { type Channel, channel, type Digest, gates, namespace, startup } from "@perishcode/protocol";
+import { Authority, Feed, type Service as Publisher, serve as publish } from "@perishcode/publish";
+import { compose, type Product, resolve as release } from "@perishcode/release";
+import { Client, type Service as Sidecar, serve as sidecar } from "@perishcode/sidecar";
 
 import { type Definition, type Id, matrix, type Status } from "./matrix.js";
 import { installed, type Selections } from "./package.js";
@@ -75,7 +75,7 @@ function pem() {
 }
 
 function path(name: "capsule" | "carrier" | "daemon" | "web"): string {
-  return dirname(fileURLToPath(import.meta.resolve(`@pesuite/${name}`)));
+  return dirname(fileURLToPath(import.meta.resolve(`@perishcode/${name}`)));
 }
 
 async function installation(client: Client, temporary: string, selections: Selections): Promise<Evidence> {

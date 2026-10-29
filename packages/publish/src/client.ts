@@ -8,7 +8,7 @@ import {
   type Pointer,
   valid,
   verify,
-} from "@pesuite/protocol";
+} from "@perishcode/protocol";
 
 import type { Asset } from "./authority.js";
 import { trust } from "./proof.js";

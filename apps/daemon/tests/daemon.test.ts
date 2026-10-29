@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { channel, digest, namespace } from "@pesuite/protocol";
-import { Client, type Lease, type Service, serve } from "@pesuite/sidecar";
+import { channel, digest, namespace } from "@perishcode/protocol";
+import { Client, type Lease, type Service, serve } from "@perishcode/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
 const roots: string[] = [];

@@ -1,4 +1,4 @@
-import { channel } from "@pesuite/protocol";
+import { channel } from "@perishcode/protocol";
 import { describe, expect, it } from "vitest";
 
 import { define } from "@";

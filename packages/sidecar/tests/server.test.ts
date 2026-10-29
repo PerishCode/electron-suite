@@ -5,7 +5,7 @@ import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { channel, digest, namespace } from "@pesuite/protocol";
+import { channel, digest, namespace } from "@perishcode/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Client, type Service, type Spec, serve } from "@";

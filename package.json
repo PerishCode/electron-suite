@@ -19,12 +19,12 @@
     "format": "biome check --write ."
   },
   "devDependencies": {
-    "@pesuite/config": "workspace:*",
-    "@pesuite/guard": "workspace:*",
-    "@pesuite/pack": "workspace:*",
-    "@pesuite/release": "workspace:*",
-    "@pesuite/testkit": "workspace:*",
-    "@pesuite/cli": "workspace:*",
+    "@perishcode/config": "workspace:*",
+    "@perishcode/guard": "workspace:*",
+    "@perishcode/pack": "workspace:*",
+    "@perishcode/release": "workspace:*",
+    "@perishcode/testkit": "workspace:*",
+    "@perishcode/cli": "workspace:*",
     "@biomejs/biome": "2.6.4",
     "typescript": "7.0.2",
     "vitest": "4.1.6"

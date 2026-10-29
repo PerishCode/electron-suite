@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
-import { canonical } from "@pesuite/protocol";
+import { canonical } from "@perishcode/protocol";
 
 interface Entry {
   bytes: string;

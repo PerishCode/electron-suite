@@ -1,4 +1,4 @@
-import { type Channel, canonical, channel } from "@pesuite/protocol";
+import { type Channel, canonical, channel } from "@perishcode/protocol";
 
 const appid = /^[a-z0-9]+(?:\.[a-z0-9]+)+$/;
 const scheme = /^[a-z][a-z0-9+.-]*$/;

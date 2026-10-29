@@ -1,5 +1,5 @@
 {
-  "name": "@pesuite/carrier",
+  "name": "@perishcode/carrier",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -20,13 +20,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@pesuite/release": "workspace:*"
+    "@perishcode/release": "workspace:*"
   },
   "devDependencies": {
-    "@pesuite/daemon": "workspace:*",
-    "@pesuite/protocol": "workspace:*",
-    "@pesuite/sidecar": "workspace:*",
-    "@pesuite/web": "workspace:*",
+    "@perishcode/daemon": "workspace:*",
+    "@perishcode/protocol": "workspace:*",
+    "@perishcode/sidecar": "workspace:*",
+    "@perishcode/web": "workspace:*",
     "@types/node": "24.12.2",
     "electron": "41.3.0",
     "esbuild": "0.28.0",

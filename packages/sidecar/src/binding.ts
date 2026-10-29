@@ -14,7 +14,7 @@ import {
   namespace,
   reduce,
   valid,
-} from "@pesuite/protocol";
+} from "@perishcode/protocol";
 
 export interface Journal {
   revision: number;

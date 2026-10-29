@@ -1,5 +1,5 @@
 {
-  "name": "@pesuite/guard",
+  "name": "@perishcode/guard",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -32,7 +32,8 @@
     "directory": "packages/guard"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
   },
   "engines": {
     "node": ">=24"

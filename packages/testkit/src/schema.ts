@@ -1,4 +1,4 @@
-import { canonical, type Digest, valid } from "@pesuite/protocol";
+import { canonical, type Digest, valid } from "@perishcode/protocol";
 
 import { type Gate, gates, type Id, ids, matrix, type Status } from "./matrix.js";
 

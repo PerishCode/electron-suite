@@ -8,7 +8,8 @@ It records the vision, evidence, ownership boundaries, and completion criteria f
 electron-suite and [open-design-slim](https://github.com/PerishCode/open-design-slim).
 electron-suite distributes reusable engineering capabilities as npm packages;
 open-design-slim consumes published packages and owns product composition and policy.
-All workspace packages use the npm scope `@pesuite` (for example, `@pesuite/guard`).
+All workspace packages use the personal npm scope `@perishcode` (for example, `@perishcode/guard`).
+Publish to GitHub Packages. Repository `.npmrc` contains only scope routing; credentials belong in user configuration.
 Expose CLI capabilities only through `pesuite <command>`; guard is `pesuite guard`.
 Repository configuration lives in `pesuite.yaml`, with guard settings under `guard`.
 Read [issue #3](https://github.com/PerishCode/electron-suite/issues/3) for guard delivery and acceptance.
@@ -70,5 +71,5 @@ Use pnpm from the repository root. Follow the user's instructions incrementally.
 ## Scripts
 
 - `postinstall.mjs`: topological concurrent workspace build.
-- `package.mjs`: thin `@pesuite/pack` platform package entry.
-- `acceptance.mjs`: thin `@pesuite/testkit` qualification entry.
+- `package.mjs`: thin `@perishcode/pack` platform package entry.
+- `acceptance.mjs`: thin `@perishcode/testkit` qualification entry.
