@@ -6,7 +6,7 @@
 ## 命令与交付
 
 唯一可执行入口为 `pesuite`，检查命令为 `pesuite guard`。`@pesuite/cli` 负责路由，`@pesuite/guard` 提供检测库；不发布独立 `guard` 命令。
-当前实现位于开发分支，正式 registry 发布及 open-design-slim 的 registry 接入以 #3 中的验收记录为准。
+源码实现已合入主线；正式 registry 发布及 open-design-slim 的 registry 接入以 #3 中的验收记录为准。
 
 ```sh
 pesuite guard
