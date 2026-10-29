@@ -161,8 +161,8 @@ export async function inspect(options: InspectOptions): Promise<Finding[]> {
     findings.push(...inspectName(path));
     const extension = extname(path).slice(1);
 
-    if (policy.prose.has(extension) && path !== "AGENTS.md") {
-      findings.push(finding(path, "source.prose", "AGENTS.md is the only non-structured source"));
+    if (policy.prose.has(extension) && !policy.documents.has(path)) {
+      findings.push(finding(path, "source.prose", "only root AGENTS.md and README.md allow prose"));
     }
 
     if (!policy.text.has(extension)) {

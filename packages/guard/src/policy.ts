@@ -3,6 +3,7 @@ export const policy = {
   exact: new Set([
     ".githooks/pre-commit",
     "AGENTS.md",
+    "README.md",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
   ]),
@@ -15,6 +16,7 @@ export const policy = {
     source: 500,
   },
   prose: new Set(["md", "mdx", "rst", "txt"]),
+  documents: new Set(["AGENTS.md", "README.md"]),
   roles: new Set(["config", "d", "test", "tests"]),
   source: new Set(["cjs", "js", "mjs", "ts", "tsx"]),
   text: new Set(["cjs", "js", "json", "mjs", "ts", "tsx", "yaml", "yml"]),

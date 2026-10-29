@@ -25,6 +25,7 @@ describe("guard", () => {
     const files = await fixture({
       ".githooks/pre-commit": "#!/bin/sh\n",
       "AGENTS.md": "# index\n",
+      "README.md": "# electron-suite\n",
       "packages/guard/src/index.ts": "export const guard = true;\n",
       "packages/guard/tests/guard.test.ts": "export const test = true;\n",
       "pnpm-workspace.yaml": "packages: []\n",
@@ -83,14 +84,19 @@ describe("guard", () => {
     await expect(inspect({ ...files, targets: new Set() })).resolves.toEqual([]);
   });
 
-  it("reserves prose for the root agent index", async () => {
+  it("reserves prose for the root agent index and readme", async () => {
     const files = await fixture({
       "notes.md": "prose\n",
+      "apps/web/README.md": "nested prose\n",
     });
     const findings = await inspect(files);
 
     expect(findings).toContainEqual(expect.objectContaining({
       path: "notes.md",
+      rule: "source.prose",
+    }));
+    expect(findings).toContainEqual(expect.objectContaining({
+      path: "apps/web/README.md",
       rule: "source.prose",
     }));
   });
