@@ -82,6 +82,17 @@ Local candidate directories are explicitly supplied trusted inputs, not an authe
 Keep signing, remote distribution, platform coverage and crash-during-commit unqualified
 until their own acceptance evidence exists.
 
+## Active capability work
+
+Issue #1 owns the roadmap; #10 owns sidecar convergence and #11 the inspect entry.
+The 0.2 sidecar increment adds caller-owned hosted methods and managed service resources.
+`Service.expose` initializes before publishing readiness. `Client.connect` returns an incarnation-fenced peer.
+Hosted bodies allocate ports/sockets/locks through their injected context and drain their own handles in stop.
+The package retires temporary resources only after calls and body stop finish; a failed drain retains ownership.
+This increment still uses a single in-process manager. Cross-process authority, manager restart adoption,
+cross-generation lifecycle serialization and complete resource escape auditing remain issue #10 work.
+Do not claim hosted IPC from a separate client proves those authority guarantees.
+
 ## Scripts
 
 - `postinstall.mjs`: topological concurrent workspace build.

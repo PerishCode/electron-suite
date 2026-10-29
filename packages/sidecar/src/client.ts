@@ -1,5 +1,3 @@
-import { createConnection } from "node:net";
-
 import type {
   Capability,
   Channel,
@@ -11,56 +9,10 @@ import type {
   Request as ResourceRequest,
 } from "@perishcode/protocol";
 import type { Change, Journal } from "./binding.js";
+import { Peer } from "./control/peer.js";
+import type { Identity } from "./control/types.js";
 import type { Lease, Release, Snapshot, Spec } from "./host.js";
-import { encode, type Request, type Response } from "./runtime/wire.js";
-
-const limit = 64 * 1024;
-
-function decode(input: string, end: number): Response {
-  const value: unknown = JSON.parse(input.slice(0, end));
-
-  if (!value || typeof value !== "object" || !("ok" in value)) {
-    throw new TypeError("invalid response");
-  }
-
-  return value as Response;
-}
-
-function call(endpoint: string, request: Request, timeout: number): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const socket = createConnection(endpoint);
-    let input = "";
-    let settled = false;
-    const finish = (operation: () => void) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      operation();
-    };
-
-    socket.setTimeout(timeout, () => finish(() => reject(new Error("request timeout"))));
-    socket.once("connect", () => socket.write(encode(request)));
-    socket.once("error", (error) => finish(() => reject(error)));
-    socket.on("data", (chunk: Buffer) => {
-      input += chunk.toString("utf8");
-      if (Buffer.byteLength(input) > limit) {
-        finish(() => reject(new Error("response exceeds limit")));
-        return;
-      }
-
-      const end = input.indexOf("\n");
-      if (end < 0) return;
-
-      try {
-        const response = decode(input, end);
-        if (!response.ok) finish(() => reject(new Error(response.error)));
-        else finish(() => resolve(response.value));
-      } catch (error) {
-        finish(() => reject(error));
-      }
-    });
-  });
-}
+import { call } from "./runtime/transport.js";
 
 export class Client {
   constructor(
@@ -68,6 +20,15 @@ export class Client {
     readonly authority: string,
     readonly timeout = 5000,
   ) {}
+
+  async connect<Methods>(identity: Identity): Promise<Peer<Methods>> {
+    const descriptor = await call(
+      this.endpoint,
+      { authority: this.authority, identity, type: "connect" },
+      this.timeout,
+    );
+    return new Peer<Methods>(this.endpoint, descriptor, this.timeout);
+  }
 
   async start(spec: Spec): Promise<Lease> {
     return (await call(

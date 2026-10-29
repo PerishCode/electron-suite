@@ -4,20 +4,21 @@ import {
   channel,
   type Event,
   type Gate,
-  type Grant,
   gates,
   type Namespace,
   namespace,
   type Permit,
-  type Registry,
   type Request as ResourceRequest,
   resources,
   valid,
 } from "@perishcode/protocol";
-import type { Change, Journal } from "../binding.js";
-import type { Lease, Release, Snapshot, Spec } from "../host.js";
+import { type Descriptor, descriptor, type Identity, identity } from "../control/types.js";
+
+import type { Lease, Spec } from "../host.js";
 
 export type Request =
+  | { authority: string; identity: Identity; type: "connect" }
+  | { descriptor: Descriptor; operation: "call" | "probe" | "stop"; method?: string; input?: unknown; type: "invoke" }
   | { authority: string; spec: Spec; type: "start" }
   | { lease: Lease; type: "attach" }
   | { lease: Lease; type: "release" }
@@ -38,9 +39,7 @@ export type Request =
   | { authority: string; lease: string; namespace: string; survivors: number[]; type: "revoke" }
   | { authority: string; namespace: string; type: "resources" };
 
-export type Response =
-  | { ok: true; value: boolean | Capability | Change | Grant | Journal | Lease | Registry | Release | Snapshot[] }
-  | { error: string; ok: false };
+export type Response = { ok: true; value: unknown } | { error: string; ok: false };
 
 function record(value: unknown, name: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -182,6 +181,17 @@ function event(value: unknown): Event {
 
 export function decode(value: string): Request {
   const data = record(JSON.parse(value), "request");
+  if (data.type === "connect")
+    return { type: "connect", authority: text(data.authority, "authority"), identity: identity(data.identity) };
+  if (data.type === "invoke") {
+    if (!["call", "probe", "stop"].includes(String(data.operation))) throw new Error("invalid service operation");
+    return {
+      type: "invoke",
+      descriptor: descriptor(data.descriptor),
+      operation: data.operation as "call" | "probe" | "stop",
+      ...(data.operation === "call" ? { method: text(data.method, "method"), input: data.input } : {}),
+    };
+  }
 
   if (data.type === "start") {
     return { authority: text(data.authority, "authority"), spec: spec(data.spec), type: "start" };

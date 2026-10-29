@@ -113,3 +113,19 @@ Daemon 使用父进程管道作为存活信号；正常停止先收敛进程，�
 参考 qualify 不再凭调用方布尔值或手动就绪将完整更新判为 passed。
 进展和验收见 [#7](https://github.com/PerishCode/electron-suite/issues/7)、[#8](https://github.com/PerishCode/electron-suite/issues/8)
 及 [slim #2](https://github.com/PerishCode/open-design-slim/issues/2)。
+
+## 通用 hosted sidecar 增量
+
+`@perishcode/sidecar` 0.2.0 提供 `Service.expose` 和 `Client.connect<Methods>`。
+调用方定义消息、输入/输出校验与 handlers；Peer 提供 call/probe/stop，不内置 OpenDesign 协议。
+身份包含 namespace/channel/generation/service，句柄还绑定 incarnation；旧句柄不能操作后继实例。
+
+hosted 服务在 initialize 中接收只读身份及 data/logs/resource/runtime 根目录，
+通过 context.allocate 申请 port/socket/lock，通过 context.forward 连接自己持有的端口与 socket。
+端口由 sidecar 持有，调用方服务监听受管 socket；服务必须在 stop 中排空自己持有的句柄。
+初始化完成后才可连接；停止阻止新调用，等待已接收调用与分配操作完成，再执行 body stop、释放临时资源并退休实例。
+停止失败保留权威和临时资源，明确重试成功前不能报告 stopped；持久数据保留。
+
+这是 #10 的第一批增量：控制面仍属于单个管理器进程。
+跨进程客户端通信已测试；跨进程管理权威、管理器重启接管和跨代生命周期串行化仍需后续交付。
+完整推进见 [#1](https://github.com/PerishCode/electron-suite/issues/1)，消费者验证见 [slim #4](https://github.com/PerishCode/open-design-slim/issues/4)。
