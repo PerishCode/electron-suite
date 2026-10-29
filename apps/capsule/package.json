@@ -14,17 +14,10 @@
   ],
   "scripts": {
     "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
-    "pretest": "pnpm run build",
-    "test": "vitest run -c vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json",
+    "test": "vitest run -c vitest.config.ts"
   },
-  "dependencies": {
-    "@perishcode/blob": "workspace:*",
-    "@perishcode/protocol": "workspace:*",
-    "@perishcode/publish": "workspace:*",
-    "@perishcode/release": "workspace:*",
-    "@perishcode/sidecar": "workspace:*"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@perishcode/daemon": "workspace:*",
     "@perishcode/web": "workspace:*",

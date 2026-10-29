@@ -20,7 +20,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@perishcode/release": "workspace:*"
+    "@perishcode/release": "workspace:*",
+    "@perishcode/electron": "workspace:*"
   },
   "devDependencies": {
     "@perishcode/daemon": "workspace:*",

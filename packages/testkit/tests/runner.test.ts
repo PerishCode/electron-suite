@@ -19,11 +19,12 @@ describe("qualification runner", () => {
     const directory = await mkdtemp(join(tmpdir(), "testkit-"));
     paths.push(directory);
     const output = join(directory, "report.json");
-    const report = await run({ output, root });
+    const report = await run({ output, root, chromium: true });
 
     expect(report.result).toBe("partial");
     expect(report.scenarios.filter((item) => item.status === "failed")).toEqual([]);
     expect(report.scenarios.find((item) => item.id === "PUB-10")?.status).toBe("passed");
+    expect(report.scenarios.find((item) => item.id === "PKG-10")?.status).toBe("unqualified");
     expect(parse(JSON.parse(await readFile(output, "utf8")))).toEqual(report);
   });
 });

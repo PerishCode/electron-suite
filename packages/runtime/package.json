@@ -1,0 +1,51 @@
+{
+  "name": "@perishcode/runtime",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./settings": {
+      "types": "./dist/settings.d.ts",
+      "default": "./dist/settings.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "pretest": "pnpm run build",
+    "test": "vitest run -c vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
+  },
+  "dependencies": {
+    "@perishcode/blob": "workspace:*",
+    "@perishcode/protocol": "workspace:*",
+    "@perishcode/publish": "workspace:*",
+    "@perishcode/release": "workspace:*",
+    "@perishcode/sidecar": "workspace:*",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.28.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.6",
+    "@perishcode/daemon": "workspace:*",
+    "@perishcode/web": "workspace:*"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PerishCode/electron-suite.git",
+    "directory": "packages/runtime"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

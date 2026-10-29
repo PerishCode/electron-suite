@@ -25,7 +25,8 @@
     "@perishcode/protocol": "workspace:*",
     "@perishcode/publish": "workspace:*",
     "@perishcode/release": "workspace:*",
-    "@perishcode/sidecar": "workspace:*"
+    "@perishcode/sidecar": "workspace:*",
+    "@perishcode/runtime": "workspace:*"
   },
   "devDependencies": {
     "@perishcode/daemon": "workspace:*",

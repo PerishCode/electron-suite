@@ -107,6 +107,7 @@ export class Capsule {
     readonly client: Client,
     readonly namespace: Namespace,
     readonly channel: Channel,
+    readonly carrier = 1,
   ) {}
 
   async update(feed: Feed): Promise<Attempt | undefined> {
@@ -120,6 +121,7 @@ export class Capsule {
 
   async stage(input: unknown, contents: Content[], mode: Mode = "update"): Promise<Attempt> {
     const manifest = envelope(input);
+    if (manifest.generation.carrier > this.carrier) throw new Error("incompatible carrier ABI");
     const expected = new Map(list(manifest).map((artifact) => [key(artifact), artifact]));
     if (expected.size !== contents.length) throw new Error("generation content mismatch");
     const nonce = randomUUID();
@@ -284,6 +286,7 @@ export class Capsule {
     const receipt = join(data.value, "generations", `${target.slice(7)}.json`);
     const manifest = envelope(JSON.parse(await readFile(receipt, "utf8")));
     if (manifest.digest !== target) throw new Error("generation receipt mismatch");
+    if (manifest.generation.carrier > this.carrier) throw new Error("incompatible carrier ABI");
     const cas = await this.client.grant(this.namespace, {
       kind: "cas",
       name: "artifact",

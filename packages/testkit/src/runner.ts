@@ -6,13 +6,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve as resolvepath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-
-import { Capsule } from "@perishcode/capsule";
 import { asset } from "@perishcode/carrier";
 import { guard } from "@perishcode/guard";
 import { type Channel, channel, type Digest, gates, namespace, startup } from "@perishcode/protocol";
 import { Authority, Feed, type Service as Publisher, serve as publish } from "@perishcode/publish";
 import { compose, type Product, resolve as release } from "@perishcode/release";
+import { Capsule } from "@perishcode/runtime";
 import { Client, type Service as Sidecar, serve as sidecar } from "@perishcode/sidecar";
 
 import { type Definition, type Id, matrix, type Status } from "./matrix.js";
@@ -159,10 +158,16 @@ async function delivery(
       artifacts: [repaired.target],
       transitions: ["serve", "escape", "tamper", "reject", "restore"],
     }),
-    evidence("PKG-07", refused ? "passed" : "failed", "premature commit refused; mounted runtime acknowledged", 0, {
-      artifacts: [repaired.target],
-      transitions: ["prepare", "refuse", "ready", "commit"],
-    }),
+    evidence(
+      "PKG-07",
+      refused ? "unqualified" : "failed",
+      "premature commit refused; runtime readiness is harness-declared",
+      0,
+      {
+        artifacts: [repaired.target],
+        transitions: ["prepare", "refuse", "ready", "commit"],
+      },
+    ),
     evidence(
       "PKG-09",
       packaged.survivors.length === 0 ? "passed" : "failed",
@@ -174,11 +179,17 @@ async function delivery(
         transitions: ["launch", "release", "retire"],
       },
     ),
-    evidence("UPD-ALL", activated ? "passed" : "failed", "four-piece candidate committed after readiness", 0, {
-      artifacts: [repaired.target],
-      restored: ["capsule", "daemon", "web", "model"],
-      transitions: ["stage", "prepare", "launch", "ready", "commit", "mount"],
-    }),
+    evidence(
+      "UPD-ALL",
+      activated ? "unqualified" : "failed",
+      "fixture committed; fixed-host four-content update not witnessed",
+      0,
+      {
+        artifacts: [repaired.target],
+        restored: ["capsule", "daemon", "web", "model"],
+        transitions: ["stage", "prepare", "launch", "ready", "commit", "mount"],
+      },
+    ),
   ];
 }
 
@@ -389,14 +400,7 @@ export async function run(options: Options): Promise<Report> {
   add(evidence("PKG-06", "unqualified", "private mounted protocol not supplied", 0));
   add(evidence("PKG-07", "unqualified", "mounted runtime readiness not supplied", 0));
   add(evidence("PKG-09", "unqualified", "installed runtime retirement not supplied", 0));
-  add(
-    evidence(
-      "PKG-10",
-      options.chromium ? "passed" : "unqualified",
-      options.chromium ? "preceding Carrier qualification passed" : "real Chromium qualification not supplied",
-      0,
-    ),
-  );
+  add(evidence("PKG-10", "unqualified", "a caller boolean is not bound Chromium execution evidence", 0));
   add(evidence("UPD-ALL", "unqualified", "packaged four-piece activation not supplied", 0));
   add(evidence("G5-NATIVE", "unqualified", "native credentials and installers are out of scope", 0));
   add(evidence("G6-REMOTE", "unqualified", "remote object storage and CDN are out of scope", 0));

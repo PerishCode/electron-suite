@@ -1,11 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { cp } from "node:fs/promises";
 import { basename, join } from "node:path";
-
-import type { Mount } from "@perishcode/capsule";
 import { inspect, pack } from "@perishcode/pack";
 import { channel, type Digest, digest, namespace } from "@perishcode/protocol";
 import { distinct, type Manifest, resolve } from "@perishcode/release";
+import type { Mount } from "@perishcode/runtime";
 import type { Client, Lease } from "@perishcode/sidecar";
 
 export interface Installed {
