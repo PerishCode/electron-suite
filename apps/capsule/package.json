@@ -30,7 +30,7 @@
     "@pesuite/web": "workspace:*",
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "vitest": "4.1.6"
   }
 }

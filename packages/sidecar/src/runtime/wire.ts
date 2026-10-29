@@ -1,22 +1,21 @@
 import {
-  channel,
-  namespace,
-  resources,
-  gates,
-  valid,
   type Capability,
   type Channel,
+  channel,
   type Event,
   type Gate,
   type Grant,
-  type Permit,
+  gates,
   type Namespace,
+  namespace,
+  type Permit,
   type Registry,
   type Request as ResourceRequest,
+  resources,
+  valid,
 } from "@pesuite/protocol";
-
-import type { Lease, Release, Snapshot, Spec } from "./host.js";
-import type { Change, Journal } from "./binding.js";
+import type { Change, Journal } from "../binding.js";
+import type { Lease, Release, Snapshot, Spec } from "../host.js";
 
 export type Request =
   | { authority: string; spec: Spec; type: "start" }

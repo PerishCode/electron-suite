@@ -1,16 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  type Binding,
-  channel,
-  digest,
-  type Digest,
-  type Event,
-  gates,
-  namespace,
-  reduce,
-  startup,
-} from "@";
+import { type Binding, channel, type Digest, digest, type Event, gates, namespace, reduce, startup } from "@";
 
 const first = digest("first");
 const second = digest("second");
@@ -70,20 +60,25 @@ describe("binding", () => {
     let state = apply(base, { mode: "update", target: first, type: "arm" });
     state = apply(state, { nonce: "current", target: first, type: "begin" });
 
-    expect(reduce(state, {
-      gate: "web",
-      nonce: "stale",
-      target: first,
-      type: "ready",
-    })).toMatchObject({ fault: "nonce", ok: false });
+    expect(
+      reduce(state, {
+        gate: "web",
+        nonce: "stale",
+        target: first,
+        type: "ready",
+      }),
+    ).toMatchObject({ fault: "nonce", ok: false });
   });
 
   it("preserves current and blocks startup after failure", () => {
-    let state = apply({ ...base, current: first }, {
-      mode: "update",
-      target: second,
-      type: "arm",
-    });
+    let state = apply(
+      { ...base, current: first },
+      {
+        mode: "update",
+        target: second,
+        type: "arm",
+      },
+    );
     state = apply(state, { nonce: "two", target: second, type: "begin" });
     state = apply(state, {
       error: "daemon timeout",
@@ -101,11 +96,14 @@ describe("binding", () => {
   });
 
   it("recovers only to an explicit target", () => {
-    let state = apply({ ...base, current: first }, {
-      mode: "update",
-      target: second,
-      type: "arm",
-    });
+    let state = apply(
+      { ...base, current: first },
+      {
+        mode: "update",
+        target: second,
+        type: "arm",
+      },
+    );
     state = apply(state, { nonce: "two", target: second, type: "begin" });
     state = apply(state, { error: "crash", nonce: "two", target: second, type: "fail" });
     state = apply(state, { target: first, type: "recover" });

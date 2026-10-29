@@ -44,10 +44,13 @@ describe("channel", () => {
 
   it("does not turn a published head into a local current", () => {
     const pointer = { generation: digest("new"), proof: digest("accepted") };
-    const distribution = publish({ channel: channel("stable"), revision: 0 }, {
-      expected: 0,
-      pointer,
-    });
+    const distribution = publish(
+      { channel: channel("stable"), revision: 0 },
+      {
+        expected: 0,
+        pointer,
+      },
+    );
     const binding = {
       channel: channel("stable"),
       namespace: namespace("main"),

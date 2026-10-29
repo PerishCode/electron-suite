@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { channel, digest, namespace } from "@pesuite/protocol";
 import { emit, resolve } from "@pesuite/release";
-import { Client, serve, type Lease } from "@pesuite/sidecar";
+import { Client, type Lease, serve } from "@pesuite/sidecar";
 import { describe, expect, it } from "vitest";
 
 import { asset } from "@";
@@ -19,8 +19,8 @@ function output(child: ChildProcess): Promise<string> {
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => reject(new Error(`carrier timeout: ${stderr}`)), 30000);
-    child.stdout?.on("data", (chunk: Buffer) => stdout += chunk.toString());
-    child.stderr?.on("data", (chunk: Buffer) => stderr += chunk.toString());
+    child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
     child.once("error", reject);
     child.once("exit", (code) => {
       clearTimeout(timer);
@@ -52,77 +52,77 @@ describe("carrier", () => {
   it.runIf(process.platform === "darwin" && process.env.PERISH_GUI === "1")(
     "runs Web to Daemon in real Chromium",
     async () => {
-    const root = await mkdtemp(join(tmpdir(), "perish-carrier-"));
-    const endpoint = join(root, "sidecar.sock");
-    const service = await serve(endpoint);
-    const client = new Client(endpoint, service.authority);
-    const scope = namespace("main");
-    const owner = "attempt";
-    const capability = await client.issue({
-      channel: channel("stable"),
-      namespace: scope,
-      owner,
-      service: "daemon",
-    });
-    const data = await client.grant(scope, { kind: "data", name: "daemon", scope: "namespace" });
-    const carrier = await client.grant(scope, { kind: "data", name: "carrier", scope: "namespace" });
-    const socket = await client.grant(scope, { kind: "socket", name: "daemon", owner, scope: "attempt" });
-    const port = await client.grant(scope, {
-      kind: "port",
-      name: "daemon",
-      owner,
-      scheme: "http",
-      scope: "attempt",
-    });
-    const manifest = resolve({}, { channel: channel("stable"), version: "1.0.0" });
-    const release = await emit(root, manifest);
-    const daemonenv = {
-      PERISH_DATA: data.value,
-      PERISH_ORIGIN: manifest.identity.origin,
-      PERISH_SOCKET: socket.value,
-      PERISH_TOKEN: capability.token,
-    };
-    const here = dirname(fileURLToPath(import.meta.url));
-    const webroot = dirname(fileURLToPath(import.meta.resolve("@pesuite/web")));
-    const carrierenv = {
-      ...process.env,
-      ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      PERISH_DAEMON: port.value,
-      PERISH_DATA: carrier.value,
-      PERISH_PROBE: "1",
-      PERISH_RELEASE: release,
-      PERISH_TOKEN: capability.token,
-      PERISH_WEB: webroot,
-    };
-    let lease: Lease | undefined;
-    let child: ChildProcess | undefined;
-
-    try {
-      const daemonroot = dirname(fileURLToPath(import.meta.resolve("@pesuite/daemon")));
-      lease = await client.start({
-        args: [join(daemonroot, "main.mjs")],
+      const root = await mkdtemp(join(tmpdir(), "perish-carrier-"));
+      const endpoint = join(root, "sidecar.sock");
+      const service = await serve(endpoint);
+      const client = new Client(endpoint, service.authority);
+      const scope = namespace("main");
+      const owner = "attempt";
+      const capability = await client.issue({
         channel: channel("stable"),
-        command: process.execPath,
-        env: daemonenv,
-        generation: digest("carrierdaemon"),
         namespace: scope,
-        ready: "ready",
-        slot: "daemon",
+        owner,
+        service: "daemon",
       });
-      await client.forward(scope, port.lease, socket.lease);
-      const spawned = spawn(electron, [join(here, "../dist/main.mjs")], {
-        env: carrierenv,
-        stdio: ["ignore", "pipe", "pipe"],
+      const data = await client.grant(scope, { kind: "data", name: "daemon", scope: "namespace" });
+      const carrier = await client.grant(scope, { kind: "data", name: "carrier", scope: "namespace" });
+      const socket = await client.grant(scope, { kind: "socket", name: "daemon", owner, scope: "attempt" });
+      const port = await client.grant(scope, {
+        kind: "port",
+        name: "daemon",
+        owner,
+        scheme: "http",
+        scope: "attempt",
       });
-      child = spawned;
-      expect(await output(spawned)).toContain('"status":"ready"');
-    } finally {
-      if (child?.exitCode === null) child.kill("SIGTERM");
-      if (lease) await client.release(lease);
-      await client.retire(capability);
-      await service.close();
-      await rm(root, { force: true, recursive: true });
-    }
+      const manifest = resolve({}, { channel: channel("stable"), version: "1.0.0" });
+      const release = await emit(root, manifest);
+      const daemonenv = {
+        PERISH_DATA: data.value,
+        PERISH_ORIGIN: manifest.identity.origin,
+        PERISH_SOCKET: socket.value,
+        PERISH_TOKEN: capability.token,
+      };
+      const here = dirname(fileURLToPath(import.meta.url));
+      const webroot = dirname(fileURLToPath(import.meta.resolve("@pesuite/web")));
+      const carrierenv = {
+        ...process.env,
+        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
+        PERISH_DAEMON: port.value,
+        PERISH_DATA: carrier.value,
+        PERISH_PROBE: "1",
+        PERISH_RELEASE: release,
+        PERISH_TOKEN: capability.token,
+        PERISH_WEB: webroot,
+      };
+      let lease: Lease | undefined;
+      let child: ChildProcess | undefined;
+
+      try {
+        const daemonroot = dirname(fileURLToPath(import.meta.resolve("@pesuite/daemon")));
+        lease = await client.start({
+          args: [join(daemonroot, "main.mjs")],
+          channel: channel("stable"),
+          command: process.execPath,
+          env: daemonenv,
+          generation: digest("carrierdaemon"),
+          namespace: scope,
+          ready: "ready",
+          slot: "daemon",
+        });
+        await client.forward(scope, port.lease, socket.lease);
+        const spawned = spawn(electron, [join(here, "../dist/main.mjs")], {
+          env: carrierenv,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        child = spawned;
+        expect(await output(spawned)).toContain('"status":"ready"');
+      } finally {
+        if (child?.exitCode === null) child.kill("SIGTERM");
+        if (lease) await client.release(lease);
+        await client.retire(capability);
+        await service.close();
+        await rm(root, { force: true, recursive: true });
+      }
     },
   );
 });

@@ -1,10 +1,8 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-import { afterEach, describe, expect, it } from "vitest";
-
 import { channel, digest, namespace } from "@pesuite/protocol";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { Sidecar, type Spec } from "@";
 
@@ -62,11 +60,13 @@ describe("sidecar", () => {
 
     expect(second.pid).toBe(first.pid);
     expect(second.capability).not.toBe(first.capability);
-    expect(await sidecar.inspect()).toEqual([expect.objectContaining({
-      attachments: 2,
-      pid: first.pid,
-      state: "running",
-    })]);
+    expect(await sidecar.inspect()).toEqual([
+      expect.objectContaining({
+        attachments: 2,
+        pid: first.pid,
+        state: "running",
+      }),
+    ]);
     expect(await sidecar.release(first)).toEqual({
       status: "retained",
       survivors: [],
@@ -113,10 +113,12 @@ describe("sidecar", () => {
     expect(second.pid).not.toBe(first.pid);
     expect(await sidecar.inspect()).toHaveLength(2);
     await sidecar.release(first);
-    expect(await sidecar.inspect()).toEqual([expect.objectContaining({
-      generation: second.generation,
-      state: "running",
-    })]);
+    expect(await sidecar.inspect()).toEqual([
+      expect.objectContaining({
+        generation: second.generation,
+        state: "running",
+      }),
+    ]);
   });
 
   it("isolates equal generations across namespaces", async () => {

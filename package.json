@@ -12,15 +12,22 @@
     "package": "node scripts/package.mjs",
     "qualify": "node scripts/acceptance.mjs",
     "build": "pnpm -r --if-present --workspace-concurrency=4 run build",
-    "guard": "node scripts/guard.mjs",
+    "guard": "pesuite guard",
     "test": "pnpm -r --if-present --workspace-concurrency=4 run test",
-    "typecheck": "pnpm -r --if-present --workspace-concurrency=4 run typecheck"
+    "typecheck": "pnpm -r --if-present --workspace-concurrency=4 run typecheck",
+    "lint": "biome check .",
+    "format": "biome check --write ."
   },
   "devDependencies": {
     "@pesuite/config": "workspace:*",
     "@pesuite/guard": "workspace:*",
     "@pesuite/pack": "workspace:*",
     "@pesuite/release": "workspace:*",
-    "@pesuite/testkit": "workspace:*"
-  }
+    "@pesuite/testkit": "workspace:*",
+    "@pesuite/cli": "workspace:*",
+    "@biomejs/biome": "2.6.4",
+    "typescript": "7.0.2",
+    "vitest": "4.1.6"
+  },
+  "packageManager": "pnpm@11.13.0"
 }

@@ -1,17 +1,17 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
 import {
+  type Channel,
   canonical,
   channel,
-  digest,
-  namespace,
-  type Channel,
   type Digest,
+  digest,
   type Namespace,
+  namespace,
   valid,
 } from "@pesuite/protocol";
 
-import { launch, type Launch, type Running, type Stop } from "./runner.js";
+import { type Launch, launch, type Running, type Stop } from "./runner.js";
 
 export interface Spec extends Launch {
   channel: Channel;
@@ -61,15 +61,17 @@ interface Retired {
 }
 
 function fingerprint(spec: Spec): Digest {
-  return digest(canonical({
-    args: spec.args ?? [],
-    command: spec.command,
-    cwd: spec.cwd ?? process.cwd(),
-    env: spec.env ?? {},
-    grace: spec.grace ?? 1000,
-    ready: spec.ready,
-    timeout: spec.timeout ?? 5000,
-  }));
+  return digest(
+    canonical({
+      args: spec.args ?? [],
+      command: spec.command,
+      cwd: spec.cwd ?? process.cwd(),
+      env: spec.env ?? {},
+      grace: spec.grace ?? 1000,
+      ready: spec.ready,
+      timeout: spec.timeout ?? 5000,
+    }),
+  );
 }
 
 function key(value: Pick<Spec, "channel" | "generation" | "namespace" | "slot">): string {

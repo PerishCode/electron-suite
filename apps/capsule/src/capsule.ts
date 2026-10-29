@@ -4,22 +4,22 @@ import { dirname, join } from "node:path";
 
 import { Store } from "@pesuite/blob";
 import {
-  envelope,
-  gates,
-  canonical,
-  startup,
-  verify,
   type Artifact,
   type Channel,
+  canonical,
   type Digest,
   type Envelope,
+  envelope,
   type Gate,
+  gates,
   type Mode,
   type Namespace,
+  startup,
+  verify,
 } from "@pesuite/protocol";
-import { Feed } from "@pesuite/publish";
+import type { Feed } from "@pesuite/publish";
 import { bundle, materialize } from "@pesuite/release";
-import { type Change, Client, type Journal } from "@pesuite/sidecar";
+import type { Change, Client, Journal } from "@pesuite/sidecar";
 
 export interface Content {
   artifact: Artifact;
@@ -98,7 +98,7 @@ async function restore(store: Store, artifact: Artifact, root: string): Promise<
     await rm(temporary, { force: true, recursive: true });
     if (!["EEXIST", "ENOTEMPTY"].includes((fault as NodeJS.ErrnoException).code ?? "")) throw fault;
   }
-  if (!await exact(destination, artifact)) throw new Error(`${artifact.kind} mount integrity mismatch`);
+  if (!(await exact(destination, artifact))) throw new Error(`${artifact.kind} mount integrity mismatch`);
   return destination;
 }
 
@@ -155,16 +155,20 @@ export class Capsule {
       });
       await persist(join(data.value, "generations", `${manifest.digest.slice(7)}.json`), canonical(manifest));
       const initial = await this.client.binding(this.namespace, this.channel);
-      const armed = changed(await this.client.transit(this.namespace, this.channel, initial.revision, {
-        mode,
-        target: manifest.digest,
-        type: "arm",
-      }));
-      const begun = changed(await this.client.transit(this.namespace, this.channel, armed.revision, {
-        nonce,
-        target: manifest.digest,
-        type: "begin",
-      }));
+      const armed = changed(
+        await this.client.transit(this.namespace, this.channel, initial.revision, {
+          mode,
+          target: manifest.digest,
+          type: "arm",
+        }),
+      );
+      const begun = changed(
+        await this.client.transit(this.namespace, this.channel, armed.revision, {
+          nonce,
+          target: manifest.digest,
+          type: "begin",
+        }),
+      );
       return {
         channel: this.channel,
         lease: staging.lease,
@@ -181,32 +185,38 @@ export class Capsule {
 
   async ready(attempt: Attempt, gate: Gate): Promise<Attempt> {
     if (!gates.includes(gate)) throw new TypeError("invalid readiness gate");
-    const journal = changed(await this.client.transit(this.namespace, this.channel, attempt.revision, {
-      gate,
-      nonce: attempt.nonce,
-      target: attempt.target,
-      type: "ready",
-    }));
+    const journal = changed(
+      await this.client.transit(this.namespace, this.channel, attempt.revision, {
+        gate,
+        nonce: attempt.nonce,
+        target: attempt.target,
+        type: "ready",
+      }),
+    );
     return { ...attempt, revision: journal.revision };
   }
 
   async commit(attempt: Attempt): Promise<Journal> {
-    const journal = changed(await this.client.transit(this.namespace, this.channel, attempt.revision, {
-      nonce: attempt.nonce,
-      target: attempt.target,
-      type: "commit",
-    }));
+    const journal = changed(
+      await this.client.transit(this.namespace, this.channel, attempt.revision, {
+        nonce: attempt.nonce,
+        target: attempt.target,
+        type: "commit",
+      }),
+    );
     await this.client.revoke(this.namespace, attempt.lease);
     return journal;
   }
 
   async fail(attempt: Attempt, error: string): Promise<Journal> {
-    const journal = changed(await this.client.transit(this.namespace, this.channel, attempt.revision, {
-      error,
-      nonce: attempt.nonce,
-      target: attempt.target,
-      type: "fail",
-    }));
+    const journal = changed(
+      await this.client.transit(this.namespace, this.channel, attempt.revision, {
+        error,
+        nonce: attempt.nonce,
+        target: attempt.target,
+        type: "fail",
+      }),
+    );
     await this.client.revoke(this.namespace, attempt.lease);
     return journal;
   }
@@ -221,15 +231,19 @@ export class Capsule {
     });
     try {
       const initial = await this.client.binding(this.namespace, this.channel);
-      const recovered = changed(await this.client.transit(this.namespace, this.channel, initial.revision, {
-        target,
-        type: "recover",
-      }));
-      const begun = changed(await this.client.transit(this.namespace, this.channel, recovered.revision, {
-        nonce,
-        target,
-        type: "begin",
-      }));
+      const recovered = changed(
+        await this.client.transit(this.namespace, this.channel, initial.revision, {
+          target,
+          type: "recover",
+        }),
+      );
+      const begun = changed(
+        await this.client.transit(this.namespace, this.channel, recovered.revision, {
+          nonce,
+          target,
+          type: "begin",
+        }),
+      );
       return {
         channel: this.channel,
         lease: staging.lease,
@@ -254,7 +268,7 @@ export class Capsule {
   async prepare(attempt: Attempt): Promise<Mount> {
     const binding = await this.client.binding(this.namespace, this.channel);
     const active = binding.state.attempt;
-    if (!active || active.status !== "running") throw new Error("capsule attempt is not running");
+    if (active?.status !== "running") throw new Error("capsule attempt is not running");
     if (active.nonce !== attempt.nonce || active.target !== attempt.target) {
       throw new Error("capsule attempt identity mismatch");
     }

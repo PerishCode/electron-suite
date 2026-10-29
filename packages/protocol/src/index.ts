@@ -1,10 +1,3 @@
-export {
-  envelope,
-  identify,
-  kinds,
-  parse,
-  verify,
-} from "./artifact.js";
 export type {
   Artifact,
   Envelope,
@@ -12,35 +5,12 @@ export type {
   Kind,
 } from "./artifact.js";
 export {
-  canonical,
-  digest,
-  valid,
-} from "./json.js";
-export type { Digest } from "./json.js";
-export type {
-  Capability,
-  Permit,
-} from "./capability.js";
-export {
-  channel,
-  namespace,
-} from "./identity.js";
-export type {
-  Channel,
-  Namespace,
-} from "./identity.js";
-export { publish } from "./channel.js";
-export type {
-  Distribution,
-  Pointer,
-  Publication,
-  Publish,
-} from "./channel.js";
-export {
-  gates,
-  reduce,
-  startup,
-} from "./binding.js";
+  envelope,
+  identify,
+  kinds,
+  parse,
+  verify,
+} from "./artifact.js";
 export type {
   Attempt,
   Binding,
@@ -53,10 +23,35 @@ export type {
   Transition,
 } from "./binding.js";
 export {
-  allocate,
-  resources,
-  revoke,
-} from "./namespace.js";
+  gates,
+  reduce,
+  startup,
+} from "./binding.js";
+export type {
+  Capability,
+  Permit,
+} from "./capability.js";
+export type {
+  Distribution,
+  Pointer,
+  Publication,
+  Publish,
+} from "./channel.js";
+export { publish } from "./channel.js";
+export type {
+  Channel,
+  Namespace,
+} from "./identity.js";
+export {
+  channel,
+  namespace,
+} from "./identity.js";
+export type { Digest } from "./json.js";
+export {
+  canonical,
+  digest,
+  valid,
+} from "./json.js";
 export type {
   Allocation,
   Grant,
@@ -65,4 +60,9 @@ export type {
   Resource,
   Revocation,
   Scope,
+} from "./namespace.js";
+export {
+  allocate,
+  resources,
+  revoke,
 } from "./namespace.js";

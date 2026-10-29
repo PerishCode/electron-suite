@@ -1,12 +1,12 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { cp } from "node:fs/promises";
 import { basename, join } from "node:path";
 
-import { type Mount } from "@pesuite/capsule";
+import type { Mount } from "@pesuite/capsule";
 import { inspect, pack } from "@pesuite/pack";
-import { channel, digest, namespace, type Digest } from "@pesuite/protocol";
-import { distinct, resolve, type Manifest } from "@pesuite/release";
-import { type Client, type Lease } from "@pesuite/sidecar";
+import { channel, type Digest, digest, namespace } from "@pesuite/protocol";
+import { distinct, type Manifest, resolve } from "@pesuite/release";
+import type { Client, Lease } from "@pesuite/sidecar";
 
 export interface Installed {
   artifacts: Digest[];
@@ -38,8 +38,8 @@ function output(child: ChildProcess): Promise<Record<string, unknown>> {
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => reject(new Error(`installed carrier timeout:${stderr}`)), 30000);
-    child.stdout?.on("data", (chunk: Buffer) => stdout += chunk.toString());
-    child.stderr?.on("data", (chunk: Buffer) => stderr += chunk.toString());
+    child.stdout?.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
     child.once("error", reject);
     child.once("exit", (code) => {
       clearTimeout(timer);
@@ -57,7 +57,11 @@ async function launch(client: Client, app: string, manifest: Manifest, mount: Mo
   const carrier = await client.grant(scope, { kind: "data", name: "carrier", scope: "namespace" });
   const socket = await client.grant(scope, { kind: "socket", name: "daemon", owner, scope: "attempt" });
   const port = await client.grant(scope, {
-    kind: "port", name: "daemon", owner, scheme: "http", scope: "attempt",
+    kind: "port",
+    name: "daemon",
+    owner,
+    scheme: "http",
+    scope: "attempt",
   });
   const executable = join(app, "Contents", "MacOS", manifest.identity.scheme);
   const resources = join(app, "Contents", "Resources");
@@ -114,8 +118,8 @@ async function launch(client: Client, app: string, manifest: Manifest, mount: Mo
     } finally {
       await client.retire(capability);
     }
-    if (status !== "stopped") throw new Error(`daemon retirement is ${status}`);
   }
+  if (status !== "stopped") throw new Error(`daemon retirement is ${status}`);
   return { pid, survivors };
 }
 

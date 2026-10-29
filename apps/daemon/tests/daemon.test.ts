@@ -5,34 +5,44 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { channel, digest, namespace } from "@pesuite/protocol";
-import { Client, serve, type Lease, type Service } from "@pesuite/sidecar";
+import { Client, type Lease, type Service, serve } from "@pesuite/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
 const roots: string[] = [];
 const services: Service[] = [];
 
-function call(endpoint: string, path: string, token: string, value?: unknown): Promise<{ body: unknown; status: number }> {
+function call(
+  endpoint: string,
+  path: string,
+  token: string,
+  value?: unknown,
+): Promise<{ body: unknown; status: number }> {
   const address = new URL(endpoint);
   const body = value === undefined ? undefined : JSON.stringify(value);
   return new Promise((resolve, reject) => {
-    const operation = request({
-      headers: {
-        ...(body ? { "content-length": Buffer.byteLength(body) } : {}),
-        authorization: `Bearer ${token}`,
-        origin: "perish://carrier",
+    const operation = request(
+      {
+        headers: {
+          ...(body ? { "content-length": Buffer.byteLength(body) } : {}),
+          authorization: `Bearer ${token}`,
+          origin: "perish://carrier",
+        },
+        host: address.hostname,
+        method: body ? "PUT" : "GET",
+        path,
+        port: address.port,
       },
-      host: address.hostname,
-      method: body ? "PUT" : "GET",
-      path,
-      port: address.port,
-    }, (response) => {
-      const chunks: Buffer[] = [];
-      response.on("data", (chunk: Buffer) => chunks.push(chunk));
-      response.once("end", () => resolve({
-        body: JSON.parse(Buffer.concat(chunks).toString("utf8")),
-        status: response.statusCode ?? 0,
-      }));
-    });
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.once("end", () =>
+          resolve({
+            body: JSON.parse(Buffer.concat(chunks).toString("utf8")),
+            status: response.statusCode ?? 0,
+          }),
+        );
+      },
+    );
     operation.once("error", reject);
     operation.end(body);
   });
@@ -41,19 +51,24 @@ function call(endpoint: string, path: string, token: string, value?: unknown): P
 function preflight(endpoint: string, origin: string): Promise<{ allow?: string; status: number }> {
   const address = new URL(endpoint);
   return new Promise((resolve, reject) => {
-    const operation = request({
-      headers: { origin },
-      host: address.hostname,
-      method: "OPTIONS",
-      path: "/state",
-      port: address.port,
-    }, (response) => {
-      response.resume();
-      response.once("end", () => resolve({
-        allow: response.headers["access-control-allow-origin"],
-        status: response.statusCode ?? 0,
-      }));
-    });
+    const operation = request(
+      {
+        headers: { origin },
+        host: address.hostname,
+        method: "OPTIONS",
+        path: "/state",
+        port: address.port,
+      },
+      (response) => {
+        response.resume();
+        response.once("end", () =>
+          resolve({
+            allow: response.headers["access-control-allow-origin"],
+            status: response.statusCode ?? 0,
+          }),
+        );
+      },
+    );
     operation.once("error", reject);
     operation.end();
   });

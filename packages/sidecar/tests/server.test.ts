@@ -1,16 +1,14 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, stat } from "node:fs/promises";
+import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createConnection } from "node:net";
-
+import { channel, digest, namespace } from "@pesuite/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { channel, digest, namespace } from "@pesuite/protocol";
-
-import { Client, serve, type Service, type Spec } from "@";
+import { Client, type Service, type Spec, serve } from "@";
 
 const roots: string[] = [];
 const services: Service[] = [];

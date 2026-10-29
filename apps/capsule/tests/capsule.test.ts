@@ -3,17 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  type Artifact,
   channel,
   digest,
-  gates,
-  identify,
-  namespace,
-  type Artifact,
   type Envelope,
   type Generation,
+  gates,
+  identify,
   type Kind,
+  namespace,
 } from "@pesuite/protocol";
-import { Client, serve, type Service } from "@pesuite/sidecar";
+import { Client, type Service, serve } from "@pesuite/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Capsule, type Content } from "@";
@@ -40,12 +40,14 @@ function fixture(seed: string): { contents: Content[]; envelope: Envelope } {
     schema: 1,
     web: artifact("web", "main", values.web),
   };
+  const blob = generation.blobs[0];
+  if (!blob) throw new Error("blob missing");
   return {
     contents: [
       { artifact: generation.capsule, bytes: values.capsule },
       { artifact: generation.daemon, bytes: values.daemon },
       { artifact: generation.web, bytes: values.web },
-      { artifact: generation.blobs[0]!, bytes: values.blob },
+      { artifact: blob, bytes: values.blob },
     ],
     envelope: { digest: identify(generation), generation, schema: 1 },
   };
@@ -96,7 +98,9 @@ describe("capsule", () => {
     const lane = channel("beta");
     const capsule = new Capsule(client, scope, lane);
     const value = fixture("broken");
-    value.contents[0] = { ...value.contents[0]!, bytes: "tampered" };
+    const first = value.contents[0];
+    if (!first) throw new Error("fixture missing");
+    value.contents[0] = { ...first, bytes: "tampered" };
 
     await expect(capsule.stage(value.envelope, value.contents)).rejects.toThrow("verification");
     expect(await client.binding(scope, lane)).toMatchObject({ revision: 0, state: { channel: lane } });

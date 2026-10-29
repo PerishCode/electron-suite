@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 async function create(name: string, root?: string): Promise<{ host: Resources; root: string }> {
-  const directory = root ?? await mkdtemp(join(tmpdir(), "perish-resource-"));
+  const directory = root ?? (await mkdtemp(join(tmpdir(), "perish-resource-")));
   const host = await Resources.open({ namespace: namespace(name), root: directory });
   hosts.push(host);
   return { host, root: directory };
@@ -28,10 +28,12 @@ describe("resources", () => {
     const address = new URL(grant.value);
     const contender = createServer();
 
-    await expect(new Promise<void>((done, reject) => {
-      contender.once("error", reject);
-      contender.listen(Number(address.port), address.hostname, done);
-    })).rejects.toMatchObject({ code: "EADDRINUSE" });
+    await expect(
+      new Promise<void>((done, reject) => {
+        contender.once("error", reject);
+        contender.listen(Number(address.port), address.hostname, done);
+      }),
+    ).rejects.toMatchObject({ code: "EADDRINUSE" });
 
     await host.release(grant.lease);
     await new Promise<void>((done, reject) => {
@@ -73,8 +75,9 @@ describe("resources", () => {
 
   it("refuses scope confusion and cleanup with survivors", async () => {
     const { host } = await create("main");
-    await expect(host.grant({ kind: "data", name: "daemon", owner: "attempt", scope: "attempt" }))
-      .rejects.toThrow("scope mismatch");
+    await expect(host.grant({ kind: "data", name: "daemon", owner: "attempt", scope: "attempt" })).rejects.toThrow(
+      "scope mismatch",
+    );
     const grant = await host.grant({ kind: "lock", name: "daemon", owner: "attempt", scope: "attempt" });
     await expect(host.release(grant.lease, [process.pid])).rejects.toThrow("survivors");
     expect(host.snapshot().grants).toContainEqual(grant);
@@ -96,7 +99,7 @@ describe("resources", () => {
     const output = await new Promise<string>((done, reject) => {
       const client = connect(Number(address.port), address.hostname);
       let value = "";
-      client.on("data", (chunk) => value += chunk.toString());
+      client.on("data", (chunk) => (value += chunk.toString()));
       client.once("end", () => done(value));
       client.once("error", reject);
     });

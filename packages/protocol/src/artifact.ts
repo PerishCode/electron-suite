@@ -1,8 +1,8 @@
-import { canonical, digest, type Digest, valid } from "./json.js";
+import { canonical, type Digest, digest, valid } from "./json.js";
 
 export const kinds = ["capsule", "web", "daemon", "blob"] as const;
 
-export type Kind = typeof kinds[number];
+export type Kind = (typeof kinds)[number];
 
 export interface Artifact {
   bytes: number;

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { encode, matrix, parse, type Evidence, type Report } from "@";
+import { type Evidence, encode, matrix, parse, type Report } from "@";
 
 function scenario(index: number): Evidence {
-  const item = matrix[index]!;
+  const item = matrix[index];
+  if (!item) throw new Error("scenario missing");
   return {
     actual: "qualified",
     artifacts: [],

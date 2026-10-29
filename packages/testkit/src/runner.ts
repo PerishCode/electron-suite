@@ -10,14 +10,14 @@ import { promisify } from "node:util";
 import { Capsule } from "@pesuite/capsule";
 import { asset } from "@pesuite/carrier";
 import { guard } from "@pesuite/guard";
-import { channel, gates, namespace, startup, type Channel, type Digest } from "@pesuite/protocol";
-import { Authority, Feed, serve as publish, type Service as Publisher } from "@pesuite/publish";
-import { compose, resolve as release, type Product } from "@pesuite/release";
-import { Client, serve as sidecar, type Service as Sidecar } from "@pesuite/sidecar";
+import { type Channel, channel, type Digest, gates, namespace, startup } from "@pesuite/protocol";
+import { Authority, Feed, type Service as Publisher, serve as publish } from "@pesuite/publish";
+import { compose, type Product, resolve as release } from "@pesuite/release";
+import { Client, type Service as Sidecar, serve as sidecar } from "@pesuite/sidecar";
 
-import { matrix, type Definition, type Id, type Status } from "./matrix.js";
+import { type Definition, type Id, matrix, type Status } from "./matrix.js";
 import { installed, type Selections } from "./package.js";
-import { encode, parse, type Evidence, type Report } from "./schema.js";
+import { type Evidence, encode, parse, type Report } from "./schema.js";
 
 export interface Options {
   chromium?: boolean;
@@ -78,17 +78,20 @@ function path(name: "capsule" | "carrier" | "daemon" | "web"): string {
   return dirname(fileURLToPath(import.meta.resolve(`@pesuite/${name}`)));
 }
 
-async function installation(
-  client: Client,
-  temporary: string,
-  selections: Selections,
-): Promise<Evidence> {
+async function installation(client: Client, temporary: string, selections: Selections): Promise<Evidence> {
   try {
-    const qualified = await timed(() => installed(client, temporary, {
-      carrier: path("carrier"),
-      daemon: path("daemon"),
-      web: path("web"),
-    }, selections));
+    const qualified = await timed(() =>
+      installed(
+        client,
+        temporary,
+        {
+          carrier: path("carrier"),
+          daemon: path("daemon"),
+          web: path("web"),
+        },
+        selections,
+      ),
+    );
     return evidence("PKG-01", "passed", "two channel identities installed and launched", qualified.milliseconds, {
       artifacts: qualified.value.artifacts,
       built: qualified.value.built,
@@ -124,10 +127,7 @@ async function delivery(
     stable: await primary.prepare(attempt),
   };
   const served = await asset(selections.stable.web, new Request("electronsuite://carrier/"));
-  const escaped = await asset(
-    selections.stable.web,
-    new Request("electronsuite://carrier/%2e%2e%2fsecret"),
-  );
+  const escaped = await asset(selections.stable.web, new Request("electronsuite://carrier/%2e%2e%2fsecret"));
   const packaged = await installation(client, temporary, selections);
   if (packaged.status !== "passed") {
     await primary.fail(attempt, packaged.actual);
@@ -151,8 +151,7 @@ async function delivery(
   }
   await rm(mounted.web, { force: true, recursive: true });
   const repaired = await primary.mount();
-  const activated = committed.state.current === update.envelope.digest
-    && repaired.target === update.envelope.digest;
+  const activated = committed.state.current === update.envelope.digest && repaired.target === update.envelope.digest;
   const protectedpath = served.status === 200 && escaped.status === 403 && tampered;
   return [
     packaged,
@@ -164,11 +163,17 @@ async function delivery(
       artifacts: [repaired.target],
       transitions: ["prepare", "refuse", "ready", "commit"],
     }),
-    evidence("PKG-09", packaged.survivors.length === 0 ? "passed" : "failed", "installed Daemons retired physically", 0, {
-      pids: packaged.pids,
-      survivors: packaged.survivors,
-      transitions: ["launch", "release", "retire"],
-    }),
+    evidence(
+      "PKG-09",
+      packaged.survivors.length === 0 ? "passed" : "failed",
+      "installed Daemons retired physically",
+      0,
+      {
+        pids: packaged.pids,
+        survivors: packaged.survivors,
+        transitions: ["launch", "release", "retire"],
+      },
+    ),
     evidence("UPD-ALL", activated ? "passed" : "failed", "four-piece candidate committed after readiness", 0, {
       artifacts: [repaired.target],
       restored: ["capsule", "daemon", "web", "model"],
@@ -213,7 +218,9 @@ async function commit(capsule: Capsule, feed: Feed): Promise<Digest> {
   let attempt = await capsule.update(feed);
   if (!attempt) throw new Error("candidate missing");
   for (const gate of gates) attempt = await capsule.ready(attempt, gate);
-  return (await capsule.commit(attempt)).state.current!;
+  const current = (await capsule.commit(attempt)).state.current;
+  if (!current) throw new Error("committed generation missing");
+  return current;
 }
 
 async function versions(root: string): Promise<Report["tools"] & { revision: string }> {
@@ -236,13 +243,15 @@ export async function run(options: Options): Promise<Report> {
   let failure: Error | undefined;
   try {
     const checked = await timed(() => guard({ root }));
-    scenarios.push(evidence(
-      "BUILD-01",
-      checked.value.ok ? "passed" : "failed",
-      checked.value.ok ? `${checked.value.paths} repository paths accepted` : "repository policy failed",
-      checked.milliseconds,
-      { diagnostics: checked.value.findings.map((item) => `${item.path}:${item.rule}`) },
-    ));
+    scenarios.push(
+      evidence(
+        "BUILD-01",
+        checked.value.ok ? "passed" : "failed",
+        checked.value.ok ? `${checked.value.paths} repository paths accepted` : "repository policy failed",
+        checked.milliseconds,
+        { diagnostics: checked.value.findings.map((item) => `${item.path}:${item.rule}`) },
+      ),
+    );
     const model = join(temporary, "model.bin");
     await writeFile(model, "qualification model");
     const stable = channel("stable");
@@ -253,20 +262,29 @@ export async function run(options: Options): Promise<Report> {
       if (first.envelope.digest !== repeated.envelope.digest) throw new Error("generation drift");
       return { first, preview: await product(beta, "1.0.0-beta.1", model) };
     });
-    scenarios.push(evidence("BUILD-03", "passed", "generation identity repeated exactly", built.milliseconds, {
-      artifacts: [built.value.first.envelope.digest, built.value.preview.envelope.digest],
-      built: ["capsule", "daemon", "web", "model"],
-    }));
+    scenarios.push(
+      evidence("BUILD-03", "passed", "generation identity repeated exactly", built.milliseconds, {
+        artifacts: [built.value.first.envelope.digest, built.value.preview.envelope.digest],
+        built: ["capsule", "daemon", "web", "model"],
+      }),
+    );
     const endpoint = join(temporary, "sidecar.sock");
     host = await sidecar(endpoint);
     let client = new Client(host.endpoint, host.authority);
     const release = namespace("release");
     const data = await client.grant(release, { kind: "data", name: "publish", scope: "namespace" });
     const socket = await client.grant(release, {
-      kind: "socket", name: "publish", owner: "server", scope: "attempt",
+      kind: "socket",
+      name: "publish",
+      owner: "server",
+      scope: "attempt",
     });
     const port = await client.grant(release, {
-      kind: "port", name: "publish", owner: "server", scheme: "http", scope: "attempt",
+      kind: "port",
+      name: "publish",
+      owner: "server",
+      scheme: "http",
+      scope: "attempt",
     });
     const keys = pem();
     const authority = await Authority.open({ privatekey: keys.privatekey, root: data.value });
@@ -282,13 +300,19 @@ export async function run(options: Options): Promise<Report> {
       const preview = await commit(secondary, feed);
       return { current, preview, primary, secondary };
     });
-    scenarios.push(evidence("PUB-01", "passed", "two isolated channels restored and committed", published.milliseconds, {
-      artifacts: [published.value.current, published.value.preview],
-      downloaded: ["capsule", "daemon", "web", "model"],
-      transitions: ["discover", "verify", "stage", "arm", "ready", "commit"],
-    }));
-    const repeated = await timed(() => authority.publish(stable, 0, built.value.first.envelope, built.value.first.assets));
-    scenarios.push(evidence("PUB-02", "passed", `head remained revision ${repeated.value.revision}`, repeated.milliseconds));
+    scenarios.push(
+      evidence("PUB-01", "passed", "two isolated channels restored and committed", published.milliseconds, {
+        artifacts: [published.value.current, published.value.preview],
+        downloaded: ["capsule", "daemon", "web", "model"],
+        transitions: ["discover", "verify", "stage", "arm", "ready", "commit"],
+      }),
+    );
+    const repeated = await timed(() =>
+      authority.publish(stable, 0, built.value.first.envelope, built.value.first.assets),
+    );
+    scenarios.push(
+      evidence("PUB-02", "passed", `head remained revision ${repeated.value.revision}`, repeated.milliseconds),
+    );
     const update = await product(stable, "2.0.0", model);
     await authority.publish(stable, 1, update.envelope, update.assets);
     const refused = await timed(async () => {
@@ -299,7 +323,9 @@ export async function run(options: Options): Promise<Report> {
         return true;
       }
     });
-    scenarios.push(evidence("PUB-10", refused.value ? "passed" : "failed", "unknown trust root rejected", refused.milliseconds));
+    scenarios.push(
+      evidence("PUB-10", refused.value ? "passed" : "failed", "unknown trust root rejected", refused.milliseconds),
+    );
     const attempt = await published.value.primary.update(feed);
     if (!attempt) throw new Error("upgrade attempt missing");
     await server.close();
@@ -310,9 +336,17 @@ export async function run(options: Options): Promise<Report> {
     client = new Client(host.endpoint, host.authority);
     const interrupted = await timed(() => client.binding(namespace("primary"), stable));
     const blocked = startup(interrupted.value.state).mode === "blocked";
-    scenarios.push(evidence("REC-04", blocked ? "passed" : "failed", "restart preserved a blocked failed attempt", interrupted.milliseconds, {
-      transitions: ["running", "restart", "failed", "blocked"],
-    }));
+    scenarios.push(
+      evidence(
+        "REC-04",
+        blocked ? "passed" : "failed",
+        "restart preserved a blocked failed attempt",
+        interrupted.milliseconds,
+        {
+          transitions: ["running", "restart", "failed", "blocked"],
+        },
+      ),
+    );
     const recovered = await timed(async () => {
       const capsule = new Capsule(client, namespace("primary"), stable);
       let recovery = await capsule.recover(published.value.current);
@@ -320,21 +354,17 @@ export async function run(options: Options): Promise<Report> {
       return capsule.commit(recovery);
     });
     const restored = recovered.value.state.current === published.value.current;
-    scenarios.push(evidence("REC-07", restored ? "passed" : "failed", "explicit old generation recovered", recovered.milliseconds, {
-      artifacts: [published.value.current],
-      restored: ["capsule", "daemon", "web", "model"],
-      transitions: ["recover", "begin", "ready", "commit"],
-    }));
+    scenarios.push(
+      evidence("REC-07", restored ? "passed" : "failed", "explicit old generation recovered", recovered.milliseconds, {
+        artifacts: [published.value.current],
+        restored: ["capsule", "daemon", "web", "model"],
+        transitions: ["recover", "begin", "ready", "commit"],
+      }),
+    );
     if (options.packaged) {
       const primary = new Capsule(client, namespace("primary"), stable);
       const secondary = new Capsule(client, namespace("secondary"), beta);
-      scenarios.push(...await qualification(
-        client,
-        temporary,
-        primary,
-        secondary,
-        update,
-      ));
+      scenarios.push(...(await qualification(client, temporary, primary, secondary, update)));
     }
   } catch (fault) {
     failure = fault as Error;
@@ -348,29 +378,34 @@ export async function run(options: Options): Promise<Report> {
   };
   if (failure) {
     for (const item of matrix.slice(0, 7)) {
-      add(evidence(item.id, "failed", failure.message, 0, {
-        diagnostics: [failure.stack ?? failure.message],
-      }));
+      add(
+        evidence(item.id, "failed", failure.message, 0, {
+          diagnostics: [failure.stack ?? failure.message],
+        }),
+      );
     }
   }
   add(evidence("PKG-01", "unqualified", "platform package not built", 0));
   add(evidence("PKG-06", "unqualified", "private mounted protocol not supplied", 0));
   add(evidence("PKG-07", "unqualified", "mounted runtime readiness not supplied", 0));
   add(evidence("PKG-09", "unqualified", "installed runtime retirement not supplied", 0));
-  add(evidence(
-    "PKG-10",
-    options.chromium ? "passed" : "unqualified",
-    options.chromium ? "preceding Carrier qualification passed" : "real Chromium qualification not supplied",
-    0,
-  ));
+  add(
+    evidence(
+      "PKG-10",
+      options.chromium ? "passed" : "unqualified",
+      options.chromium ? "preceding Carrier qualification passed" : "real Chromium qualification not supplied",
+      0,
+    ),
+  );
   add(evidence("UPD-ALL", "unqualified", "packaged four-piece activation not supplied", 0));
   add(evidence("G5-NATIVE", "unqualified", "native credentials and installers are out of scope", 0));
   add(evidence("G6-REMOTE", "unqualified", "remote object storage and CDN are out of scope", 0));
   for (const item of matrix) {
     add(evidence(item.id, "failed", "scenario did not execute", 0));
   }
-  scenarios.sort((left, right) => matrix.findIndex((item) => item.id === left.id)
-    - matrix.findIndex((item) => item.id === right.id));
+  scenarios.sort(
+    (left, right) => matrix.findIndex((item) => item.id === left.id) - matrix.findIndex((item) => item.id === right.id),
+  );
   const tools = await versions(root);
   const failed = scenarios.some((item) => item.status === "failed");
   const partial = scenarios.some((item) => item.status === "unqualified");

@@ -13,15 +13,17 @@ const mark = (state: string): void => {
 };
 
 mark("loaded");
-protocol.registerSchemesAsPrivileged([{
-  privileges: {
-    corsEnabled: true,
-    secure: true,
-    standard: true,
-    supportFetchAPI: true,
+protocol.registerSchemesAsPrivileged([
+  {
+    privileges: {
+      corsEnabled: true,
+      secure: true,
+      standard: true,
+      supportFetchAPI: true,
+    },
+    scheme: identity.scheme,
   },
-  scheme: identity.scheme,
-}]);
+]);
 if (options.probe) app.disableHardwareAcceleration();
 app.setName(identity.name);
 app.setPath("userData", options.data);
@@ -41,11 +43,13 @@ async function probe(window: BrowserWindow): Promise<void> {
       bootstrap: typeof globalThis.perish,
     })`);
     if (value.status === "ready") {
-      process.stdout.write(`${JSON.stringify({
-        origin: identity.origin,
-        status: "ready",
-        version: identity.version,
-      })}\n`);
+      process.stdout.write(
+        `${JSON.stringify({
+          origin: identity.origin,
+          status: "ready",
+          version: identity.version,
+        })}\n`,
+      );
       app.quit();
       return;
     }
@@ -78,8 +82,11 @@ async function launch(): Promise<void> {
   }
 }
 
-app.whenReady().then(launch).catch((fault: Error) => {
-  process.stderr.write(`${fault.message}\n`);
-  app.exit(1);
-});
+app
+  .whenReady()
+  .then(launch)
+  .catch((fault: Error) => {
+    process.stderr.write(`${fault.message}\n`);
+    app.exit(1);
+  });
 app.on("window-all-closed", () => app.quit());

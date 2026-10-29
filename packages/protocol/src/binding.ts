@@ -3,7 +3,7 @@ import type { Digest } from "./json.js";
 
 export const gates = ["capsule", "renderer", "daemon", "web", "product"] as const;
 
-export type Gate = typeof gates[number];
+export type Gate = (typeof gates)[number];
 export type Mode = "update" | "recovery";
 
 export interface Handoff {
@@ -37,9 +37,7 @@ export type Event =
 
 export type Fault = "attempt" | "handoff" | "nonce" | "readiness" | "target";
 
-export type Transition =
-  | { changed: boolean; ok: true; state: Binding }
-  | { fault: Fault; ok: false; state: Binding };
+export type Transition = { changed: boolean; ok: true; state: Binding } | { fault: Fault; ok: false; state: Binding };
 
 export type Startup =
   | { mode: "initial" }
@@ -87,7 +85,7 @@ function begin(state: Binding, event: Extract<Event, { type: "begin" }>): Transi
 }
 
 function match(state: Binding, event: { nonce: string; target: Digest }): Fault | undefined {
-  if (!state.attempt || state.attempt.status !== "running") return "attempt";
+  if (state.attempt?.status !== "running") return "attempt";
   if (state.attempt.target !== event.target) return "target";
   if (state.attempt.nonce !== event.nonce) return "nonce";
   return undefined;
