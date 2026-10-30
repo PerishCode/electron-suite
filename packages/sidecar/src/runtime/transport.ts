@@ -1,4 +1,5 @@
 import { createConnection } from "node:net";
+import { decorate } from "./sessionwire.js";
 import { encode, type Request, type Response } from "./wire.js";
 
 const limit = 64 * 1024;
@@ -14,7 +15,7 @@ function decode(input: string, end: number): Response {
 }
 
 export function call(endpoint: string, request: Request, timeout: number): Promise<unknown> {
-  const payload = encode(request);
+  const payload = encode(decorate(endpoint, request));
   return new Promise((resolve, reject) => {
     const socket = createConnection(endpoint);
     let input = "";

@@ -285,7 +285,10 @@ export class Sidecar {
     const results = await Promise.all(
       pending.map(async ([identity, value]) => {
         try {
-          return await this.stop(identity, await value);
+          const entry = await value;
+          return await (this.observer?.run
+            ? this.observer.run(scope(entry), () => this.stop(identity, entry))
+            : this.stop(identity, entry));
         } catch (fault) {
           if (this.#entries.has(identity)) throw fault;
           return { status: "stopped", survivors: [] } as Stop;

@@ -6,6 +6,7 @@ export { Bindings } from "./binding.js";
 export { Client } from "./client.js";
 export type { Directory, Instance, NamespaceEntry, Phase } from "./control/directory.js";
 export { Peer } from "./control/peer.js";
+export type { SessionRecord, SessionScope } from "./control/session.js";
 export type { Attachment, Context, Expose, Identity } from "./control/types.js";
 export type {
   Lease,

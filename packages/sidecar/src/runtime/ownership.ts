@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 export interface OwnerRecord {
   schema: 1;
   directory?: boolean;
+  sessions?: boolean;
   scope: string;
   incarnation: string;
   pid: number;
@@ -20,6 +21,7 @@ export class Ownership {
   readonly incarnation = randomUUID();
   private closed = false;
   private directory = false;
+  private sessions = false;
   private constructor(
     private db: DatabaseSync,
     readonly previous: OwnerRecord | undefined,
@@ -69,6 +71,7 @@ export class Ownership {
       }
       const owner = new Ownership(db, previous, scope, fresh);
       owner.directory = previous?.directory === true;
+      owner.sessions = previous?.sessions === true;
       owner.save("active");
       db.exec("COMMIT");
       return owner;
@@ -112,6 +115,7 @@ export class Ownership {
       pid: process.pid,
       phase: "active",
       ...(this.directory ? { directory: true } : {}),
+      ...(this.sessions ? { sessions: true } : {}),
     };
   }
   readDirectory(): unknown {
@@ -122,16 +126,19 @@ export class Ownership {
     this.info;
     this.db.exec("BEGIN EXCLUSIVE");
     const before = this.directory;
+    const priorSessions = this.sessions;
     try {
       this.db.exec(
         "CREATE TABLE IF NOT EXISTS directory (id INTEGER PRIMARY KEY CHECK(id=1), record TEXT NOT NULL) STRICT",
       );
       this.db.prepare("INSERT OR REPLACE INTO directory(id,record) VALUES(1,?)").run(JSON.stringify(value));
       this.directory = true;
+      this.sessions = true;
       this.save("active");
       this.db.exec("COMMIT");
     } catch (fault) {
       this.directory = before;
+      this.sessions = priorSessions;
       this.db.exec("ROLLBACK");
       throw fault;
     }
@@ -171,7 +178,8 @@ export class Ownership {
       !Number.isSafeInteger(value.pid) ||
       value.pid < 1 ||
       !["active", "closed"].includes(value.phase) ||
-      (value.directory !== undefined && typeof value.directory !== "boolean")
+      (value.directory !== undefined && typeof value.directory !== "boolean") ||
+      (value.sessions !== undefined && typeof value.sessions !== "boolean")
     )
       throw new Error("ownership is invalid or unpublished; recovery required");
     return value;
@@ -181,6 +189,7 @@ export class Ownership {
     const record: OwnerRecord = {
       schema: 1,
       ...(this.directory ? { directory: true } : {}),
+      ...(this.sessions ? { sessions: true } : {}),
       scope: this.scope,
       incarnation: this.incarnation,
       pid: process.pid,

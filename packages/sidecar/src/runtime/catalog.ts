@@ -9,6 +9,7 @@ import {
   parse,
   slot,
 } from "../control/directory.js";
+import { type SessionRecord, sessionKey } from "../control/session.js";
 import type { Identity } from "../control/types.js";
 import { Ownership } from "./ownership.js";
 
@@ -20,24 +21,27 @@ export class Catalog {
   static open(owner: Ownership): Catalog {
     const prior = owner.readDirectory();
     if (prior === undefined && owner.previous?.directory) throw new Error("directory missing; recovery required");
-    const old = prior === undefined ? undefined : parse(prior, owner.previous ?? owner.info);
+    const old =
+      prior === undefined ? undefined : parse(prior, owner.previous ?? owner.info, owner.previous?.sessions === true);
     const state: Directory = {
       schema: 1,
       revision: (old?.revision ?? -1) + 1,
       manager: { incarnation: owner.incarnation, pid: owner.info.pid, phase: "active" },
       namespaces: old?.namespaces ?? [],
       instances: old?.instances ?? [],
+      sessions: old?.sessions ?? [],
     };
     owner.writeDirectory(state);
     return new Catalog(owner, state);
   }
   snapshot(scope?: Namespace): Directory {
     const info = this.owner.info;
-    const result = parse(this.state, info);
+    const result = parse(this.state, info, true);
     if (scope !== undefined) {
       namespace(scope);
       result.namespaces = result.namespaces.filter((entry) => entry.namespace === scope);
       result.instances = result.instances.filter((entry) => entry.namespace === scope);
+      result.sessions = result.sessions.filter((entry) => entry.namespace === scope);
     }
     return result;
   }
@@ -46,7 +50,7 @@ export class Catalog {
     const next = structuredClone(this.state);
     change(next);
     next.revision++;
-    const parsed = parse(next, this.owner.info);
+    const parsed = parse(next, this.owner.info, true);
     this.owner.writeDirectory(parsed);
     this.state = parsed;
   }
@@ -107,7 +111,22 @@ export class Catalog {
       change: (scope, id, phase, pid) => this.change(scope, id, phase, pid),
     };
   }
+  session(record: Omit<SessionRecord, "manager">): void {
+    this.update((next) => {
+      if (!next.namespaces.some((entry) => entry.namespace === record.namespace))
+        next.namespaces.push({ namespace: record.namespace, manager: next.manager.incarnation, phase: "unopened" });
+      const index = next.sessions.findIndex((entry) => sessionKey(entry) === sessionKey(record));
+      const prior = next.sessions[index];
+      if (prior && record.phase !== "active" && prior.incarnation !== record.incarnation)
+        throw new Error("session incarnation is fenced");
+      const value = { ...record, manager: next.manager.incarnation };
+      if (index < 0) next.sessions.push(value);
+      else next.sessions[index] = value;
+    });
+  }
   drained(): void {
+    if (this.state.sessions.some((entry) => !["completed", "failed"].includes(entry.phase)))
+      throw new Error("directory has incomplete sessions");
     if (this.state.instances.some((entry) => entry.phase !== "retired"))
       throw new Error("directory has unretired instances");
     if (this.state.namespaces.some((entry) => !["closed", "unopened"].includes(entry.phase)))
@@ -119,14 +138,19 @@ export class Catalog {
 export async function readDirectory(root: string, scope?: Namespace): Promise<Directory> {
   const snapshot = await Ownership.inspect(join(root, "manager.sqlite"));
   if (!snapshot.owner.directory) throw new Error("directory unavailable; recovery required");
-  const result = parse(snapshot.directory, {
-    ...snapshot.owner,
-    phase: snapshot.owner.phase === "active" ? "interrupted" : "closed",
-  });
+  const result = parse(
+    snapshot.directory,
+    {
+      ...snapshot.owner,
+      phase: snapshot.owner.phase === "active" ? "interrupted" : "closed",
+    },
+    snapshot.owner.sessions === true,
+  );
   if (scope !== undefined) {
     namespace(scope);
     result.namespaces = result.namespaces.filter((entry) => entry.namespace === scope);
     result.instances = result.instances.filter((entry) => entry.namespace === scope);
+    result.sessions = result.sessions.filter((entry) => entry.namespace === scope);
   }
   return result;
 }

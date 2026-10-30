@@ -6,11 +6,14 @@ import { type Capability, type Namespace, namespace, type Permit } from "@perish
 import { Bindings } from "../binding.js";
 import type { Directory } from "../control/directory.js";
 import { Hosted } from "../control/hosted.js";
+import type { SessionScope } from "../control/session.js";
 import type { Attachment, Expose } from "../control/types.js";
 import { Sidecar } from "../host.js";
 import { Catalog } from "./catalog.js";
 import { Ownership } from "./ownership.js";
 import { Resources } from "./resource.js";
+import { Sessions } from "./sessions.js";
+import { ambient, lifecycleScope } from "./sessionwire.js";
 import { decode, encode, type Request, type Response } from "./wire.js";
 
 export interface Service {
@@ -19,6 +22,7 @@ export interface Service {
   endpoint: string;
   expose<M>(options: Expose<M>): Promise<Attachment>;
   directory(scope?: Namespace): Directory;
+  session<T>(scope: SessionScope, operation: () => Promise<T>): Promise<T>;
 }
 
 const limit = 64 * 1024;
@@ -31,6 +35,8 @@ function equal(left: string, right: string): boolean {
 
 interface Runtime {
   catalog: Catalog;
+  sessions: Sessions;
+  endpoint: string;
   bindings: Bindings;
   capabilities: Map<string, Capability>;
   host: Sidecar;
@@ -64,8 +70,15 @@ async function dispatch(runtime: Runtime, authority: string, request: Request) {
   if (runtime.closing && ["start", "attach", "issue", "grant", "forward", "transit"].includes(request.type)) {
     throw new Error("sidecar is closing");
   }
-  if (request.type === "invoke")
-    return runtime.hosted.invoke(request.descriptor, request.operation, request.method, request.input);
+  if (request.type === "session") throw new Error("session requires its owner connection");
+  if (request.type === "invoke") {
+    const invoke = () => runtime.hosted.invoke(request.descriptor, request.operation, request.method, request.input);
+    if (request.operation === "call")
+      return request.session
+        ? runtime.sessions.run(request.descriptor, invoke, request.session)
+        : ambient.run({ endpoint: runtime.endpoint, business: true }, invoke);
+    return invoke();
+  }
   if (request.type === "connect") {
     if (!equal(request.authority, authority)) throw new Error("invalid authority");
     return runtime.hosted.connect(request.identity);
@@ -105,7 +118,7 @@ function accept(server: Server, runtime: Runtime, authority: string): void {
   server.on("connection", (socket) => {
     let input = "";
 
-    socket.on("data", (chunk: Buffer) => {
+    const read = (chunk: Buffer) => {
       input += chunk.toString("utf8");
 
       if (Buffer.byteLength(input) > limit) {
@@ -116,13 +129,43 @@ function accept(server: Server, runtime: Runtime, authority: string): void {
       const end = input.indexOf("\n");
       if (end < 0) return;
       socket.pause();
+      socket.off("data", read);
 
       Promise.resolve(input.slice(0, end))
         .then(decode)
-        .then((request) => dispatch(runtime, authority, request))
-        .then((value) => reply(socket, { ok: true, value }))
+        .then(async (request) => {
+          if (request.type === "session") {
+            if (runtime.closing || !equal(request.authority, authority))
+              throw new Error("invalid authority or closing manager");
+            await runtime.sessions.accept(socket, request);
+            return undefined;
+          }
+          if ("authority" in request && !equal(request.authority, authority)) throw new Error("invalid authority");
+          const scope = lifecycleScope(request);
+          const operation =
+            request.type === "invoke" && request.operation === "stop"
+              ? runtime.hosted.stopping(request.descriptor)
+              : () => dispatch(runtime, authority, request);
+          const cleanup =
+            request.type === "release" ||
+            request.type === "retire" ||
+            (request.type === "invoke" && request.operation === "stop");
+          const controller = new AbortController();
+          socket.once("close", () => controller.abort());
+          return {
+            value: await (scope
+              ? (cleanup
+                  ? runtime.sessions.cleanup.bind(runtime.sessions)
+                  : runtime.sessions.run.bind(runtime.sessions))(scope, operation, request.session, controller.signal)
+              : dispatch(runtime, authority, request)),
+          };
+        })
+        .then((result) => {
+          if (result) reply(socket, { ok: true, value: result.value });
+        })
         .catch((error: Error) => reply(socket, { error: error.message, ok: false }));
-    });
+    };
+    socket.on("data", read);
   });
 }
 
@@ -151,20 +194,25 @@ export async function serve(
   root = resolve(root);
   const ownership = await Ownership.claim(join(root, "manager.sqlite"));
   let catalog: Catalog;
+  let sessions: Sessions;
   try {
     host.observe({
       claim: (...args) => catalog.observer().claim(...args),
       change: (...args) => catalog.observer().change(...args),
+      run: (scope, operation) => sessions.run(scope, operation),
     });
     catalog = Catalog.open(ownership);
+    sessions = new Sessions(endpoint, catalog);
   } catch (fault) {
     ownership.abandon();
     throw fault;
   }
   const hosts = new Map<Namespace, Promise<Resources>>();
   const acquired = new Map<Namespace, Resources>();
-  const hosted = new Hosted(async (name) => runtime.open(name), catalog);
+  const hosted = new Hosted(async (name) => runtime.open(name), catalog, sessions);
   const runtime: Runtime = {
+    sessions,
+    endpoint,
     catalog,
     hosted,
     closing: false,
@@ -206,24 +254,36 @@ export async function serve(
 
   let shutdown: Promise<void> | undefined;
   const stop = async () => {
+    sessions.outside();
     runtime.closing = true;
-    await hosted.close();
-    const results = await host.close();
-    if (results.some((result) => result.status !== "stopped")) throw new Error("sidecar processes remain alive");
-    if (server.listening) await close(server);
-    await Promise.all(
-      [...acquired.entries()].map(async ([name, resources]) => {
-        await resources.close();
-        catalog.namespace(name, "closed", resources.incarnation);
-      }),
-    );
-    catalog.drained();
-    ownership.close();
+    hosted.quiesce();
+    return sessions.shutdown(async () => {
+      await hosted.close();
+      const results = await host.close();
+      if (results.some((result) => result.status !== "stopped")) throw new Error("sidecar processes remain alive");
+      if (server.listening) await close(server);
+      await Promise.all(
+        [...acquired.entries()].map(async ([name, resources]) => {
+          await resources.close();
+          catalog.namespace(name, "closed", resources.incarnation);
+        }),
+      );
+      catalog.drained();
+      ownership.close();
+    });
   };
   return {
     authority,
     endpoint,
-    expose: (options) => hosted.expose(options),
+    expose: (options) => {
+      try {
+        hosted.available(options.identity);
+      } catch (fault) {
+        return Promise.reject(fault);
+      }
+      return sessions.run(options.identity, () => hosted.expose(options));
+    },
+    session: (scope, operation) => sessions.local(scope, operation),
     directory: (scope) => catalog.snapshot(scope),
     close: () => {
       shutdown ??= stop().catch((fault) => {

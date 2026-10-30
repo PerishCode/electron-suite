@@ -164,11 +164,16 @@ it("does not let shutdown retire a service while initialization is still running
   const { server, options } = await fixture();
   const gate = deferred();
   let drained = false;
-  options.lifecycle.initialize = () => gate.promise;
+  const entered = deferred();
+  options.lifecycle.initialize = async () => {
+    entered.done();
+    await gate.promise;
+  };
   options.lifecycle.stop = async () => {
     drained = true;
   };
   const opening = server.expose<Methods>(options);
+  await entered.promise;
   const rejected = expect(opening).rejects.toThrow("stopped during initialization");
   const stopping = server.close();
   expect(drained).toBe(false);

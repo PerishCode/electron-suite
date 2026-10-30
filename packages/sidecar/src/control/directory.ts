@@ -1,4 +1,5 @@
 import { type Namespace, namespace } from "@perishcode/protocol";
+import { type SessionRecord, sessionKey, sessionScope } from "./session.js";
 import { type Identity, identity } from "./types.js";
 
 export type Phase = "initializing" | "ready" | "stopping" | "failed" | "retired";
@@ -21,8 +22,10 @@ export interface Directory {
   manager: { incarnation: string; pid: number; phase: "active" | "closed" | "interrupted" };
   namespaces: NamespaceEntry[];
   instances: Instance[];
+  sessions: SessionRecord[];
 }
 export interface Observer {
+  run?<T>(scope: Identity, operation: () => Promise<T>): Promise<T>;
   claim(scope: Identity, incarnation: string): void;
   change(scope: Identity, incarnation: string, phase: Phase, pid?: number): void;
 }
@@ -31,7 +34,7 @@ const uuid = (value: unknown): string => {
   if (typeof value !== "string" || !/^[0-9a-f-]{36}$/.test(value)) throw new Error("invalid directory incarnation");
   return value;
 };
-export function parse(input: unknown, owner: Directory["manager"]): Directory {
+export function parse(input: unknown, owner: Directory["manager"], requiredSessions = false): Directory {
   if (!input || typeof input !== "object") throw new Error("directory is missing; recovery required");
   const data = input as Directory;
   if (
@@ -44,6 +47,30 @@ export function parse(input: unknown, owner: Directory["manager"]): Directory {
     !Array.isArray(data.instances)
   )
     throw new Error("invalid directory; recovery required");
+  if (requiredSessions && !Array.isArray(data.sessions))
+    throw new Error("session directory missing; recovery required");
+  const sessions = (data.sessions ?? []).map((entry): SessionRecord => {
+    const scope = sessionScope(entry);
+    if (
+      !["automatic", "local", "remote"].includes(entry.kind) ||
+      !["active", "closing", "completed", "failed", "interrupted"].includes(entry.phase) ||
+      (entry.reason !== undefined && !["callback", "operation", "disconnect"].includes(entry.reason))
+    )
+      throw new Error("invalid session record");
+    if (!["completed", "failed"].includes(entry.phase) && entry.manager !== owner.incarnation)
+      throw new Error("session owner mismatch");
+    return {
+      ...scope,
+      incarnation: uuid(entry.incarnation),
+      manager: uuid(entry.manager),
+      kind: entry.kind,
+      phase: entry.phase,
+      ...(entry.reason ? { reason: entry.reason } : {}),
+    };
+  });
+  if (new Set(sessions.map(sessionKey)).size !== sessions.length) throw new Error("duplicate session scope");
+  if (owner.phase === "closed" && sessions.some((entry) => !["completed", "failed"].includes(entry.phase)))
+    throw new Error("closed manager has incomplete sessions");
   const namespaces = data.namespaces.map((entry): NamespaceEntry => {
     if (!["unopened", "opening", "ready", "failed", "closed"].includes(entry.phase))
       throw new Error("invalid namespace phase");
@@ -100,5 +127,6 @@ export function parse(input: unknown, owner: Directory["manager"]): Directory {
     manager: { incarnation: owner.incarnation, pid: owner.pid, phase: owner.phase },
     namespaces,
     instances,
+    sessions,
   };
 }
