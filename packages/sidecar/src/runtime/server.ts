@@ -162,6 +162,7 @@ export async function serve(
     throw fault;
   }
   const hosts = new Map<Namespace, Promise<Resources>>();
+  const acquired = new Map<Namespace, Resources>();
   const hosted = new Hosted(async (name) => runtime.open(name), catalog);
   const runtime: Runtime = {
     catalog,
@@ -175,16 +176,16 @@ export async function serve(
       let pending = hosts.get(name);
       if (!pending) {
         catalog.namespace(name, "opening");
-        pending = Resources.open({ namespace: name, root }).then(
-          (resources) => {
+        pending = Promise.resolve(acquired.get(name) ?? Resources.open({ namespace: name, root }))
+          .then((resources) => {
+            acquired.set(name, resources);
             catalog.namespace(name, "ready", resources.incarnation);
             return resources;
-          },
-          (fault) => {
-            catalog.namespace(name, "failed");
+          })
+          .catch((fault) => {
+            catalog.namespace(name, "failed", acquired.get(name)?.incarnation);
             throw fault;
-          },
-        );
+          });
         hosts.set(name, pending);
         pending.catch(() => hosts.delete(name));
       }
@@ -211,8 +212,7 @@ export async function serve(
     if (results.some((result) => result.status !== "stopped")) throw new Error("sidecar processes remain alive");
     if (server.listening) await close(server);
     await Promise.all(
-      [...hosts.entries()].map(async ([name, pending]) => {
-        const resources = await pending;
+      [...acquired.entries()].map(async ([name, resources]) => {
         await resources.close();
         catalog.namespace(name, "closed", resources.incarnation);
       }),

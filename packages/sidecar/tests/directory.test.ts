@@ -6,7 +6,9 @@ import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
 import { channel, digest, namespace } from "@perishcode/protocol";
 import { expect, it, vi } from "vitest";
-import { Client, type Directory, readDirectory, type Service, type Spec, serve } from "@";
+import { Client, type Directory, Resources, readDirectory, type Service, type Spec, serve } from "@";
+
+import { Catalog } from "@/runtime/catalog.js";
 
 const scope = { namespace: namespace("main"), channel: channel("stable"), service: "probe", generation: digest("one") };
 const spec = (generation = scope.generation): Spec => ({
@@ -259,4 +261,27 @@ it("reads last committed hosted and process identities after SIGKILL without rew
     }
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("retains an acquired namespace handle when ready publication fails", async () => {
+  await fixture(async (server, root) => {
+    const original = Catalog.prototype.namespace;
+    let fail = true;
+    const spy = vi.spyOn(Catalog.prototype, "namespace").mockImplementation(function (this: Catalog, ...args) {
+      if (args[1] === "ready" && fail) {
+        fail = false;
+        throw new Error("injected directory publication failure");
+      }
+      return original.apply(this, args);
+    });
+    try {
+      await expect(server.expose(options)).rejects.toThrow("directory publication failure");
+    } finally {
+      spy.mockRestore();
+    }
+    await server.close();
+    expect((await readDirectory(root)).namespaces[0]?.phase).toBe("closed");
+    const resources = await Resources.open({ root, namespace: scope.namespace });
+    await resources.close();
+  });
 });
