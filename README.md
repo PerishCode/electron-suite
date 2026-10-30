@@ -152,4 +152,4 @@ hosted 服务在 initialize 中接收只读身份及 data/logs/resource/runtime 
 
 新增职责或 pattern 必须经授权，并同步规则回归与必要索引；已有授权 pattern 范围内可正常迭代。AGENTS 说明这一演进流程，不将结构永久冻结。specs/skills/assets 等目录没有隐式特权。
 
-exclude 不能隐藏未知目录或已授权源码目录。仅仓库根 node_modules/.artifacts/.state 和实际 module 根 node_modules/dist/coverage 可作为不展开的生成/依赖/运行数据边界；这些内容不计入源码合规证明。JSON 的 pruned 字段列出边界。目录规则拒绝符号链接（包括排除边界上的链接），不遍历链接目标。Git 元数据仅在仓库根特殊处理。
+exclude 不能隐藏未知目录或已授权源码目录。仅仓库根 node_modules/.artifacts/.state 和实际 module 根 node_modules/dist/coverage 可作为不展开的生成/依赖/运行数据边界；这些内容不计入源码合规证明。JSON 的 pruned 字段列出边界，directories 字段记录生效的白名单。目录规则拒绝符号链接（包括排除边界上的链接），不遍历链接目标。Git 元数据仅在仓库根特殊处理。

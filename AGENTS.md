@@ -27,6 +27,7 @@
 | --------------------------------------------------- | --------------------------------------------------------------------- |
 | package.json / pnpm-workspace.yaml / pnpm-lock.yaml | standard dispatch, workspace membership and fixed dependency closure  |
 | pesuite.yaml / biome.json                           | guard/runtime declarations and formatter/linter configuration         |
+| packages/guard/src/rules/tree.ts / scan/files.ts    | directory allowlists and inspected/pruned boundaries                  |
 | packages/guard/src/config/defaults.ts               | policy defaults and rule index                                        |
 | packages/cli/src/index.ts / lifecycle.ts            | sole public bin routing; guard/release/pack capabilities              |
 | packages/sidecar/src/control / runtime              | hosted methods, resource ownership and management transport           |
