@@ -4,9 +4,11 @@ import { createServer, type Server, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { type Capability, type Namespace, namespace, type Permit } from "@perishcode/protocol";
 import { Bindings } from "../binding.js";
+import type { Directory } from "../control/directory.js";
 import { Hosted } from "../control/hosted.js";
 import type { Attachment, Expose } from "../control/types.js";
 import { Sidecar } from "../host.js";
+import { Catalog } from "./catalog.js";
 import { Ownership } from "./ownership.js";
 import { Resources } from "./resource.js";
 import { decode, encode, type Request, type Response } from "./wire.js";
@@ -16,6 +18,7 @@ export interface Service {
   close(): Promise<void>;
   endpoint: string;
   expose<M>(options: Expose<M>): Promise<Attachment>;
+  directory(scope?: Namespace): Directory;
 }
 
 const limit = 64 * 1024;
@@ -27,6 +30,7 @@ function equal(left: string, right: string): boolean {
 }
 
 interface Runtime {
+  catalog: Catalog;
   bindings: Bindings;
   capabilities: Map<string, Capability>;
   host: Sidecar;
@@ -74,6 +78,7 @@ async function dispatch(runtime: Runtime, authority: string, request: Request) {
   if (request.type === "attach") return runtime.host.attach(request.lease);
   if (request.type === "release") return runtime.host.release(request.lease);
   if (!equal(request.authority, authority)) throw new Error("invalid authority");
+  if (request.type === "directory") return runtime.catalog.snapshot(request.namespace);
   if (request.type === "inspect") return runtime.host.inspect();
   if (request.type === "binding") return runtime.bindings.read(request.namespace, request.channel);
   if (request.type === "transit") {
@@ -145,9 +150,22 @@ export async function serve(
 ): Promise<Service> {
   root = resolve(root);
   const ownership = await Ownership.claim(join(root, "manager.sqlite"));
+  let catalog: Catalog;
+  try {
+    host.observe({
+      claim: (...args) => catalog.observer().claim(...args),
+      change: (...args) => catalog.observer().change(...args),
+    });
+    catalog = Catalog.open(ownership);
+  } catch (fault) {
+    ownership.abandon();
+    throw fault;
+  }
   const hosts = new Map<Namespace, Promise<Resources>>();
-  const hosted = new Hosted(async (name) => runtime.open(name));
+  const acquired = new Map<Namespace, Resources>();
+  const hosted = new Hosted(async (name) => runtime.open(name), catalog);
   const runtime: Runtime = {
+    catalog,
     hosted,
     closing: false,
     bindings: new Bindings(root),
@@ -157,7 +175,17 @@ export async function serve(
       const name = namespace(value);
       let pending = hosts.get(name);
       if (!pending) {
-        pending = Resources.open({ namespace: name, root });
+        catalog.namespace(name, "opening");
+        pending = Promise.resolve(acquired.get(name) ?? Resources.open({ namespace: name, root }))
+          .then((resources) => {
+            acquired.set(name, resources);
+            catalog.namespace(name, "ready", resources.incarnation);
+            return resources;
+          })
+          .catch((fault) => {
+            catalog.namespace(name, "failed", acquired.get(name)?.incarnation);
+            throw fault;
+          });
         hosts.set(name, pending);
         pending.catch(() => hosts.delete(name));
       }
@@ -171,6 +199,7 @@ export async function serve(
     if (process.platform !== "win32") await chmod(endpoint, 0o600);
   } catch (fault) {
     if (server.listening) await close(server);
+    catalog.drained();
     ownership.close();
     throw fault;
   }
@@ -182,13 +211,20 @@ export async function serve(
     const results = await host.close();
     if (results.some((result) => result.status !== "stopped")) throw new Error("sidecar processes remain alive");
     if (server.listening) await close(server);
-    await Promise.all([...hosts.values()].map(async (pending) => (await pending).close()));
+    await Promise.all(
+      [...acquired.entries()].map(async ([name, resources]) => {
+        await resources.close();
+        catalog.namespace(name, "closed", resources.incarnation);
+      }),
+    );
+    catalog.drained();
     ownership.close();
   };
   return {
     authority,
     endpoint,
     expose: (options) => hosted.expose(options),
+    directory: (scope) => catalog.snapshot(scope),
     close: () => {
       shutdown ??= stop().catch((fault) => {
         shutdown = undefined;

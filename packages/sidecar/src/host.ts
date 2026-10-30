@@ -11,7 +11,9 @@ import {
   valid,
 } from "@perishcode/protocol";
 
-import { type Launch, launch, type Running, type Stop } from "./runner.js";
+import type { Observer } from "./control/directory.js";
+import type { Identity } from "./control/types.js";
+import { type Launch, LaunchFault, launch, type Running, type Stop } from "./runner.js";
 
 export interface Spec extends Launch {
   channel: Channel;
@@ -37,7 +39,7 @@ export interface Snapshot {
   namespace: Namespace;
   pid: number;
   slot: string;
-  state: "running" | "exited";
+  state: "running" | "exited" | "stopping" | "failed";
 }
 
 export interface Release {
@@ -46,6 +48,11 @@ export interface Release {
 }
 
 interface Entry {
+  incarnation: string;
+  retired?: boolean;
+  state: "running" | "stopping" | "failed";
+  stopping?: Promise<Stop>;
+  fault?: unknown;
   attachments: Map<string, string>;
   channel: Channel;
   fingerprint: Digest;
@@ -94,7 +101,20 @@ function lease(entry: Entry): Lease {
   };
 }
 
+const scope = (value: Pick<Spec, "namespace" | "channel" | "generation" | "slot">): Identity => ({
+  namespace: value.namespace,
+  channel: value.channel,
+  generation: value.generation,
+  service: value.slot,
+});
+
 export class Sidecar {
+  constructor(private observer?: Observer) {}
+  /** @internal Bind an empty host to its one persistent manager before launching. */
+  observe(observer: Observer): void {
+    if (this.observer || this.#entries.size || this.#released.size) throw new Error("host is already in use");
+    this.observer = observer;
+  }
   readonly #entries = new Map<string, Promise<Entry>>();
   readonly #released = new Map<string, Retired>();
 
@@ -103,17 +123,87 @@ export class Sidecar {
   }
 
   async #create(spec: Spec, mark: Digest): Promise<Entry> {
-    const running = await launch(spec);
-
-    return {
+    const incarnation = randomUUID();
+    this.observer?.claim(scope(spec), incarnation);
+    let running: Running | undefined;
+    const entry = (value: Running, state: Entry["state"], fault?: unknown): Entry => ({
       attachments: new Map(),
       channel: spec.channel,
       fingerprint: mark,
       generation: spec.generation,
       namespace: spec.namespace,
-      running,
+      running: value,
       slot: spec.slot,
-    };
+      incarnation,
+      state,
+      fault,
+    });
+    try {
+      running = await launch(spec);
+      this.observer?.change(scope(spec), incarnation, "ready", running.pid);
+      return entry(running, "running");
+    } catch (fault) {
+      let stopped: Stop;
+      if (fault instanceof LaunchFault) {
+        running = fault.running;
+        stopped = fault.stopped;
+      } else if (running) {
+        try {
+          stopped = await running.stop();
+        } catch {
+          stopped = { status: "partial", survivors: [running.pid] };
+        }
+      } else {
+        this.observer?.change(scope(spec), incarnation, "failed");
+        throw fault;
+      }
+      let outcome = fault;
+      try {
+        this.observer?.change(
+          scope(spec),
+          incarnation,
+          stopped.status === "stopped" ? "retired" : "failed",
+          running?.pid,
+        );
+      } catch (metadata) {
+        outcome = new AggregateError([fault, metadata], "startup and directory publication failed");
+      }
+      if (stopped.status !== "stopped" && running) return entry(running, "failed", outcome);
+      throw outcome;
+    }
+  }
+
+  private stop(identity: string, entry: Entry): Promise<Stop> {
+    if (entry.retired) return Promise.resolve({ status: "stopped", survivors: [] });
+    if (entry.stopping) return entry.stopping;
+    entry.state = "stopping";
+    const pending = (async () => {
+      this.observer?.change(scope(entry), entry.incarnation, "stopping", entry.running.pid);
+      try {
+        const result = await entry.running.stop();
+        this.observer?.change(
+          scope(entry),
+          entry.incarnation,
+          result.status === "stopped" ? "retired" : "failed",
+          entry.running.pid,
+        );
+        if (result.status === "stopped") {
+          entry.retired = true;
+          for (const [attachment, capability] of entry.attachments)
+            this.#released.set(attachment, { capability, result });
+          this.#entries.delete(identity);
+        } else entry.state = "failed";
+        return result;
+      } catch (fault) {
+        entry.state = "failed";
+        this.observer?.change(scope(entry), entry.incarnation, "failed", entry.running.pid);
+        throw fault;
+      }
+    })();
+    entry.stopping = pending.finally(() => {
+      entry.stopping = undefined;
+    });
+    return entry.stopping;
   }
 
   async start(spec: Spec): Promise<Lease> {
@@ -134,6 +224,7 @@ export class Sidecar {
 
     const entry = await pending;
     if (entry.fingerprint !== mark) throw new Error("generation config mismatch");
+    if (entry.state !== "running") throw entry.fault ?? new Error("generation is not accepting attachments");
     if (!entry.running.active()) throw new Error("generation process exited");
     return lease(entry);
   }
@@ -147,6 +238,7 @@ export class Sidecar {
       throw new Error("invalid capability");
     }
 
+    if (entry.state !== "running") throw entry.fault ?? new Error("generation is not accepting attachments");
     if (!entry.running.active()) throw new Error("generation process exited");
     return lease(entry);
   }
@@ -164,23 +256,14 @@ export class Sidecar {
       throw new Error("invalid capability");
     }
 
-    if (!entry.attachments.delete(value.attachment)) throw new Error("invalid attachment");
-
-    if (entry.attachments.size > 0) {
+    if (entry.attachments.size > 1) {
+      entry.attachments.delete(value.attachment);
       const result: Release = { status: "retained", survivors: [] };
       this.#released.set(value.attachment, { capability: value.capability, result });
       return result;
     }
 
-    const result = await entry.running.stop();
-    const release: Release = result;
-    this.#released.set(value.attachment, { capability: value.capability, result: release });
-
-    if (result.status === "stopped") {
-      this.#entries.delete(identity);
-    }
-
-    return release;
+    return this.stop(identity, entry);
   }
 
   async inspect(): Promise<Snapshot[]> {
@@ -193,19 +276,22 @@ export class Sidecar {
       namespace: entry.namespace,
       pid: entry.running.pid,
       slot: entry.slot,
-      state: entry.running.active() ? "running" : "exited",
+      state: entry.state === "running" ? (entry.running.active() ? "running" : "exited") : entry.state,
     }));
   }
 
   async close(): Promise<Stop[]> {
-    const entries = await Promise.all(this.#entries.values());
-    const results = await Promise.all(entries.map((entry) => entry.running.stop()));
-
-    for (const [identity, pending] of this.#entries) {
-      const entry = await pending;
-      if (!entry.running.active()) this.#entries.delete(identity);
-    }
-
+    const pending = [...this.#entries.entries()];
+    const results = await Promise.all(
+      pending.map(async ([identity, value]) => {
+        try {
+          return await this.stop(identity, await value);
+        } catch (fault) {
+          if (this.#entries.has(identity)) throw fault;
+          return { status: "stopped", survivors: [] } as Stop;
+        }
+      }),
+    );
     return results;
   }
 }

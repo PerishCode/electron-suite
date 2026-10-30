@@ -9,6 +9,7 @@ import type {
   Request as ResourceRequest,
 } from "@perishcode/protocol";
 import type { Change, Journal } from "./binding.js";
+import type { Directory } from "./control/directory.js";
 import { Peer } from "./control/peer.js";
 import type { Identity } from "./control/types.js";
 import type { Lease, Release, Snapshot, Spec } from "./host.js";
@@ -48,6 +49,14 @@ export class Client {
 
   async release(lease: Lease): Promise<Release> {
     return (await call(this.endpoint, { lease, type: "release" }, this.timeout)) as Release;
+  }
+
+  async directory(namespace: Namespace): Promise<Directory> {
+    return (await call(
+      this.endpoint,
+      { authority: this.authority, namespace, type: "directory" },
+      this.timeout,
+    )) as Directory;
   }
 
   async inspect(): Promise<Snapshot[]> {

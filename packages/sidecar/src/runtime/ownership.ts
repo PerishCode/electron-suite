@@ -3,8 +3,9 @@ import { lstat, mkdir, open, realpath } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-interface Record {
+export interface OwnerRecord {
   schema: 1;
+  directory?: boolean;
   scope: string;
   incarnation: string;
   pid: number;
@@ -18,8 +19,10 @@ export class Ownership {
   readonly fresh: boolean;
   readonly incarnation = randomUUID();
   private closed = false;
+  private directory = false;
   private constructor(
     private db: DatabaseSync,
+    readonly previous: OwnerRecord | undefined,
     private scope: string,
     fresh: boolean,
   ) {
@@ -58,20 +61,14 @@ export class Ownership {
       if (fresh) db.exec("CREATE TABLE authority (id INTEGER PRIMARY KEY CHECK(id=1), record TEXT NOT NULL) STRICT;");
       const row = db.prepare("SELECT record FROM authority WHERE id=1").get();
       if (!row && !fresh) throw new Error("ownership is unpublished; recovery required");
+      let previous: OwnerRecord | undefined;
       if (row) {
-        const value = JSON.parse(String(row.record)) as Record;
-        if (
-          value.schema !== 1 ||
-          value.scope !== scope ||
-          !/^[0-9a-f-]{36}$/.test(value.incarnation) ||
-          !Number.isSafeInteger(value.pid) ||
-          value.pid < 1 ||
-          !["active", "closed"].includes(value.phase)
-        )
-          throw new Error("ownership is invalid; recovery required");
+        const value = Ownership.parse(row.record, scope);
         if (value.phase === "active") throw new Error("ownership was interrupted; recovery required");
+        previous = value;
       }
-      const owner = new Ownership(db, scope, fresh);
+      const owner = new Ownership(db, previous, scope, fresh);
+      owner.directory = previous?.directory === true;
       owner.save("active");
       db.exec("COMMIT");
       return owner;
@@ -106,8 +103,89 @@ export class Ownership {
     this.closed = true;
   }
 
-  private save(phase: Record["phase"]): void {
-    const record: Record = { schema: 1, scope: this.scope, incarnation: this.incarnation, pid: process.pid, phase };
+  get info(): OwnerRecord {
+    if (this.closed) throw new Error("ownership is closed");
+    return {
+      schema: 1,
+      scope: this.scope,
+      incarnation: this.incarnation,
+      pid: process.pid,
+      phase: "active",
+      ...(this.directory ? { directory: true } : {}),
+    };
+  }
+  readDirectory(): unknown {
+    this.info;
+    return Ownership.data(this.db);
+  }
+  writeDirectory(value: unknown): void {
+    this.info;
+    this.db.exec("BEGIN EXCLUSIVE");
+    const before = this.directory;
+    try {
+      this.db.exec(
+        "CREATE TABLE IF NOT EXISTS directory (id INTEGER PRIMARY KEY CHECK(id=1), record TEXT NOT NULL) STRICT",
+      );
+      this.db.prepare("INSERT OR REPLACE INTO directory(id,record) VALUES(1,?)").run(JSON.stringify(value));
+      this.directory = true;
+      this.save("active");
+      this.db.exec("COMMIT");
+    } catch (fault) {
+      this.directory = before;
+      this.db.exec("ROLLBACK");
+      throw fault;
+    }
+  }
+  static async inspect(path: string): Promise<{ owner: OwnerRecord; directory: unknown }> {
+    const scope = join(await realpath(dirname(path)), basename(path));
+    if (!(await lstat(scope)).isFile()) throw new Error("ownership must be a regular file");
+    const db = new DatabaseSync(scope, { readOnly: true, timeout: 0 });
+    try {
+      db.exec("BEGIN");
+      const row = db.prepare("SELECT record FROM authority WHERE id=1").get();
+      const owner = Ownership.parse(row?.record, scope);
+      const directory = Ownership.data(db);
+      db.exec("COMMIT");
+      return { owner, directory };
+    } catch (fault) {
+      if ([5, 6].includes((fault as { errcode?: number }).errcode ?? 0))
+        throw new Error("directory is held; query the active manager", { cause: fault });
+      throw new Error("directory is invalid or unpublished; recovery required", { cause: fault });
+    } finally {
+      db.close();
+    }
+  }
+  private static data(db: DatabaseSync): unknown {
+    if (!db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name='directory'").get()) return undefined;
+    const row = db.prepare("SELECT record FROM directory WHERE id=1").get();
+    if (!row) throw new Error("directory is unpublished; recovery required");
+    return JSON.parse(String(row.record));
+  }
+  private static parse(raw: unknown, scope: string): OwnerRecord {
+    const value = JSON.parse(String(raw)) as OwnerRecord;
+    if (
+      value?.schema !== 1 ||
+      value.scope !== scope ||
+      typeof value.incarnation !== "string" ||
+      !/^[0-9a-f-]{36}$/.test(value.incarnation) ||
+      !Number.isSafeInteger(value.pid) ||
+      value.pid < 1 ||
+      !["active", "closed"].includes(value.phase) ||
+      (value.directory !== undefined && typeof value.directory !== "boolean")
+    )
+      throw new Error("ownership is invalid or unpublished; recovery required");
+    return value;
+  }
+
+  private save(phase: OwnerRecord["phase"]): void {
+    const record: OwnerRecord = {
+      schema: 1,
+      ...(this.directory ? { directory: true } : {}),
+      scope: this.scope,
+      incarnation: this.incarnation,
+      pid: process.pid,
+      phase,
+    };
     this.db.prepare("INSERT OR REPLACE INTO authority(id,record) VALUES(1,?)").run(JSON.stringify(record));
   }
 }

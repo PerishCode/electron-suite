@@ -124,12 +124,14 @@ export class Resources {
   #closing = false;
   #closed = false;
   #shutdown?: Promise<void>;
+  readonly incarnation: string;
 
   private constructor(
     base: string,
     state: Registry,
     private ownership: Ownership,
   ) {
+    this.incarnation = ownership.incarnation;
     this.#base = base;
     this.#file = join(base, "registry.json");
     this.#state = state;
