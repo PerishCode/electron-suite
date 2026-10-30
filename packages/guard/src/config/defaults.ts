@@ -2,6 +2,10 @@ import type { Policy } from "../types.js";
 
 export const defaults: Policy = {
   workspace: true,
+  directories: {
+    repository: ["apps", "packages", "apps/*", "packages/*", "node_modules", ".artifacts", ".state"],
+    module: ["src", "tests", "dist", "coverage", "node_modules"],
+  },
   exclude: ["**/.git/**", "**/node_modules/**", "**/dist/**", "**/coverage/**", "**/.artifacts/**", "**/.state/**"],
   modules: ["apps/*", "packages/*"],
   components: ["packages/components"],
@@ -19,6 +23,7 @@ export const defaults: Policy = {
     "pre-commit",
   ],
   rules: {
+    "directory.allowed": { enabled: true },
     "directory.scripts": { enabled: true },
     "package.scripts": { enabled: true },
     "directory.name": { enabled: true },

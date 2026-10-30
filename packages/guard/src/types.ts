@@ -24,6 +24,7 @@ export interface Exception {
 
 export interface Policy {
   workspace: boolean;
+  directories: { repository: string[]; module: string[] };
   exclude: string[];
   modules: string[];
   components: string[];
@@ -61,6 +62,8 @@ export interface Report {
   files: number;
   links: string[];
   excluded: string[];
+  pruned: string[];
+  directories: Policy["directories"];
   exceptions: Exception[];
   findings: Finding[];
 }

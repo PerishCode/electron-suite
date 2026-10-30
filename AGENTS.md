@@ -12,6 +12,10 @@
 
 ## Directory conventions
 
+- Every directory node must match guard's repository-relative or module-relative allowlist. Parent approval does not approve descendants; this includes hidden, empty and tests directories.
+- Authorized patterns permit routine expansion within their declared scope. For a new responsibility or pattern, obtain scope authorization, declare bounded patterns in pesuite.yaml, and update regression coverage and the relevant index. Do not widen patterns, excludes or exceptions just to silence findings. The structure may evolve through this process.
+- Generated/dependency/runtime directories have fixed owned boundaries; exclusions do not authorize source or resource trees. Source resources must follow the declared resource lifecycle.
+
 - apps contains runnable reference units; packages contains reusable capabilities. Source belongs in src, tests in sibling tests/**/*.test.ts.
 - Brief scale: source <=500 lines; module depth <=5 and width <=8; only configured components paths have a width exemption; styles only in packages/components/**/*.less.
 - Modules own source/test tsconfigs and esbuild/Vitest configs. Pin external dependencies to x.y.z and local dependencies to workspace:*; use TS7, Vitest and Biome.

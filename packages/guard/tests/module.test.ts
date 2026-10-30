@@ -21,7 +21,7 @@ async function fixture(): Promise<string> {
     }),
     "vitest.config.ts": 'export default { test: { include: ["tests/**/*.test.ts"] } };',
     "src/index.ts": "export const value = 1;",
-    "tests/nested/value.test.ts": "export {};",
+    "tests/value.test.ts": "export {};",
   };
   for (const [path, content] of Object.entries(files)) {
     await mkdir(dirname(join(root, path)), { recursive: true });
@@ -127,7 +127,9 @@ describe("repository contracts", () => {
     try {
       await writeFile(join(outside, "bad.css"), "body{}");
       await symlink(outside, join(root, "linked"), "dir");
-      expect((await guard({ root })).findings).toEqual([]);
+      expect((await guard({ root })).findings).toContainEqual(
+        expect.objectContaining({ path: "linked", rule: "directory.allowed" }),
+      );
       await writeFile(join(outside, "pesuite.yaml"), "schemaVersion: 1\n");
       await symlink(join(outside, "bad.css"), join(root, "src", "linked.css"));
       expect((await guard({ root })).findings).toContainEqual(
