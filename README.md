@@ -166,3 +166,16 @@ exclude 不能隐藏未知目录或已授权源码目录。仅仓库根 node_mod
 这一步只证明受管入口的独占权威、中断阻塞与 hosted 跨代隔离，未完成完整服务实例持久目录、lifecycle session、存活子进程接管或四单元统一控制面。slim 的独立探针消费此增量，四单元 runtime 仍固定在首版发布 SDK；#10 保持 Open。约束尺度依靠 API、参考骨架、AGENTS 与验收，不建设 OS 沙箱。
 
 Direct Resources 使用者必须先排空自己持有的 body，再正常 close；Hosted/Service 路径负责按顺序调用生命周期。需要恢复的状态是下一步协议的输入，不是建议下游另写资源清理器。
+
+
+## Sidecar 0.4：namespace 持久实例目录
+
+Service 管理的 hosted 与独立进程在外部动作前提交实例 claim，记录 namespace/channel/service/generation/incarnation、kind、生命周期阶段和实际 PID；就绪发布后才能连接，排空成功后才精确退休。最后一个进程租约在停止失败时保留，支持原租约重试；同服务槽位跨 kind/generation 排他。原始独立 Sidecar 内存 API 保留兼容，持久目录属于 Service 管理路径；注入已有运行状态的 host 会被拒绝。
+
+Service.directory() 提供根视图，Client.directory(namespace) 提供经管理权威校验的 namespace 视图。readDirectory(root, namespace?) 可在正常关闭或异常中断后只读检查。活跃管理器持锁时应使用在线 API；离线 API 不抢锁、不写文件、不执行清扫或恢复。返回副本不包含 token、capability、命令参数、环境变量或私有 transport 信息。
+
+每个 namespace 索引保留最后资源 owner 及阶段，跨正常 manager 替换保留。NamespaceEntry.phase 的 unopened/opening/ready/failed/closed 描述资源权威状态；服务实例有自己的 initializing/ready/stopping/failed/retired 生命周期。进程尚未申请 namespace 资源时索引为 unopened。每个服务槽位仅保存当前或最近退休的实例，不作为无限追加事件日志；修订号跨管理器单调增加。
+
+SIGKILL 后，离线视图将 manager 标为 interrupted，同时保留实例最后提交的阶段与 PID。ready 记录不推导为当前 OS 存活；托管 body 和仍可能存活的独立子进程会分别保留 kind。中断后重新 serve 仍报 recovery required，不能用快照或删除记录作为接管凭据。
+
+目录和 authority 的功能标记在同一 SQLite 事务中提交；已建立目录后缺失/损坏记录不会被当作空目录。正常关闭的旧 0.3 owner 可开始建立目录，但不会补造历史实例；旧版中断权威仍保留阻塞。完整生命周期会话、实例与资源使用关系、存活子进程接管及四单元统一控制面继续由 #10 推进。

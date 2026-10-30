@@ -41,7 +41,13 @@ export interface Attachment {
 export function identity(input: unknown): Identity {
   if (!input || typeof input !== "object") throw new TypeError("invalid service identity");
   const value = input as Identity;
-  if (!valid(value.generation) || typeof value.service !== "string" || !/^[a-z][a-z0-9]*$/.test(value.service)) {
+  if (
+    typeof value.channel !== "string" ||
+    typeof value.namespace !== "string" ||
+    !valid(value.generation) ||
+    typeof value.service !== "string" ||
+    !/^[a-z][a-z0-9]*$/.test(value.service)
+  ) {
     throw new TypeError("invalid service identity");
   }
   return {

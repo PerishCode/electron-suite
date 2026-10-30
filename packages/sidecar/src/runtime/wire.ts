@@ -17,6 +17,7 @@ import { type Descriptor, descriptor, type Identity, identity } from "../control
 import type { Lease, Spec } from "../host.js";
 
 export type Request =
+  | { authority: string; namespace: Namespace; type: "directory" }
   | { authority: string; identity: Identity; type: "connect" }
   | { descriptor: Descriptor; operation: "call" | "probe" | "stop"; method?: string; input?: unknown; type: "invoke" }
   | { authority: string; spec: Spec; type: "start" }
@@ -271,11 +272,11 @@ export function decode(value: string): Request {
     };
   }
 
-  if (data.type === "resources") {
+  if (data.type === "directory" || data.type === "resources") {
     return {
       authority: text(data.authority, "authority"),
       namespace: namespace(text(data.namespace, "namespace")),
-      type: "resources",
+      type: data.type,
     };
   }
 

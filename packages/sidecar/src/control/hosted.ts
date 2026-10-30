@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { digest, type Grant } from "@perishcode/protocol";
+import type { Catalog } from "../runtime/catalog.js";
 import type { Resources } from "../runtime/resource.js";
 import {
   type Attachment,
@@ -31,7 +32,10 @@ const equal = (a: string, b: string): boolean => {
 export class Hosted {
   private entries = new Map<string, Entry>();
   private closing = false;
-  constructor(private open: (namespace: string) => Promise<Resources>) {}
+  constructor(
+    private open: (namespace: string) => Promise<Resources>,
+    private catalog?: Catalog,
+  ) {}
 
   async expose<M>(options: Expose<M>): Promise<Attachment> {
     if (this.closing) throw new Error("host is closing");
@@ -44,6 +48,7 @@ export class Hosted {
       resolveClosed = done;
     });
     let stopping: Promise<void> | undefined;
+    let claimed = false;
     let resources: Resources | undefined;
     let temporary: string | undefined;
     const grants = new Map<string, Grant>();
@@ -60,6 +65,7 @@ export class Hosted {
         if (stopping) return stopping;
         entry.phase = "stopping";
         stopping = (async () => {
+          this.catalog?.change(scope, incarnation, "stopping");
           await initialization;
           await Promise.allSettled([...entry.calls]);
           await Promise.allSettled([...allocations]);
@@ -72,11 +78,13 @@ export class Hosted {
             await resources.release(temporary, []);
             temporary = undefined;
           }
+          this.catalog?.change(scope, incarnation, "retired");
           if (this.entries.get(id) === entry) this.entries.delete(id);
           resolveClosed();
         })().catch((fault) => {
           entry.phase = "failed";
           stopping = undefined;
+          if (claimed) this.catalog?.change(scope, incarnation, "failed");
           throw fault;
         });
         return stopping;
@@ -84,6 +92,8 @@ export class Hosted {
     };
     this.entries.set(id, entry);
     try {
+      this.catalog?.claim(scope, incarnation, "hosted");
+      claimed = true;
       resources = await this.open(scope.namespace);
       const name = `h${digest(`${scope.channel}:${scope.service}`).slice(7, 31)}`;
       const data = await resources.grant({ kind: "data", name, scope: "namespace" });
@@ -136,6 +146,7 @@ export class Hosted {
         await entry.close();
         throw new Error("service stopped during initialization");
       }
+      this.catalog?.change(scope, incarnation, "ready");
       entry.phase = "ready";
       this.handlers.set(
         entry,
@@ -144,6 +155,11 @@ export class Hosted {
       return { context, closed, close: entry.close };
     } catch (fault) {
       initialized();
+      if (!claimed) {
+        this.entries.delete(id);
+        resolveClosed();
+        throw fault;
+      }
       try {
         await entry.close();
       } catch (cleanup) {

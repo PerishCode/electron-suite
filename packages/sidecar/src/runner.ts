@@ -21,6 +21,16 @@ export interface Running {
   stop(): Promise<Stop>;
 }
 
+export class LaunchFault extends Error {
+  constructor(
+    cause: unknown,
+    readonly stopped: Stop,
+    readonly running?: Running,
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+  }
+}
+
 function pause(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -101,11 +111,19 @@ export async function launch(spec: Launch): Promise<Running> {
   });
   const grace = spec.grace ?? 1000;
 
+  const running: Running | undefined = child.pid
+    ? { active: () => active(child.pid as number), pid: child.pid, stop: () => retire(child, grace) }
+    : undefined;
   try {
     await wait(child, spec.ready, spec.timeout ?? 5000);
   } catch (error) {
-    await retire(child, grace);
-    throw error;
+    let stopped: Stop;
+    try {
+      stopped = await retire(child, grace);
+    } catch {
+      stopped = { status: "partial", survivors: child.pid ? [child.pid] : [] };
+    }
+    throw new LaunchFault(error, stopped, running);
   }
 
   const pid = child.pid;
