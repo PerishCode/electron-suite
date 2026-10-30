@@ -29,6 +29,17 @@ async function terminate(pid: number): Promise<void> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
   }
+  // Fixture teardown only: the controlled child was deliberately orphaned above.
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+      throw error;
+    }
+    await new Promise((done) => setTimeout(done, 10));
+  }
+  throw new Error("controlled fixture process remains after cleanup");
 }
 async function fixture(run: (server: Service, root: string, client: Client) => Promise<void>) {
   const root = await mkdtemp(join(tmpdir(), "directory-"));
