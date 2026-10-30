@@ -12,11 +12,12 @@ import {
   resources,
   valid,
 } from "@perishcode/protocol";
+import { type SessionHint, type SessionScope, sessionHint, sessionScope } from "../control/session.js";
 import { type Descriptor, descriptor, type Identity, identity } from "../control/types.js";
-
 import type { Lease, Spec } from "../host.js";
 
-export type Request =
+type Message =
+  | ({ authority: string; type: "session" } & SessionScope)
   | { authority: string; namespace: Namespace; type: "directory" }
   | { authority: string; identity: Identity; type: "connect" }
   | { descriptor: Descriptor; operation: "call" | "probe" | "stop"; method?: string; input?: unknown; type: "invoke" }
@@ -39,6 +40,8 @@ export type Request =
   | { authority: string; namespace: string; port: string; socket: string; type: "forward" }
   | { authority: string; lease: string; namespace: string; survivors: number[]; type: "revoke" }
   | { authority: string; namespace: string; type: "resources" };
+
+export type Request = Message & { session?: SessionHint };
 
 export type Response = { ok: true; value: unknown } | { error: string; ok: false };
 
@@ -180,8 +183,9 @@ function event(value: unknown): Event {
   throw new TypeError("event.type is invalid");
 }
 
-export function decode(value: string): Request {
-  const data = record(JSON.parse(value), "request");
+function message(data: Record<string, unknown>): Message {
+  if (data.type === "session")
+    return { authority: text(data.authority, "authority"), type: "session", ...sessionScope(data) };
   if (data.type === "connect")
     return { type: "connect", authority: text(data.authority, "authority"), identity: identity(data.identity) };
   if (data.type === "invoke") {
@@ -281,6 +285,16 @@ export function decode(value: string): Request {
   }
 
   throw new TypeError("request type is invalid");
+}
+
+export function decode(value: string): Request {
+  const data = record(JSON.parse(value), "request");
+  const request = message(data);
+  if (data.session !== undefined) {
+    if (request.type === "session") throw new Error("nested session acquisition is invalid");
+    return { ...request, session: sessionHint(data.session) };
+  }
+  return request;
 }
 
 export function encode(value: Request | Response): string {

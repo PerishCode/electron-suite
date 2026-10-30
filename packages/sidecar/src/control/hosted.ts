@@ -2,6 +2,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { digest, type Grant } from "@perishcode/protocol";
 import type { Catalog } from "../runtime/catalog.js";
 import type { Resources } from "../runtime/resource.js";
+import type { Sessions } from "../runtime/sessions.js";
 import {
   type Attachment,
   type Context,
@@ -18,6 +19,7 @@ interface Entry {
   phase: "initializing" | "ready" | "stopping" | "failed";
   calls: Set<Promise<unknown>>;
   close(): Promise<void>;
+  requestStop(): void;
 }
 const key = (value: Identity): string => {
   const scope = identity(value);
@@ -35,8 +37,21 @@ export class Hosted {
   constructor(
     private open: (namespace: string) => Promise<Resources>,
     private catalog?: Catalog,
+    private sessions?: Sessions,
   ) {}
 
+  available(scope: Identity): void {
+    if (this.closing) throw new Error("host is closing");
+    if (this.entries.has(key(scope))) throw new Error("service already owned");
+  }
+  quiesce(): void {
+    this.closing = true;
+    for (const entry of this.entries.values()) entry.requestStop();
+  }
+  stopping(input: Descriptor): () => Promise<void> {
+    const entry = this.entry(input);
+    return entry.close;
+  }
   async expose<M>(options: Expose<M>): Promise<Attachment> {
     if (this.closing) throw new Error("host is closing");
     const scope = Object.freeze(identity(options.identity));
@@ -48,6 +63,8 @@ export class Hosted {
       resolveClosed = done;
     });
     let stopping: Promise<void> | undefined;
+    let draining: Promise<void> | undefined;
+    let retired = false;
     let claimed = false;
     let resources: Resources | undefined;
     let temporary: string | undefined;
@@ -61,30 +78,43 @@ export class Hosted {
       capability: { ...scope, incarnation, token: randomBytes(32).toString("hex") },
       phase: "initializing",
       calls: new Set(),
+      requestStop: () => {
+        if (!retired) entry.phase = "stopping";
+      },
       close: () => {
-        if (stopping) return stopping;
-        entry.phase = "stopping";
-        stopping = (async () => {
-          this.catalog?.change(scope, incarnation, "stopping");
-          await initialization;
-          await Promise.allSettled([...entry.calls]);
-          await Promise.allSettled([...allocations]);
-          await options.lifecycle.stop();
-          for (const [value, grant] of grants) {
-            await resources?.release(grant.lease, []);
-            grants.delete(value);
-          }
-          if (resources && temporary) {
-            await resources.release(temporary, []);
-            temporary = undefined;
-          }
-          this.catalog?.change(scope, incarnation, "retired");
-          if (this.entries.get(id) === entry) this.entries.delete(id);
-          resolveClosed();
-        })().catch((fault) => {
-          entry.phase = "failed";
+        if (retired) return Promise.resolve();
+        const drain = (): Promise<void> => {
+          if (draining) return draining;
+          draining = (async () => {
+            entry.requestStop();
+            this.catalog?.change(scope, incarnation, "stopping");
+            await initialization;
+            await Promise.allSettled([...entry.calls]);
+            await Promise.allSettled([...allocations]);
+            await options.lifecycle.stop();
+            for (const [value, grant] of grants) {
+              await resources?.release(grant.lease, []);
+              grants.delete(value);
+            }
+            if (resources && temporary) {
+              await resources.release(temporary, []);
+              temporary = undefined;
+            }
+            this.catalog?.change(scope, incarnation, "retired");
+            if (this.entries.get(id) === entry) this.entries.delete(id);
+            retired = true;
+            resolveClosed();
+          })().catch((fault) => {
+            entry.phase = "failed";
+            draining = undefined;
+            if (claimed) this.catalog?.change(scope, incarnation, "failed");
+            throw fault;
+          });
+          return draining;
+        };
+        if (this.sessions?.current(scope)) return drain();
+        stopping ??= (this.sessions ? this.sessions.cleanup(scope, drain) : drain()).catch((fault) => {
           stopping = undefined;
-          if (claimed) this.catalog?.change(scope, incarnation, "failed");
           throw fault;
         });
         return stopping;
@@ -176,7 +206,7 @@ export class Hosted {
       throw new Error("service is not ready");
     return { ...entry.capability };
   }
-  async invoke(input: Descriptor, operation: string, method?: string, value?: unknown): Promise<unknown> {
+  private entry(input: Descriptor): Entry {
     const capability = descriptor(input);
     const entry = this.entries.get(key(capability));
     if (
@@ -186,6 +216,10 @@ export class Hosted {
     ) {
       throw new Error("service capability is fenced");
     }
+    return entry;
+  }
+  async invoke(input: Descriptor, operation: string, method?: string, value?: unknown): Promise<unknown> {
+    const entry = this.entry(input);
     if (operation === "stop") {
       await entry.close();
       return null;

@@ -128,7 +128,7 @@ hosted 服务在 initialize 中接收只读身份及 data/logs/resource/runtime 
 停止失败保留权威和临时资源，明确重试成功前不能报告 stopped；持久数据保留。
 
 这是 #10 的第一批增量：控制面仍属于单个管理器进程。
-跨进程客户端通信已测试；跨进程管理权威、管理器重启接管和跨代生命周期串行化仍需后续交付。
+后续 0.3–0.5 增量补齐排他的持久管理权威、实例目录和跨代生命周期串行化；异常管理器接管仍未交付。
 完整推进见 [#1](https://github.com/PerishCode/electron-suite/issues/1)，消费者验证见 [slim #4](https://github.com/PerishCode/open-design-slim/issues/4)。
 
 ## 生命周期入口与 scripts 边界
@@ -178,4 +178,26 @@ Service.directory() 提供根视图，Client.directory(namespace) 提供经管�
 
 SIGKILL 后，离线视图将 manager 标为 interrupted，同时保留实例最后提交的阶段与 PID。ready 记录不推导为当前 OS 存活；托管 body 和仍可能存活的独立子进程会分别保留 kind。中断后重新 serve 仍报 recovery required，不能用快照或删除记录作为接管凭据。
 
-目录和 authority 的功能标记在同一 SQLite 事务中提交；已建立目录后缺失/损坏记录不会被当作空目录。正常关闭的旧 0.3 owner 可开始建立目录，但不会补造历史实例；旧版中断权威仍保留阻塞。完整生命周期会话、实例与资源使用关系、存活子进程接管及四单元统一控制面继续由 #10 推进。
+目录和 authority 的功能标记在同一 SQLite 事务中提交；已建立目录后缺失/损坏记录不会被当作空目录。正常关闭的旧 0.3 owner 可开始建立目录，但不会补造历史实例；旧版中断权威仍保留阻塞。实例与资源使用关系、存活子进程接管及四单元统一控制面继续由 #10 推进。
+
+## Sidecar 0.5：生命周期会话
+
+同一个 manager root 内，以 namespace/channel 为串行化作用域。单次生命周期写操作自动取得会话；批量编排显式使用以下 API（scope 使用 protocol 的 namespace/channel 类型）：
+
+```ts
+await service.session(scope, async () => {
+  await service.expose(options);
+});
+await client.session(scope, async (scoped) => {
+  const lease = await scoped.start(spec);
+  await scoped.release(lease);
+});
+```
+
+同作用域本地和 loopback 嵌套沿私有控制上下文重入，避免 initialize/stop 等回调等待自己；顶层并发命令依序执行。不同 channel 可以独立推进。跨作用域嵌套和会话内 manager.close 会快速拒绝；不提供多作用域事务。回调结束后 scoped Client 和遗留异步上下文失效。
+
+控制端持有独立 owner socket；Client timeout 只限制会话取得，不构成持有期租约。正常结束等待已接收操作排空，再提交 completed/failed；回调失败不回滚已发生的外部效果。异常连接丢失则排空已接收操作并提交 interrupted，拒绝该 lane 的后续写入。断连不等于进程死亡，不能自动清锁或超时接管。其他 lane 可继续；manager.close 遇中断 lane 返回 recovery required 并保留管理权威。正常关闭先停止新入口，再等待会话和受管服务排空。
+
+Service.directory / Client.directory / readDirectory 的 sessions 记录只保留每个作用域当前或最近会话的阶段与 manager/incarnation，不公开 token 或回调异常正文。功能标记和记录原子提交；兼容正常关闭的旧版目录，但已建立的会话索引缺失将拒绝打开。
+
+普通业务消息不混入会话字段。若 handler 要启动/停止受管实例，控制方须先进入 Client.session，再在该上下文调用 Peer；普通业务 handler 中直接发起生命周期写入会拒绝，以免与排空互相等待。原始 grant/revoke/forward 仍是 namespace 资源分配能力；实例与资源使用关系将在后续增量统一。四单元 SDK 的控制面接入、恢复写入和存活子进程接管均未据此宣称完成。验收见 [#26](https://github.com/PerishCode/electron-suite/issues/26)。
