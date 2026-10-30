@@ -70,7 +70,7 @@ async function fixture(run: (root: string) => Promise<void>) {
   }
 }
 
-it("elects exactly one real controller across endpoints at concurrent cold start", async () => {
+it.each([1, 2, 3])("elects exactly one real controller across endpoints at concurrent cold start (%i)", async () => {
   await fixture(async (root) => {
     const owners = await Promise.all(
       Array.from({ length: 4 }, (_, index) => child(root, "manager", join(root, `m${index}.sock`))),

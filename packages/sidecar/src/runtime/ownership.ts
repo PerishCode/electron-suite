@@ -41,7 +41,20 @@ export class Ownership {
     if (!(await lstat(scope)).isFile()) throw new Error("ownership must be a regular file");
     const db = new DatabaseSync(scope, { timeout: 0 });
     try {
-      db.exec("PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE;");
+      db.exec("PRAGMA locking_mode=EXCLUSIVE");
+      // A reader of the just-created, unpublished file can briefly win SQLite's
+      // lock before its unique creator initializes the schema. Only that creator
+      // retries; no contender can use this wait to take over an existing claim.
+      const deadline = Date.now() + 500;
+      for (;;) {
+        try {
+          db.exec("BEGIN EXCLUSIVE");
+          break;
+        } catch (fault) {
+          if (!fresh || (fault as { errcode?: number }).errcode !== 5 || Date.now() >= deadline) throw fault;
+          await new Promise((done) => setTimeout(done, 5));
+        }
+      }
       if (fresh) db.exec("CREATE TABLE authority (id INTEGER PRIMARY KEY CHECK(id=1), record TEXT NOT NULL) STRICT;");
       const row = db.prepare("SELECT record FROM authority WHERE id=1").get();
       if (!row && !fresh) throw new Error("ownership is unpublished; recovery required");
