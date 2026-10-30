@@ -160,6 +160,15 @@ importers:
       '@perishcode/guard':
         specifier: workspace:*
         version: link:../guard
+      '@perishcode/pack':
+        specifier: workspace:*
+        version: link:../pack
+      '@perishcode/release':
+        specifier: workspace:*
+        version: link:../release
+      '@perishcode/runtime':
+        specifier: workspace:*
+        version: link:../runtime
     devDependencies:
       '@types/node':
         specifier: 24.12.2

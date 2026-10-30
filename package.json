@@ -7,16 +7,9 @@
     "pnpm": ">=10.33.2"
   },
   "scripts": {
-    "postinstall": "node scripts/postinstall.mjs",
-    "prepare": "git config core.hooksPath .githooks",
-    "package": "node scripts/package.mjs",
-    "qualify": "node scripts/acceptance.mjs",
-    "build": "pnpm -r --if-present --workspace-concurrency=4 run build",
-    "guard": "pesuite guard",
-    "test": "pnpm -r --if-present --workspace-concurrency=4 run test",
-    "typecheck": "pnpm -r --if-present --workspace-concurrency=4 run typecheck",
-    "lint": "biome check .",
-    "format": "biome check --write ."
+    "lint": "pnpm -r --if-present run lint",
+    "test": "pnpm -r --if-present run test",
+    "build": "pnpm -r --if-present run build"
   },
   "devDependencies": {
     "@perishcode/config": "workspace:*",

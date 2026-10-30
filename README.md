@@ -5,7 +5,7 @@
 
 ## 命令与交付
 
-唯一可执行入口为 `pesuite`，检查命令为 `pesuite guard`。`@perishcode/cli` 负责路由，`@perishcode/guard` 提供检测库；不发布独立 `guard` 命令。
+唯一可执行入口为 `pesuite`，工程检查使用 `pesuite guard`，内容准备和安装产物构建使用 `pesuite release` / `pesuite pack`。`@perishcode/cli` 负责路由，`@perishcode/guard` 提供检测库；不发布独立 `guard` 命令。
 源码实现已合入主线；发布与 open-design-slim 的消费验收见 #3。
 
 分发 registry 为 GitHub Packages：`https://npm.pkg.github.com`。仓库 `.npmrc` 仅声明 `@perishcode` 的 registry 路由，token 保留在用户级 `~/.npmrc`，不得提交。其他第三方依赖继续使用 npmjs。消费机器需要有 GitHub Packages 读取权限的登录态。
@@ -22,21 +22,22 @@ pesuite --version
 
 ## 默认规范
 
-| 规则                       | 默认行为                                                                                                            |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| module                     | 按 pnpm workspace packages 识别；没有 workspace 声明时使用 apps/_、packages/_；单包仓库根本身也是 module            |
-| directory.name / file.name | module 目录与文件采用单个小写字母数字词，文件可使用 config、test、tests、d 角色后缀；标准文档和工具文件名有显式例外 |
-| directory.depth            | module 根为 0，src/tests 为 1；目录深度不超过 5                                                                     |
-| directory.children         | module 内每目录直接文件及子目录不超过 8；包括空目录与 tests 子树                                                    |
-| components                 | 默认只有精确路径 packages/components 豁免该目录的宽度，其他规则继续检查                                             |
-| file.lines                 | 源码与测试最多 500 物理行，含空行／注释；末尾换行不额外增加一行                                                     |
-| file.test / module.layout  | src 与 tests 同级；测试在 tests/**/*.test.ts；根目录工具配置有明确例外，CLI 入口也位于 src                          |
-| module.typescript          | 独立 tsconfig.json 与 tsconfig.tests.json；测试显式 @ -> ./src 并扩展源码配置；精确 TypeScript 7 依赖               |
-| module.vitest              | Vitest 精确依赖、vitest run 脚本，以及可静态识别的 tests/**/*.test.ts 发现配置                                      |
-| repository.biome           | 根声明 Biome 依赖并提供 biome.json 或 biome.jsonc                                                                   |
-| dependency.version         | 依赖四个字段中，外部严格 x.y.z，本仓库包严格 workspace:*；不允许范围、tag、预发行或其他协议                         |
-| file.style                 | 样式表仅允许 packages/components/**/*.less；禁止其他源码中的样式定义                                                |
-| file.coverage              | TS/JS 解析失败及未支持的 Vue/Svelte 源码不得报告通过                                                                |
+| 规则                                | 默认行为                                                                                                            |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| module                              | 按 pnpm workspace packages 识别；没有 workspace 声明时使用 apps/_、packages/_；单包仓库根本身也是 module            |
+| directory.name / file.name          | module 目录与文件采用单个小写字母数字词，文件可使用 config、test、tests、d 角色后缀；标准文档和工具文件名有显式例外 |
+| directory.depth                     | module 根为 0，src/tests 为 1；目录深度不超过 5                                                                     |
+| directory.children                  | module 内每目录直接文件及子目录不超过 8；包括空目录与 tests 子树                                                    |
+| components                          | 默认只有精确路径 packages/components 豁免该目录的宽度，其他规则继续检查                                             |
+| file.lines                          | 源码与测试最多 500 物理行，含空行／注释；末尾换行不额外增加一行                                                     |
+| file.test / module.layout           | src 与 tests 同级；测试在 tests/**/*.test.ts；根目录工具配置有明确例外，CLI 入口也位于 src                          |
+| module.typescript                   | 独立 tsconfig.json 与 tsconfig.tests.json；测试显式 @ -> ./src 并扩展源码配置；精确 TypeScript 7 依赖               |
+| module.vitest                       | Vitest 精确依赖、vitest run 脚本，以及可静态识别的 tests/**/*.test.ts 发现配置                                      |
+| repository.biome                    | 根声明 Biome 依赖并提供 biome.json 或 biome.jsonc                                                                   |
+| dependency.version                  | 依赖四个字段中，外部严格 x.y.z，本仓库包严格 workspace:*；不允许范围、tag、预发行或其他协议                         |
+| file.style                          | 样式表仅允许 packages/components/**/*.less；禁止其他源码中的样式定义                                                |
+| package.scripts / directory.scripts | 只允许 lint/test/build；根同名递归分派，模块直接运行工具；禁止 scripts 目录                                         |
+| file.coverage                       | TS/JS 解析失败及未支持的 Vue/Svelte 源码不得报告通过                                                                |
 
 格式、通用 lint 和 import 整理由 Biome 执行，测试由 Vitest 执行，类型检查由 TypeScript 7 执行；guard 检查工程契约，不代替这些工具运行。
 
@@ -51,7 +52,7 @@ guard:
     file.lines:
       max: 500
   overrides:
-    - paths: [scripts/**]
+    - paths: [packages/example/tests/**]
       rules:
         file.lines:
           max: 200
@@ -78,15 +79,14 @@ TS/JS 使用 Babel 语法树，HTML 使用 parse5。检查 JSX style 属性／st
 
 ## 本地开发
 
-使用 Node.js 24、pnpm。首次安装构建 workspace；CLI 的受版本管理 bin 适配器保证冷安装可建立命令链接，发布包包含构建输出。
+使用 Node.js 24、pnpm。安装后显式运行 pnpm build 构建 workspace；CLI 的受版本管理 bin 适配器保证冷安装可建立命令链接，发布包包含构建输出。
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
 pnpm test
-pnpm typecheck
 pnpm lint
-pnpm guard
+pnpm exec pesuite guard
 ```
 
 `apps/` 为运行载体与能力验证应用，`packages/` 为共享能力；包职责见 [AGENTS.md](./AGENTS.md)。
@@ -129,3 +129,13 @@ hosted 服务在 initialize 中接收只读身份及 data/logs/resource/runtime 
 这是 #10 的第一批增量：控制面仍属于单个管理器进程。
 跨进程客户端通信已测试；跨进程管理权威、管理器重启接管和跨代生命周期串行化仍需后续交付。
 完整推进见 [#1](https://github.com/PerishCode/electron-suite/issues/1)，消费者验证见 [slim #4](https://github.com/PerishCode/open-design-slim/issues/4)。
+
+## 生命周期入口与 scripts 边界
+
+根 scripts 只保留 lint/test/build，命令固定为 pnpm -r --if-present run 对应脚本；pnpm 不支持 --if-exists。
+模块脚本直接运行 Biome、Vitest、esbuild 与 TypeScript；build 同时检查 source/tests 类型。
+不保留 postinstall/prepare/pretest/prepack、guard/format/typecheck/package/qualify 等别名，也不允许 scripts 目录。
+新增 package.scripts 与 directory.scripts 规则负责持续检测；工具命令边界按实际需求显式扩展。
+
+内容准备使用 pesuite release，unsigned macOS 构建使用 pesuite pack；二者读取明确输入，不隐式构建。
+参考 qualification 直接调用 @perishcode/testkit API。完整命令、参数和结果位置见根 AGENTS.md 的迭代流程。

@@ -13,9 +13,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json",
-    "test": "vitest run -c vitest.config.ts"
+    "lint": "biome check .",
+    "test": "vitest run -c vitest.config.ts",
+    "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly && tsc -p tsconfig.tests.json"
   },
   "dependencies": {},
   "devDependencies": {

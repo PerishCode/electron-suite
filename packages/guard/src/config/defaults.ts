@@ -19,6 +19,8 @@ export const defaults: Policy = {
     "pre-commit",
   ],
   rules: {
+    "directory.scripts": { enabled: true },
+    "package.scripts": { enabled: true },
     "directory.name": { enabled: true },
     "directory.depth": { enabled: true, max: 5 },
     "directory.children": { enabled: true, max: 8 },

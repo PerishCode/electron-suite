@@ -23,7 +23,8 @@ jobs:
       - run: pnpm --filter @perishcode/carrier test
         env:
           PERISH_GUI: "1"
-      - run: pnpm qualify
+      - run: |
+          node --input-type=module -e 'import { run } from "@perishcode/testkit"; const r = await run({root:process.cwd(), output:process.env.PERISH_REPORT ?? ".artifacts/qualification.json", packaged:process.env.PERISH_PACKAGE === "1"}); if(r.result === "failed") process.exitCode=1;'
         env:
           PERISH_CHROMIUM: "passed"
           PERISH_PACKAGE: "1"

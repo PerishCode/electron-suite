@@ -24,10 +24,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm test
-      - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm guard
-      - run: pnpm qualify
+      - run: pnpm exec biome check .
+      - run: pnpm exec pesuite guard
+      - run: |
+          node --input-type=module -e 'import { run } from "@perishcode/testkit"; const r = await run({root:process.cwd(), output:process.env.PERISH_REPORT ?? ".artifacts/qualification.json", packaged:process.env.PERISH_PACKAGE === "1"}); if(r.result === "failed") process.exitCode=1;'
       - uses: actions/upload-artifact@v4.6.2
         if: always()
         with:

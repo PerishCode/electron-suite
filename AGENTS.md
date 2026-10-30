@@ -1,100 +1,76 @@
 # electron-suite
 
-## Long-term direction
+## Meta rules
 
-Read [issue #1: Electron product engineering lifecycle](https://github.com/PerishCode/electron-suite/issues/1)
-before planning or changing cross-repository architecture.
-It records the vision, evidence, ownership boundaries, and completion criteria for
-electron-suite and [open-design-slim](https://github.com/PerishCode/open-design-slim).
-electron-suite distributes reusable engineering capabilities as npm packages;
-open-design-slim consumes published packages and owns product composition and policy.
-All workspace packages use the personal npm scope `@perishcode` (for example, `@perishcode/guard`).
-Publish to GitHub Packages. Repository `.npmrc` contains only scope routing; credentials belong in user configuration.
-Expose CLI capabilities only through `pesuite <command>`; guard is `pesuite guard`.
-Repository configuration lives in `pesuite.yaml`, with guard settings under `guard`.
-Read [issue #3](https://github.com/PerishCode/electron-suite/issues/3) for guard delivery and acceptance.
-Link incremental work and validation evidence to issue #1 using `Refs #1`.
-Keep it Open until the full product lifecycle and recorded completion criteria are
-fulfilled with reviewable evidence. Partial deliveries must not close it; do not
-use automatic closing keywords for this issue.
+- [Issue #1](https://github.com/PerishCode/electron-suite/issues/1) owns the long-term direction and roadmap. Keep it Open until the full lifecycle is proven; use Refs #1 for incremental work.
+- suite owns reusable mechanisms and distributes @perishcode npm packages through GitHub Packages; slim consumes fixed published versions and owns composition. Credentials stay in user .npmrc.
+- The current scope is four-unit skeletons and mechanism probes. Do not migrate OpenDesign features, business APIs or data models.
+- [#10](https://github.com/PerishCode/electron-suite/issues/10) owns sidecar convergence; [#11–#16](https://github.com/PerishCode/electron-suite/issues/1) cover inspect, serve, layered updates and blob. Hosted 0.2 is an increment, not proof of cross-process authority/restart adoption.
+- Public capabilities use pesuite subcommands or explicit package APIs. package.json scripts contain only lint/test/build; the workspace root only dispatches `pnpm -r --if-present run <same-name>`. pnpm has no --if-exists option.
+- Modules run their own tools. Do not add install/prepare/pretest/prepack hooks, lifecycle aliases, root callbacks, or scripts directories. Extend policy explicitly when a real capability requires it.
+- guard is the engineering-policy authority. Run the relevant build/tests, root lint, direct root Biome check and guard before delivery. Missing execution evidence remains unqualified.
 
-## Workspace
+## Directory conventions
 
-- `apps/`: runnable applications.
-- `packages/`: shared capabilities and tooling.
-- `pnpm-workspace.yaml`: workspace membership for `apps/*` and `packages/*`.
-- `README.md`: project introduction, repository layout, and local commands.
-- `AGENTS.md`: repository conventions and capability index for agents.
+- apps contains runnable reference units; packages contains reusable capabilities. Source belongs in src, tests in sibling tests/**/*.test.ts.
+- Brief scale: source <=500 lines; module depth <=5 and width <=8; only configured components paths have a width exemption; styles only in packages/components/**/*.less.
+- Modules own source/test tsconfigs and esbuild/Vitest configs. Pin external dependencies to x.y.z and local dependencies to workspace:*; use TS7, Vitest and Biome.
+- These summaries aid navigation; the actual guard findings and configuration determine compliance. Root AGENTS.md and README.md are the repository prose entry points.
 
-Keep application code in `apps/` and reusable capabilities in `packages/`.
-Use pnpm from the repository root. Follow the user's instructions incrementally.
-`AGENTS.md` and `README.md` at the repository root are the allowed prose files.
+## Core file index
 
-## Config
+| File or location                                    | Responsibility                                                        |
+| --------------------------------------------------- | --------------------------------------------------------------------- |
+| package.json / pnpm-workspace.yaml / pnpm-lock.yaml | standard dispatch, workspace membership and fixed dependency closure  |
+| pesuite.yaml / biome.json                           | guard/runtime declarations and formatter/linter configuration         |
+| packages/guard/src/config/defaults.ts               | policy defaults and rule index                                        |
+| packages/cli/src/index.ts / lifecycle.ts            | sole public bin routing; guard/release/pack capabilities              |
+| packages/sidecar/src/control / runtime              | hosted methods, resource ownership and management transport           |
+| packages/runtime/src/session.ts / capsule.ts        | generation mounting, execution, activation and recovery               |
+| packages/electron/src/host.ts / bridge.ts           | installed host and narrow browser contract                            |
+| packages/release / blob / publish / pack            | content identity, CAS, distribution primitives and unsigned packaging |
+| packages/testkit/src/runner.ts / schema.ts          | reference qualification API and evidence schema                       |
+| apps/carrier / capsule / web / daemon               | reference runtime units, not product business code                    |
+| .github/workflows / .githooks/pre-commit            | CI verification and optional local direct guard hook                  |
 
-- `pesuite.yaml`: versioned repository policy overrides; no `guard.yaml` fallback.
-- `biome.json`: formatting, lint, and import organization policy.
-- `electron.config.mjs`: optional release identity capability overrides.
+## Iteration workflows
 
-## Engineering rules
+### Local environment
 
-- Each workspace package is a module; its root is depth 0, `src` and `tests` are depth 1.
-- Source files, including tests, contain at most 500 physical lines including blanks and comments.
-- Module directory depth is at most 5 and direct child count at most 8.
-- Exact configured components paths are exempt from width only, never depth or file rules.
-- Only `packages/components/**/*.less` may define stylesheets. Other source must not define styles.
-- Keep source in `src` and tests in `tests/**/*.test.ts`; neither tree is exempt from directory rules.
-- Modules own `tsconfig.json` and `tsconfig.tests.json`; tests declare `@` pointing to `./src`.
-- Use TypeScript 7, Vitest, and Biome. External dependencies use exact `x.y.z`; internal dependencies use `workspace:*`.
-- Run `pnpm build`, `pnpm test`, `pnpm typecheck`, `pnpm lint`, and `pnpm guard` before delivery.
+Use Node24 and pnpm11.13.0. Configure GitHub Packages credentials in user .npmrc; repository .npmrc contains routing only.
+Run `pnpm install --frozen-lockfile`, then explicitly `pnpm build`. Installation does not build the workspace or configure Git hooks.
+If desired, enable the tracked hook after building with `git config core.hooksPath .githooks`.
 
-## Apps
+### Local changes and debugging
 
-- `carrier`: platform-installed Electron host.
-- `capsule`: independently delivered runtime payload.
-- `web`: browser capability fixture.
-- `daemon`: background capability fixture.
+Use module-scoped `pnpm --filter @perishcode/<module> build|test|lint` while iterating. Build includes source declarations and test type checking.
+Hosted control tests are `pnpm --filter @perishcode/sidecar test`; the real Chromium probe is `PERISH_GUI=1 pnpm --filter @perishcode/carrier test` after building.
+The unified inspect/serve lifecycle entries are still tracked by #11/#12; do not invent root shortcuts as substitutes.
 
-## Packages
+### Local build and checks
 
-- `blob`: immutable content-addressed artifact storage.
-- `config`: typed optional capability entry.
-- `guard`: repository structure and source-shape policy authority.
-- `cli`: the sole `pesuite` bin and command routing; consumes guard without duplicating rules.
-- `pack`: unsigned platform package construction for installation qualification.
-- `protocol`: artifact identity, generation contract, and activation state model.
-- `publish`: trusted localhost distribution and channel head authority.
-- `release`: release identity resolution and manifest authority.
-- `sidecar`: capability-scoped process lifecycle reference implementation.
-- `testkit`: typed acceptance matrix, qualification runner, and report schema.
-- `runtime`: published generation orchestration, product receipts, daemon probe and session lifecycle.
-- `electron`: published installed-host adapter, restricted renderer IPC and sandboxed preload.
+Run `pnpm build`, `pnpm test`, `pnpm lint`, `pnpm exec biome check .`, and `pnpm exec pesuite guard`.
+Use `pnpm exec biome check --write .` for formatting. There is no separate typecheck or format script.
 
-## Skeleton delivery
+### Local end-to-end qualification
 
-Read issues #6, #7 and #8 for the mechanism audit and runtime delivery.
-The current slim phase only establishes electron/capsule/web/daemon skeletons;
-do not migrate any OpenDesign features, business API or data models.
-Runtime product declarations use `runtime:` in `pesuite.yaml`.
-The old electron.config.mjs and Carrier app remain reference fixtures.
-The new host executes a mounted Capsule entry and keeps daemon tokens in the main process.
-Local candidate directories are explicitly supplied trusted inputs, not an authenticated remote update feed.
-Keep signing, remote distribution, platform coverage and crash-during-commit unqualified
-until their own acceptance evidence exists.
+Invoke the actual package API from the repository root:
 
-## Active capability work
+```sh
+node --input-type=module -e 'import { run } from "@perishcode/testkit"; const r=await run({root:process.cwd(),output:".artifacts/qualification.json",packaged:process.env.PERISH_PACKAGE==="1"}); if(r.result==="failed") process.exitCode=1;'
+```
 
-Issue #1 owns the roadmap; #10 owns sidecar convergence and #11 the inspect entry.
-The 0.2 sidecar increment adds caller-owned hosted methods and managed service resources.
-`Service.expose` initializes before publishing readiness. `Client.connect` returns an incarnation-fenced peer.
-Hosted bodies allocate ports/sockets/locks through their injected context and drain their own handles in stop.
-The package retires temporary resources only after calls and body stop finish; a failed drain retains ownership.
-This increment still uses a single in-process manager. Cross-process authority, manager restart adoption,
-cross-generation lifecycle serialization and complete resource escape auditing remain issue #10 work.
-Do not claim hosted IPC from a separate client proves those authority guarantees.
+Set PERISH_PACKAGE=1 on macOS for unsigned installed qualification. Real Chromium has its separate explicit test above; a caller boolean is not evidence. Reports go under .artifacts. Signing, remote feeds and other platform guarantees require separate acceptance.
 
-## Scripts
+### Content, package and distribution
 
-- `postinstall.mjs`: topological concurrent workspace build.
-- `package.mjs`: thin `@perishcode/pack` platform package entry.
-- `acceptance.mjs`: thin `@perishcode/testkit` qualification entry.
+After module builds, prepare reference content through the formal capability:
+
+```sh
+pnpm exec pesuite release --capsule apps/capsule/dist --daemon apps/daemon/dist --web apps/web/dist --output .artifacts/seed
+pnpm exec pesuite pack --carrier apps/carrier/dist --seed .artifacts/seed --output .artifacts/package --receipt .artifacts/package.json
+```
+
+These commands do not implicitly compile sources. pack is currently unsigned macOS. The reference carrier is driven by the testkit runtime harness.
+For npm delivery, build/check explicitly, run `pnpm --dir packages/<name> pack --pack-destination <absolute-artifact-dir>`, inspect the archive, then publish that archive to GitHub Packages. No prepack hook builds on your behalf.
+Record package versions, archive integrity, CI and independent slim registry-consumer results in the owning issue. Keep actual runtime generation separate from npm package versions.

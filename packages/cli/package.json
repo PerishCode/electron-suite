@@ -1,6 +1,6 @@
 {
   "name": "@perishcode/cli",
-  "version": "0.1.1",
+  "version": "0.3.0",
   "type": "module",
   "exports": {
     ".": {
@@ -13,10 +13,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "lint": "biome check .",
     "test": "vitest run -c vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json",
-    "prepack": "pnpm run build"
+    "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly && tsc -p tsconfig.tests.json"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
@@ -39,7 +38,10 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@perishcode/guard": "workspace:*"
+    "@perishcode/guard": "workspace:*",
+    "@perishcode/runtime": "workspace:*",
+    "@perishcode/release": "workspace:*",
+    "@perishcode/pack": "workspace:*"
   },
   "bin": {
     "pesuite": "./src/pesuite.mjs"
