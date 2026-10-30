@@ -7,10 +7,10 @@ import { file } from "./rules/files.js";
 import { moduleRules } from "./rules/module.js";
 import { scripts } from "./rules/scripts.js";
 import { style } from "./rules/style.js";
-import { tree } from "./rules/tree.js";
+import { directories, tree } from "./rules/tree.js";
 import { files } from "./scan/files.js";
 import { modules } from "./scan/modules.js";
-import type { Context, Finding, Policy, Report } from "./types.js";
+import type { Context, Entry, Finding, Policy, Report } from "./types.js";
 
 export { defaults } from "./config/defaults.js";
 export { configuration, load } from "./config/index.js";
@@ -26,9 +26,15 @@ export async function guard(options: GuardOptions): Promise<Report> {
   const root = await realpath(options.root);
   if (!(await stat(root)).isDirectory()) throw new Error("guard root must be a directory");
   const policy = options.policy ?? (await load(root));
-  const entries = await files(root, policy);
+  const pruned: Entry[] = [];
+  const entries = await files(root, policy, pruned);
   const context: Context = { root, entries, policy, modules: await modules(root, entries, policy) };
-  const findings: Finding[] = [...tree(context), ...(await moduleRules(context)), ...(await scripts(context))];
+  const findings: Finding[] = [
+    ...directories(context, pruned),
+    ...tree(context),
+    ...(await moduleRules(context)),
+    ...(await scripts(context)),
+  ];
   for (const entry of entries) {
     if (entry.kind === "directory") continue;
     const source = sources.has(extname(entry.path).slice(1).toLowerCase());
@@ -63,6 +69,8 @@ export async function guard(options: GuardOptions): Promise<Report> {
     files: entries.filter((entry) => entry.kind === "file").length,
     links: entries.filter((entry) => entry.kind === "link").map((entry) => entry.path),
     excluded: [...policy.exclude],
+    pruned: pruned.map((entry) => entry.path).sort(),
+    directories: structuredClone(policy.directories),
     exceptions: structuredClone(policy.exceptions),
     findings,
   };

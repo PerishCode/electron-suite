@@ -1,5 +1,22 @@
 schemaVersion: 1
 guard:
+  directories:
+    repository:
+      - apps
+      - packages
+      - apps/*
+      - packages/*
+      - node_modules
+      - .artifacts
+      - .state
+      - .github
+      - .github/workflows
+      - .githooks
+      - packages/guard/src/config
+      - packages/guard/src/rules
+      - packages/guard/src/scan
+      - packages/sidecar/src/control
+      - packages/sidecar/src/runtime
   components:
     - packages/components
 runtime:

@@ -25,6 +25,7 @@ pesuite --version
 | 规则                                | 默认行为                                                                                                            |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | module                              | 按 pnpm workspace packages 识别；没有 workspace 声明时使用 apps/_、packages/_；单包仓库根本身也是 module            |
+| directory.allowed                   | 仓库与模块相对路径白名单逐节点匹配；默认拒绝未知、隐藏和空目录，不隐式授权后代                                      |
 | directory.name / file.name          | module 目录与文件采用单个小写字母数字词，文件可使用 config、test、tests、d 角色后缀；标准文档和工具文件名有显式例外 |
 | directory.depth                     | module 根为 0，src/tests 为 1；目录深度不超过 5                                                                     |
 | directory.children                  | module 内每目录直接文件及子目录不超过 8；包括空目录与 tests 子树                                                    |
@@ -62,7 +63,7 @@ guard:
       reason: 有界迁移期间保留，完成拆分后删除
 ```
 
-guard 支持 `exclude`、`modules`、`components`、`names`、`rules`、`overrides` 和 `exceptions`。`modules` 一旦显式声明即覆盖 workspace 发现模式；`components` 仅接受精确 repo 相对路径；`names` 为文件 basename 例外。
+guard 支持 `directories`、`exclude`、`modules`、`components`、`names`、`rules`、`overrides` 和 `exceptions`。`modules` 一旦显式声明即覆盖 workspace 发现模式；`components` 仅接受精确 repo 相对路径；`names` 为文件 basename 例外。
 
 未声明字段继承默认值，数组整体替换，显式 `[]` 清空列表；局部 overrides 按声明顺序覆盖已提供的规则字段。每条规则可设置 `enabled`，数值规则另支持非负整数 `max`。exceptions 仅豁免匹配路径的指定规则，必须提供非空理由；exclude 才改变扫描集合。
 
@@ -139,3 +140,16 @@ hosted 服务在 initialize 中接收只读身份及 data/logs/resource/runtime 
 
 内容准备使用 pesuite release，unsigned macOS 构建使用 pesuite pack；二者读取明确输入，不隐式构建。
 参考 qualification 直接调用 @perishcode/testkit API。完整命令、参数和结果位置见根 AGENTS.md 的迭代流程。
+
+
+## 目录白名单与有序扩张
+
+目录规则采用严格白名单。guard.directories.repository 匹配仓库相对路径，guard.directories.module 匹配独立 module 相对路径；两者取并集，每个节点都要匹配。默认 repository 开放 apps、packages、apps/_、packages/_、node_modules、.artifacts、.state；module 开放 src、tests、dist、coverage、node_modules。单包根也是 module，workspace 聚合根不按 module 放行 src/tests。
+
+父目录不隐式授权后代；src/config、tests/flows 等需按职责声明。pattern 可使用单层 *，不允许递归 **；有限层级 pattern 不免除原深度、宽度、文件与样式规则。components 仅豁免既有宽度限制。
+
+例如经授权引入共享测试分类时，可在 guard.directories.module 中声明完整数组 [src, tests, dist, coverage, node_modules, tests/flows, tests/flows/*]。这仅允许 flows 及下一层；更深层仍需明确决策。每个 scope 数组整体替换，未声明 scope 继承默认值，[] 清空；仓库专属扩张优先使用 repository 中的精确路径，实际例子见本仓 pesuite.yaml。
+
+新增职责或 pattern 必须经授权，并同步规则回归与必要索引；已有授权 pattern 范围内可正常迭代。AGENTS 说明这一演进流程，不将结构永久冻结。specs/skills/assets 等目录没有隐式特权。
+
+exclude 不能隐藏未知目录或已授权源码目录。仅仓库根 node_modules/.artifacts/.state 和实际 module 根 node_modules/dist/coverage 可作为不展开的生成/依赖/运行数据边界；这些内容不计入源码合规证明。JSON 的 pruned 字段列出边界，directories 字段记录生效的白名单。目录规则拒绝符号链接（包括排除边界上的链接），不遍历链接目标。Git 元数据仅在仓库根特殊处理。

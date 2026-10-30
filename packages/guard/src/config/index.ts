@@ -13,11 +13,21 @@ export function configuration(input: unknown): Policy {
   if (!("guard" in top)) return policy;
   const guard = object(
     top.guard,
-    ["exclude", "modules", "components", "names", "rules", "overrides", "exceptions"],
+    ["directories", "exclude", "modules", "components", "names", "rules", "overrides", "exceptions"],
     "guard",
   );
   for (const name of ["exclude", "modules", "components", "names"] as const) {
     if (name in guard) policy[name] = strings(guard[name], `guard.${name}`, name !== "names");
+  }
+  if ("directories" in guard) {
+    const data = object(guard.directories, ["repository", "module"], "guard.directories");
+    for (const scope of ["repository", "module"] as const) {
+      if (!(scope in data)) continue;
+      const patterns = strings(data[scope], `guard.directories.${scope}`);
+      if (patterns.some((pattern) => pattern.split("/").includes("**")))
+        throw new Error("directory patterns require finite depth; ** is not allowed");
+      policy.directories[scope] = patterns;
+    }
   }
   if ("modules" in guard) policy.workspace = false;
   if (policy.components.some((path) => path.includes("*"))) throw new Error("guard.components requires exact paths");
