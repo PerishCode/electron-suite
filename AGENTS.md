@@ -5,7 +5,7 @@
 - [Issue #1](https://github.com/PerishCode/electron-suite/issues/1) owns the long-term direction and roadmap. Keep it Open until the full lifecycle is proven; use Refs #1 for incremental work.
 - suite owns reusable mechanisms and distributes @perishcode npm packages through GitHub Packages; slim consumes fixed published versions and owns composition. Credentials stay in user .npmrc.
 - The current scope is four-unit skeletons and mechanism probes. Do not migrate OpenDesign features, business APIs or data models.
-- [#10](https://github.com/PerishCode/electron-suite/issues/10) owns sidecar convergence; [#11–#16](https://github.com/PerishCode/electron-suite/issues/1) cover inspect, serve, layered updates and blob. Hosted 0.2 is an increment, not proof of cross-process authority/restart adoption.
+- [#10](https://github.com/PerishCode/electron-suite/issues/10) owns sidecar convergence; [#11–#16](https://github.com/PerishCode/electron-suite/issues/1) cover inspect, serve, layered updates and blob. Ownership 0.3 adds exclusive root/namespace authority and fail-closed interruption; live-process restart adoption remains unqualified.
 - Public capabilities use pesuite subcommands or explicit package APIs. package.json scripts contain only lint/test/build; the workspace root only dispatches `pnpm -r --if-present run <same-name>`. pnpm has no --if-exists option.
 - Modules run their own tools. Do not add install/prepare/pretest/prepack hooks, lifecycle aliases, root callbacks, or scripts directories. Extend policy explicitly when a real capability requires it.
 - guard is the engineering-policy authority. Run the relevant build/tests, root lint, direct root Biome check and guard before delivery. Missing execution evidence remains unqualified.
@@ -23,20 +23,21 @@
 
 ## Core file index
 
-| File or location                                    | Responsibility                                                        |
-| --------------------------------------------------- | --------------------------------------------------------------------- |
-| package.json / pnpm-workspace.yaml / pnpm-lock.yaml | standard dispatch, workspace membership and fixed dependency closure  |
-| pesuite.yaml / biome.json                           | guard/runtime declarations and formatter/linter configuration         |
-| packages/guard/src/rules/tree.ts / scan/files.ts    | directory allowlists and inspected/pruned boundaries                  |
-| packages/guard/src/config/defaults.ts               | policy defaults and rule index                                        |
-| packages/cli/src/index.ts / lifecycle.ts            | sole public bin routing; guard/release/pack capabilities              |
-| packages/sidecar/src/control / runtime              | hosted methods, resource ownership and management transport           |
-| packages/runtime/src/session.ts / capsule.ts        | generation mounting, execution, activation and recovery               |
-| packages/electron/src/host.ts / bridge.ts           | installed host and narrow browser contract                            |
-| packages/release / blob / publish / pack            | content identity, CAS, distribution primitives and unsigned packaging |
-| packages/testkit/src/runner.ts / schema.ts          | reference qualification API and evidence schema                       |
-| apps/carrier / capsule / web / daemon               | reference runtime units, not product business code                    |
-| .github/workflows / .githooks/pre-commit            | CI verification and optional local direct guard hook                  |
+| File or location                                    | Responsibility                                                           |
+| --------------------------------------------------- | ------------------------------------------------------------------------ |
+| package.json / pnpm-workspace.yaml / pnpm-lock.yaml | standard dispatch, workspace membership and fixed dependency closure     |
+| pesuite.yaml / biome.json                           | guard/runtime declarations and formatter/linter configuration            |
+| packages/guard/src/rules/tree.ts / scan/files.ts    | directory allowlists and inspected/pruned boundaries                     |
+| packages/guard/src/config/defaults.ts               | policy defaults and rule index                                           |
+| packages/cli/src/index.ts / lifecycle.ts            | sole public bin routing; guard/release/pack capabilities                 |
+| packages/sidecar/src/runtime/ownership.ts           | persistent exclusive owner records; interrupted/invalid ownership blocks |
+| packages/sidecar/src/control / runtime              | hosted methods, resource ownership and management transport              |
+| packages/runtime/src/session.ts / capsule.ts        | generation mounting, execution, activation and recovery                  |
+| packages/electron/src/host.ts / bridge.ts           | installed host and narrow browser contract                               |
+| packages/release / blob / publish / pack            | content identity, CAS, distribution primitives and unsigned packaging    |
+| packages/testkit/src/runner.ts / schema.ts          | reference qualification API and evidence schema                          |
+| apps/carrier / capsule / web / daemon               | reference runtime units, not product business code                       |
+| .github/workflows / .githooks/pre-commit            | CI verification and optional local direct guard hook                     |
 
 ## Iteration workflows
 
@@ -49,6 +50,7 @@ If desired, enable the tracked hook after building with `git config core.hooksPa
 ### Local changes and debugging
 
 Use module-scoped `pnpm --filter @perishcode/<module> build|test|lint` while iterating. Build includes source declarations and test type checking.
+Never delete authority/registry files to bypass recovery-required errors. Keep the root and evidence for explicit reconciliation.
 Hosted control tests are `pnpm --filter @perishcode/sidecar test`; the real Chromium probe is `PERISH_GUI=1 pnpm --filter @perishcode/carrier test` after building.
 The unified inspect/serve lifecycle entries are still tracked by #11/#12; do not invent root shortcuts as substitutes.
 

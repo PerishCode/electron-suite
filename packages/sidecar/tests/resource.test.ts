@@ -56,7 +56,7 @@ describe("resources", () => {
     expect(stored.grants).toEqual([left]);
   });
 
-  it("reaps stale attempt resources when its namespace reopens", async () => {
+  it("reaps attempt resources only after its namespace closed cleanly", async () => {
     const root = await mkdtemp(join(tmpdir(), "perish-resource-"));
     const first = await create("main", root);
     const staging = await first.host.grant({
