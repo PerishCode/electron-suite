@@ -1,12 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { channel, digest, namespace } from "@perishcode/protocol";
-import { afterEach, expect, it } from "vitest";
-import { Client, type Expose, type Service, serve } from "@";
+import { afterEach, expect, it, vi } from "vitest";
+import { Client, type Expose, Resources, type Service, serve } from "@";
 
 type Methods = { echo: { input: string; output: string }; count: { input: number; output: number } };
 const identity = {
@@ -29,7 +29,7 @@ function deferred() {
   return { promise, done };
 }
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "hosted-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "hosted-")));
   roots.push(root);
   const server = await serve(join(root, "manager.sock"));
   services.push(server);
@@ -44,7 +44,7 @@ async function fixture() {
 
 it("provides caller-owned methods to a separate process and injects managed roots", async () => {
   const { root, server, client, options } = await fixture();
-  const attached = await server.expose(options);
+  const attached = await server.expose<Methods>(options);
   for (const path of Object.values(attached.context.roots)) {
     expect(path.startsWith(`${root}/`)).toBe(true);
     expect((await stat(path)).isDirectory()).toBe(true);
@@ -73,9 +73,9 @@ it("does not publish readiness until initialize completes; duplicate exposure ca
   const { server, client, options } = await fixture();
   const gate = deferred();
   options.lifecycle.initialize = () => gate.promise;
-  const opening = server.expose(options);
+  const opening = server.expose<Methods>(options);
   await expect(client.connect(identity)).rejects.toThrow("not ready");
-  await expect(server.expose(options)).rejects.toThrow("already owned");
+  await expect(server.expose<Methods>(options)).rejects.toThrow("already owned");
   gate.done();
   const attached = await opening;
   expect((await (await client.connect(identity)).probe()).phase).toBe("ready");
@@ -84,10 +84,10 @@ it("does not publish readiness until initialize completes; duplicate exposure ca
 
 it("fences old clients and old attachment close after same-generation replacement", async () => {
   const { server, client, options } = await fixture();
-  const first = await server.expose(options);
+  const first = await server.expose<Methods>(options);
   const old = await client.connect<Methods>(identity);
   await first.close();
-  const second = await server.expose(options);
+  const second = await server.expose<Methods>(options);
   await first.close();
   await expect(old.call("count", 0)).rejects.toThrow("fenced");
   await expect(old.stop()).rejects.toThrow("fenced");
@@ -108,7 +108,7 @@ it("drains in-flight calls and coalesces local and remote stop", async () => {
   options.lifecycle.stop = async () => {
     stops++;
   };
-  const attached = await server.expose(options);
+  const attached = await server.expose<Methods>(options);
   const peer = await client.connect<Methods>(identity);
   const call = peer.call("echo", "");
   await entered.promise;
@@ -129,12 +129,12 @@ it("retains ownership and temporary resources when stop fails; allows an explici
   options.lifecycle.stop = async () => {
     if (fail) throw new Error("body still owns resources");
   };
-  const attached = await server.expose(options);
+  const attached = await server.expose<Methods>(options);
   const peer = await client.connect<Methods>(identity);
   await expect(attached.close()).rejects.toThrow("still owns");
   expect((await peer.probe()).phase).toBe("failed");
   expect((await stat(attached.context.roots.runtime)).isDirectory()).toBe(true);
-  await expect(server.expose(options)).rejects.toThrow("already owned");
+  await expect(server.expose<Methods>(options)).rejects.toThrow("already owned");
   await expect(server.close()).rejects.toThrow("did not drain");
   await expect(server.expose<Methods>({ ...options, identity: { ...identity, service: "other" } })).rejects.toThrow(
     "closing",
@@ -153,11 +153,11 @@ it("drains initialization failure before allowing a replacement", async () => {
   options.lifecycle.stop = async () => {
     drained = true;
   };
-  await expect(server.expose(options)).rejects.toThrow("init failed");
+  await expect(server.expose<Methods>(options)).rejects.toThrow("init failed");
   expect(drained).toBe(true);
   await expect(client.connect(identity)).rejects.toThrow("not ready");
   options.lifecycle.initialize = async () => {};
-  await server.expose(options);
+  await server.expose<Methods>(options);
 });
 
 it("does not let shutdown retire a service while initialization is still running", async () => {
@@ -168,7 +168,7 @@ it("does not let shutdown retire a service while initialization is still running
   options.lifecycle.stop = async () => {
     drained = true;
   };
-  const opening = server.expose(options);
+  const opening = server.expose<Methods>(options);
   const rejected = expect(opening).rejects.toThrow("stopped during initialization");
   const stopping = server.close();
   expect(drained).toBe(false);
@@ -179,7 +179,7 @@ it("does not let shutdown retire a service while initialization is still running
 
 it("rejects non-serializable call input without crashing the host", async () => {
   const { server, client, options } = await fixture();
-  await server.expose(options);
+  await server.expose<Methods>(options);
   const peer = await client.connect<Methods>(identity);
   await expect(peer.call("count", 1n as unknown as number)).rejects.toThrow();
   expect(await peer.call("count", 1)).toBe(2);
@@ -205,7 +205,7 @@ it("holds a managed port, forwards only owned sockets and releases resources aft
   };
   options.lifecycle.stop = () =>
     new Promise<void>((done, reject) => http.close((error) => (error ? reject(error) : done())));
-  const attached = await server.expose(options);
+  const attached = await server.expose<Methods>(options);
   expect(await (await fetch(endpoint, { headers: { connection: "close" } })).text()).toBe("caller protocol");
   const grants = (await client.resources(identity.namespace)).grants;
   expect(grants.filter((g) => g.kind === "port" || g.kind === "socket")).toHaveLength(2);
@@ -214,4 +214,63 @@ it("holds a managed port, forwards only owned sockets and releases resources aft
   await expect(stat(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
   await expect(attached.context.allocate({ kind: "port", name: "late" })).rejects.toThrow("not allocating");
   expect((await client.resources(identity.namespace)).grants.every((g) => g.scope === "namespace")).toBe(true);
+});
+
+it("keeps one service slot across generations until successful retirement", async () => {
+  const { server, client, options } = await fixture();
+  let fail = true;
+  const first = await server.expose<Methods>({
+    ...options,
+    lifecycle: {
+      initialize: async () => {},
+      stop: async () => {
+        if (fail) throw new Error("drain failed");
+      },
+    },
+  });
+  const peer = await client.connect<Methods>(identity);
+  const next = { ...options, identity: { ...identity, generation: digest("next") } };
+  await expect(server.expose<Methods>(next)).rejects.toThrow("already owned");
+  await expect(first.close()).rejects.toThrow("drain failed");
+  await expect(server.expose<Methods>(next)).rejects.toThrow("already owned");
+  fail = false;
+  await first.close();
+  const replacement = await server.expose<Methods>(next);
+  expect(replacement.context.incarnation).not.toBe(first.context.incarnation);
+  expect(replacement.context.roots.data).toBe(first.context.roots.data);
+  await expect(client.connect(identity)).rejects.toThrow("not ready");
+  await expect(peer.stop()).rejects.toThrow("fenced");
+  await expect(first.context.allocate({ kind: "lock", name: "late" })).rejects.toThrow("not allocating");
+  await first.close();
+  expect(await (await client.connect<Methods>(next.identity)).call("echo", "next")).toBe("next");
+});
+it("retries partial grant retirement without releasing an already retired grant again", async () => {
+  const { server, options } = await fixture();
+  const paths: string[] = [];
+  const attached = await server.expose<Methods>({
+    ...options,
+    lifecycle: {
+      initialize: async (context) => {
+        paths.push((await context.allocate({ kind: "lock", name: "first" })).value);
+        paths.push((await context.allocate({ kind: "lock", name: "second" })).value);
+      },
+      stop: async () => {},
+    },
+  });
+  const release = Resources.prototype.release;
+  let calls = 0;
+  const spy = vi.spyOn(Resources.prototype, "release").mockImplementation(function (this: Resources, ...args) {
+    if (++calls === 2) return Promise.reject(new Error("injected retirement failure"));
+    return release.apply(this, args);
+  });
+  try {
+    await expect(attached.close()).rejects.toThrow("injected retirement failure");
+    await expect(stat(paths[0] as string)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await stat(paths[1] as string)).isFile()).toBe(true);
+    await attached.close();
+    await expect(stat(paths[1] as string)).rejects.toMatchObject({ code: "ENOENT" });
+    await attached.closed;
+  } finally {
+    spy.mockRestore();
+  }
 });

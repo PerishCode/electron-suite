@@ -1,12 +1,13 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { chmod } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
-import { dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { type Capability, type Namespace, namespace, type Permit } from "@perishcode/protocol";
 import { Bindings } from "../binding.js";
 import { Hosted } from "../control/hosted.js";
 import type { Attachment, Expose } from "../control/types.js";
 import { Sidecar } from "../host.js";
+import { Ownership } from "./ownership.js";
 import { Resources } from "./resource.js";
 import { decode, encode, type Request, type Response } from "./wire.js";
 
@@ -142,6 +143,8 @@ export async function serve(
   authority = randomBytes(32).toString("base64url"),
   root = dirname(endpoint),
 ): Promise<Service> {
+  root = resolve(root);
+  const ownership = await Ownership.claim(join(root, "manager.sqlite"));
   const hosts = new Map<Namespace, Promise<Resources>>();
   const hosted = new Hosted(async (name) => runtime.open(name));
   const runtime: Runtime = {
@@ -163,8 +166,14 @@ export async function serve(
   };
   const server = createServer();
   accept(server, runtime, authority);
-  await listen(server, endpoint);
-  if (process.platform !== "win32") await chmod(endpoint, 0o600);
+  try {
+    await listen(server, endpoint);
+    if (process.platform !== "win32") await chmod(endpoint, 0o600);
+  } catch (fault) {
+    if (server.listening) await close(server);
+    ownership.close();
+    throw fault;
+  }
 
   let shutdown: Promise<void> | undefined;
   const stop = async () => {
@@ -172,8 +181,9 @@ export async function serve(
     await hosted.close();
     const results = await host.close();
     if (results.some((result) => result.status !== "stopped")) throw new Error("sidecar processes remain alive");
-    await close(server);
+    if (server.listening) await close(server);
     await Promise.all([...hosts.values()].map(async (pending) => (await pending).close()));
+    ownership.close();
   };
   return {
     authority,

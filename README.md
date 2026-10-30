@@ -153,3 +153,16 @@ hosted 服务在 initialize 中接收只读身份及 data/logs/resource/runtime 
 新增职责或 pattern 必须经授权，并同步规则回归与必要索引；已有授权 pattern 范围内可正常迭代。AGENTS 说明这一演进流程，不将结构永久冻结。specs/skills/assets 等目录没有隐式特权。
 
 exclude 不能隐藏未知目录或已授权源码目录。仅仓库根 node_modules/.artifacts/.state 和实际 module 根 node_modules/dist/coverage 可作为不展开的生成/依赖/运行数据边界；这些内容不计入源码合规证明。JSON 的 pruned 字段列出边界，directories 字段记录生效的白名单。目录规则拒绝符号链接（包括排除边界上的链接），不遍历链接目标。Git 元数据仅在仓库根特殊处理。
+
+
+## Sidecar 0.3：独占权威与中断阻塞
+
+同一数据根只能存在一个 manager，同一 namespace 只能存在一个 Resources owner；受管 API 在触碰旧资源前取得权威。内部使用 Node24 内置 SQLite 的独占锁与已提交 owner 状态，没有新增 npm/native 依赖，也不通过 PID/mtime 或删除陈旧 socket 抢占。root alias 归一化，namespace 路径拒绝符号链接。SQLite 的同步调用仅用于小型权威记录；竞争立即失败，不在事件循环中等待抢锁。
+
+正常 close 在排空后退休权威，随后可重开。关闭中的 Resources 拒绝新操作，关闭后旧对象不能修改或关闭后继。namespace/channel/service 槽位跨 generation 排他；停止失败继续占有槽位，成功退休后才可替换，旧代连接与 incarnation 被 fence。
+
+异常退出、未发布/损坏 authority、丢失 committed registry、没有 ownership 见证的旧 attempt 资源，均明确报 recovery required。原状态与资源保留，不把不确定性当作 absent；禁止删除 authority/registry 来绕过错误。当前尚不提供自动接管或清理中断权威的公共命令。首次升级前应由旧 owner 正常 drain/close；遗留临时资源没有见证时保持阻塞。
+
+这一步只证明受管入口的独占权威、中断阻塞与 hosted 跨代隔离，未完成完整服务实例持久目录、lifecycle session、存活子进程接管或四单元统一控制面。slim 的独立探针消费此增量，四单元 runtime 仍固定在首版发布 SDK；#10 保持 Open。约束尺度依靠 API、参考骨架、AGENTS 与验收，不建设 OS 沙箱。
+
+Direct Resources 使用者必须先排空自己持有的 body，再正常 close；Hosted/Service 路径负责按顺序调用生命周期。需要恢复的状态是下一步协议的输入，不是建议下游另写资源清理器。

@@ -1,5 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { chmod, type FileHandle, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  type FileHandle,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { createConnection, createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -17,6 +28,7 @@ import {
   resources,
   revoke,
 } from "@perishcode/protocol";
+import { Ownership } from "./ownership.js";
 
 const durable = new Set<Resource>(["cache", "cas", "data", "logs"]);
 const transient = new Set<Resource>(["lock", "port", "socket", "staging"]);
@@ -109,8 +121,15 @@ export class Resources {
   readonly #handles = new Map<string, Handle>();
   #pending = Promise.resolve();
   #state: Registry;
+  #closing = false;
+  #closed = false;
+  #shutdown?: Promise<void>;
 
-  private constructor(base: string, state: Registry) {
+  private constructor(
+    base: string,
+    state: Registry,
+    private ownership: Ownership,
+  ) {
     this.#base = base;
     this.#file = join(base, "registry.json");
     this.#state = state;
@@ -118,29 +137,45 @@ export class Resources {
 
   static async open(options: ResourceOptions): Promise<Resources> {
     const name = namespace(options.namespace);
-    const base = resolve(options.root, "namespaces", name);
+    await mkdir(options.root, { mode: 0o700, recursive: true });
+    const root = await realpath(options.root);
+    const namespaces = join(root, "namespaces");
+    await mkdir(namespaces, { mode: 0o700, recursive: true });
+    if (!(await lstat(namespaces)).isDirectory()) throw new Error("namespace root must be a regular directory");
+    const base = join(namespaces, name);
     await mkdir(base, { mode: 0o700, recursive: true });
+    if (!(await lstat(base)).isDirectory()) throw new Error("namespace must be a regular directory");
     await chmod(base, 0o700);
-    let state: Registry = { grants: [], namespace: name, revision: 0 };
+    const ownership = await Ownership.claim(join(base, "ownership.sqlite"));
     try {
-      state = registry(JSON.parse(await readFile(join(base, "registry.json"), "utf8")), base, name);
-    } catch (fault) {
-      if ((fault as NodeJS.ErrnoException).code !== "ENOENT") throw fault;
-    }
+      let state: Registry = { grants: [], namespace: name, revision: 0 };
+      try {
+        state = registry(JSON.parse(await readFile(join(base, "registry.json"), "utf8")), base, name);
+      } catch (fault) {
+        if ((fault as NodeJS.ErrnoException).code !== "ENOENT") throw fault;
+        if (!ownership.fresh) throw new Error("resource registry missing; recovery required");
+      }
 
-    const stale = state.grants.filter((grant) => grant.scope === "attempt");
-    state = {
-      ...state,
-      grants: state.grants.filter((grant) => grant.scope === "namespace"),
-      revision: state.revision + (stale.length > 0 ? 1 : 0),
-    };
-    const host = new Resources(base, state);
-    for (const grant of stale) await host.#remove(grant);
-    await host.#save();
-    return host;
+      const stale = state.grants.filter((grant) => grant.scope === "attempt");
+      if (ownership.fresh && stale.length)
+        throw new Error("attempt resources have unpublished ownership; recovery required");
+      state = {
+        ...state,
+        grants: state.grants.filter((grant) => grant.scope === "namespace"),
+        revision: state.revision + (stale.length > 0 ? 1 : 0),
+      };
+      const host = new Resources(base, state, ownership);
+      for (const grant of stale) await host.#remove(grant);
+      await host.#save();
+      return host;
+    } catch (fault) {
+      ownership.abandon();
+      throw fault;
+    }
   }
 
   snapshot(): Registry {
+    if (this.#closed) throw new Error("resources are closed");
     return structuredClone(this.#state);
   }
 
@@ -170,11 +205,26 @@ export class Resources {
   }
 
   close(): Promise<void> {
-    return this.#run(async () => {
-      const handles = [...this.#handles.values()];
-      this.#handles.clear();
-      await Promise.all(handles.map(close));
-    });
+    if (this.#closed) return Promise.resolve();
+    this.#closing = true;
+    this.#shutdown ??= this.#pending
+      .then(async () => {
+        for (const [lease, handle] of this.#handles) {
+          await close(handle);
+          this.#handles.delete(lease);
+        }
+        this.ownership.close();
+        this.#closed = true;
+      })
+      .catch((fault) => {
+        this.#shutdown = undefined;
+        throw fault;
+      });
+    this.#pending = this.#shutdown.then(
+      () => undefined,
+      () => undefined,
+    );
+    return this.#shutdown;
   }
 
   async #grant(request: Request): Promise<Grant> {
@@ -217,8 +267,14 @@ export class Resources {
     if (!grant) throw new Error("resource unknown");
     await this.#cleanup(grant, this.#handles.get(lease));
     this.#handles.delete(lease);
+    const before = this.#state;
     this.#state = result.state;
-    await this.#save();
+    try {
+      await this.#save();
+    } catch (fault) {
+      this.#state = before;
+      throw fault;
+    }
   }
 
   async #create(request: Request, lease: string): Promise<{ handle?: Handle; value: string }> {
@@ -253,6 +309,7 @@ export class Resources {
   }
 
   async #run<T>(action: () => Promise<T>): Promise<T> {
+    if (this.#closing || this.#closed) return Promise.reject(new Error("resources are closing or closed"));
     const result = this.#pending.then(action, action);
     this.#pending = result.then(
       () => undefined,

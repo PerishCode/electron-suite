@@ -18,7 +18,10 @@ interface Entry {
   calls: Set<Promise<unknown>>;
   close(): Promise<void>;
 }
-const key = (value: Identity): string => JSON.stringify(identity(value));
+const key = (value: Identity): string => {
+  const scope = identity(value);
+  return JSON.stringify([scope.namespace, scope.channel, scope.service]);
+};
 const equal = (a: string, b: string): boolean => {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
@@ -61,8 +64,14 @@ export class Hosted {
           await Promise.allSettled([...entry.calls]);
           await Promise.allSettled([...allocations]);
           await options.lifecycle.stop();
-          for (const grant of grants.values()) await resources?.release(grant.lease, []);
-          if (resources && temporary) await resources.release(temporary, []);
+          for (const [value, grant] of grants) {
+            await resources?.release(grant.lease, []);
+            grants.delete(value);
+          }
+          if (resources && temporary) {
+            await resources.release(temporary, []);
+            temporary = undefined;
+          }
           if (this.entries.get(id) === entry) this.entries.delete(id);
           resolveClosed();
         })().catch((fault) => {
@@ -147,7 +156,8 @@ export class Hosted {
   private handlers = new WeakMap<Entry, Record<string, (input: unknown, context: Context) => unknown>>();
   connect(input: Identity): Descriptor {
     const entry = this.entries.get(key(input));
-    if (entry?.phase !== "ready") throw new Error("service is not ready");
+    if (entry?.phase !== "ready" || entry.capability.generation !== input.generation)
+      throw new Error("service is not ready");
     return { ...entry.capability };
   }
   async invoke(input: Descriptor, operation: string, method?: string, value?: unknown): Promise<unknown> {
