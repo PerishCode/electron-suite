@@ -2,3 +2,11 @@ schemaVersion: 1
 guard:
   components:
     - packages/components
+runtime:
+  appid: io.perish.electronsuite
+  carrier: 1
+  channel: stable
+  name: electron-suite
+  namespace: primary
+  scheme: electronsuite
+  version: 1.0.0

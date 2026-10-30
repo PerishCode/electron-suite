@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { format, guard } from "@perishcode/guard";
+import { lifecycle, lifecycleHelp } from "./lifecycle.js";
 
 const version = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string })
   .version;
@@ -18,14 +19,15 @@ export async function run(args: string[], cwd: string, output: Output): Promise<
   const json = args.includes("--json");
   try {
     if (args.length === 1 && ["--help", "-h"].includes(args[0] ?? "")) {
-      output.stdout(`${help}\n`);
+      output.stdout(`${help}\n\n${lifecycleHelp}\n`);
       return 0;
     }
     if (args.length === 1 && args[0] === "--version") {
       output.stdout(`${version}\n`);
       return 0;
     }
-    if (args[0] !== "guard") throw new Error("expected subcommand: pesuite guard");
+    if (args[0] === "release" || args[0] === "pack") return await lifecycle(args, cwd, output);
+    if (args[0] !== "guard") throw new Error("expected subcommand: pesuite guard|release|pack");
     if (args.length === 2 && ["--help", "-h"].includes(args[1] ?? "")) {
       output.stdout(`${help}\n`);
       return 0;
@@ -56,7 +58,7 @@ export async function run(args: string[], cwd: string, output: Output): Promise<
     const message = error instanceof Error ? error.message : String(error);
     if (json)
       output.stdout(`${JSON.stringify({ schemaVersion: 1, ok: false, error: { kind: "operational", message } })}\n`);
-    else output.stderr(`pesuite guard: ${message}\n`);
+    else output.stderr(`pesuite ${args[0] ?? ""}: ${message}\n`);
     return 2;
   }
 }

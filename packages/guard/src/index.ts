@@ -5,6 +5,7 @@ import { load } from "./config/index.js";
 import { rule } from "./config/match.js";
 import { file } from "./rules/files.js";
 import { moduleRules } from "./rules/module.js";
+import { scripts } from "./rules/scripts.js";
 import { style } from "./rules/style.js";
 import { tree } from "./rules/tree.js";
 import { files } from "./scan/files.js";
@@ -27,7 +28,7 @@ export async function guard(options: GuardOptions): Promise<Report> {
   const policy = options.policy ?? (await load(root));
   const entries = await files(root, policy);
   const context: Context = { root, entries, policy, modules: await modules(root, entries, policy) };
-  const findings: Finding[] = [...tree(context), ...(await moduleRules(context))];
+  const findings: Finding[] = [...tree(context), ...(await moduleRules(context)), ...(await scripts(context))];
   for (const entry of entries) {
     if (entry.kind === "directory") continue;
     const source = sources.has(extname(entry.path).slice(1).toLowerCase());

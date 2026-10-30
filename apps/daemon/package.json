@@ -16,10 +16,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
-    "pretest": "pnpm run build",
+    "lint": "biome check .",
     "test": "vitest run -c vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json"
+    "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly && tsc -p tsconfig.tests.json"
   },
   "devDependencies": {
     "@perishcode/protocol": "workspace:*",
