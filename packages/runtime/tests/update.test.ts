@@ -87,12 +87,12 @@ describe("update", () => {
     await authority.publish(stable, 0, first.envelope, first.assets);
     await authority.publish(beta, 0, preview.envelope, preview.assets);
     const primary = new Capsule(client, namespace("primary"), stable);
-    const secondary = new Capsule(client, namespace("secondary"), beta);
+    const secondary = new Capsule(client, namespace("primary"), beta);
 
     await commit(primary, feed);
     await commit(secondary, feed);
     expect((await client.binding(namespace("primary"), stable)).state.current).toBe(first.envelope.digest);
-    expect((await client.binding(namespace("secondary"), beta)).state.current).toBe(preview.envelope.digest);
+    expect((await client.binding(namespace("primary"), beta)).state.current).toBe(preview.envelope.digest);
     const mounted = await primary.mount();
     expect(JSON.parse(await readFile(join(mounted.capsule, "release.json"), "utf8"))).toMatchObject({
       channel: "stable",
@@ -119,7 +119,7 @@ describe("update", () => {
     await primary.fail(attempt, "daemon timeout");
 
     expect((await client.binding(namespace("primary"), stable)).state.current).toBe(first.envelope.digest);
-    expect((await client.binding(namespace("secondary"), beta)).state.current).toBe(preview.envelope.digest);
+    expect((await client.binding(namespace("primary"), beta)).state.current).toBe(preview.envelope.digest);
     await expect(primary.mount()).rejects.toThrow("blocked");
   });
 });

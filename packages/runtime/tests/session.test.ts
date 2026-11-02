@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { channel } from "@perishcode/protocol";
 import { compose, resolve } from "@perishcode/release";
+import { readDirectory } from "@perishcode/sidecar";
 import { afterEach, expect, it } from "vitest";
 import { Session, type SessionOptions, writeProduct } from "@";
 
@@ -98,4 +99,67 @@ it("rejects incompatible carrier requirements before an activation attempt", asy
   const valid = await Session.open(options);
   sessions.push(valid);
   expect(valid.mount.target).not.toBe(product.envelope.digest);
+});
+
+it("keeps same-namespace channels isolated and preserves factory data across product versions", async () => {
+  const { options, root } = await fixture();
+  const run = async (manifest: SessionOptions["manifest"], seed: string, expected: unknown, value: string) => {
+    const session = await Session.open({ ...options, manifest, seed, candidate: seed });
+    sessions.push(session);
+    const payload = await session.activate();
+    await session.start();
+    expect(await session.request("read")).toEqual(expected);
+    await session.request("write", { value });
+    const receipt = await session.confirm(payload, "renderer");
+    expect(receipt.factory).toEqual({ namespace: "fixture", channel: manifest.channel });
+    expect(receipt.directory.instances).toContainEqual(
+      expect.objectContaining({
+        kind: "process",
+        service: "daemon",
+        namespace: "fixture",
+        channel: manifest.channel,
+        generation: receipt.generation,
+        pid: receipt.daemon.pid,
+        phase: "ready",
+      }),
+    );
+    await session.close();
+    return receipt;
+  };
+  const seed = async (lane: string, version: string) => {
+    const manifest = resolve({}, { channel: channel(lane), version });
+    const product = await compose(manifest, {
+      carrier: 1,
+      capsule: join(root, "capsule"),
+      daemon: join(root, "daemon"),
+      web: join(root, "web"),
+    });
+    const path = join(root, version);
+    await writeProduct(path, product);
+    return { manifest, path };
+  };
+  const first = await run(options.manifest, options.seed, {}, "stable1");
+  const beta = await seed("beta", "1.0.0-beta.1");
+  await run(beta.manifest, beta.path, {}, "beta1");
+  const next = await seed("stable", "2.0.0");
+  const upgraded = await run(next.manifest, next.path, { value: "stable1" }, "stable2");
+  expect(upgraded.generation).not.toBe(first.generation);
+  await run(beta.manifest, beta.path, { value: "beta1" }, "beta2");
+  const directory = await readDirectory(options.root);
+  expect(directory.manager.phase).toBe("closed");
+  expect(directory.factories.map((f) => [f.channel, f.namespace, f.phase]).sort()).toEqual([
+    ["beta", "fixture", "closed"],
+    ["stable", "fixture", "closed"],
+  ]);
+  expect(directory.instances.every((i) => i.phase === "retired")).toBe(true);
+}, 30000);
+
+it("rejects a foreign channel candidate before creating factory resources", async () => {
+  const { root, options, product } = await fixture();
+  const manifest = resolve({}, { channel: channel("beta"), version: "1.0.0-beta.1" });
+  await writeProduct(join(root, "foreign"), { ...product, manifest });
+  await expect(Session.open({ ...options, candidate: join(root, "foreign") })).rejects.toThrow("identity mismatch");
+  const directory = await readDirectory(options.root);
+  expect(directory.factories.every((f) => f.phase === "unopened")).toBe(true);
+  expect(directory.instances).toEqual([]);
 });

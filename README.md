@@ -107,7 +107,7 @@ renderer 只有 health/read/write 接口，不取得服务 token、任意 URL �
 
 Daemon 使用父进程管道作为存活信号；正常停止先收敛进程，再退休凭据和释放临时资源。
 启动失败保留阻塞状态，需要显式 recover 最近 committed generation；不隐式声称自动回退。
-持久资源按 namespace 隔离，产品应为不同渠道选择不同 userData 根；不要将此理解为自动跨渠道隔离。
+runtime/electron 0.2 的持久资源由 `<channel, namespace>` factory 隔离，同 factory 的版本更替保持数据连续。产品仍声明 userData 根；该根的 manager 中断会阻塞其管理的 factory，不能以换 channel 绕过。
 
 此 SDK 首版服务于四单元骨架，不迁移 OpenDesign 功能。本地 candidate 是调用者明确选择的可信目录，
 不构成公网更新授权；完整远端信任、签名安装器、跨平台进程树与提交中断恢复仍需独立验收。
@@ -280,3 +280,18 @@ publish 需要明确 --repository，默认 --mode draft。--require 指定必须
 GitHub 发布接口契约参考 [GitHub Releases REST API](https://docs.github.com/en/rest/releases/releases)。产品 workflow 默认 publish=false；CI registry 认证参考 [GitHub Packages npm](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry)，token 通过环境注入，不能提交配置或日志。实际验收与未验收项见 #32。
 
 发布组合：guard/cli 0.5.0、release 0.4.0、pack 0.2.0、pipeline 0.1.0。release 统一拥有 product 目录 IO，runtime 保留其既有 API 的源码 re-export；已发布四单元 SDK 仍为 0.1.0，pipeline 交付不代表 SDK 已完成 factory 版本迁移。
+
+
+## 四单元 factory SDK（#38）
+
+runtime/electron 0.2.0 与 CLI 0.6.0 将四单元 SDK 升级到 sidecar 0.6.0 / release 0.4.1。
+这取代前文仍描述首版 SDK 的待迁移状态；产品依旧只消费固定 registry 版本。
+Capsule 和 Session 绑定 factory 管理资源、进程与 binding，多步 lifecycle 操作在同 factory session 内执行。
+跨 factory attempt 在管理写入前拒绝；候选及已挂载内容必须匹配分发身份。
+运行收据同时记录 factory scope 与 sidecar directory 的 daemon 进程身份，不以业务层另建进程清单作为真相源。
+正常停止先退休 daemon、凭据和临时资源，成功关闭 manager 后才报告 stopped；失败关闭保留重试入口。
+
+正常升级与冷启动保留 factory 持久数据，同 namespace 的其他渠道独立。
+SIGKILL 后父管道仍使 daemon 收敛，但 manager 保留 interrupted 权威，重新启动必须报 recovery required。
+PESUITE_RECOVER 只恢复正常管理器内失败的 generation binding，不提供 manager 中断恢复或 live-child adoption。
+不得删除 authority/registry、改根或猜测 stable 来恢复旧布局。本增量不实现旧 SDK 数据迁移执行器。
