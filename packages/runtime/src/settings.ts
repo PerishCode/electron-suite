@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { namespace } from "@perishcode/protocol";
 import { type Manifest, parse as manifest } from "@perishcode/release";
 import { parse } from "yaml";
 
@@ -18,7 +19,7 @@ export async function settings(path: string): Promise<Settings> {
   for (const key of allowed.filter((key) => key !== "carrier")) {
     if (typeof value[key] !== "string" || !value[key]) throw new Error(`runtime.${key} is required`);
   }
-  if (!/^[a-z][a-z0-9]*$/.test(String(value.namespace))) throw new Error("invalid runtime namespace");
+  namespace(String(value.namespace));
   if (!Number.isSafeInteger(value.carrier) || Number(value.carrier) < 1) throw new Error("invalid carrier ABI");
   return {
     carrier: Number(value.carrier),

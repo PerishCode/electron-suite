@@ -7,6 +7,7 @@ export interface OwnerRecord {
   schema: 1;
   directory?: boolean;
   sessions?: boolean;
+  factories?: boolean;
   scope: string;
   incarnation: string;
   pid: number;
@@ -22,6 +23,7 @@ export class Ownership {
   private closed = false;
   private directory = false;
   private sessions = false;
+  private factories = false;
   private constructor(
     private db: DatabaseSync,
     readonly previous: OwnerRecord | undefined,
@@ -31,7 +33,7 @@ export class Ownership {
     this.fresh = fresh;
   }
 
-  static async claim(path: string): Promise<Ownership> {
+  static async claim(path: string, requireFactory = false): Promise<Ownership> {
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     const parent = await realpath(dirname(path));
     const scope = join(parent, basename(path));
@@ -66,12 +68,15 @@ export class Ownership {
       let previous: OwnerRecord | undefined;
       if (row) {
         const value = Ownership.parse(row.record, scope);
+        if (requireFactory && !value.factories)
+          throw new Error("ownership uses legacy namespace format; explicit migration required");
         if (value.phase === "active") throw new Error("ownership was interrupted; recovery required");
         previous = value;
       }
       const owner = new Ownership(db, previous, scope, fresh);
       owner.directory = previous?.directory === true;
       owner.sessions = previous?.sessions === true;
+      owner.factories = requireFactory || previous?.factories === true;
       owner.save("active");
       db.exec("COMMIT");
       return owner;
@@ -116,6 +121,7 @@ export class Ownership {
       phase: "active",
       ...(this.directory ? { directory: true } : {}),
       ...(this.sessions ? { sessions: true } : {}),
+      ...(this.factories ? { factories: true } : {}),
     };
   }
   readDirectory(): unknown {
@@ -179,7 +185,8 @@ export class Ownership {
       value.pid < 1 ||
       !["active", "closed"].includes(value.phase) ||
       (value.directory !== undefined && typeof value.directory !== "boolean") ||
-      (value.sessions !== undefined && typeof value.sessions !== "boolean")
+      (value.sessions !== undefined && typeof value.sessions !== "boolean") ||
+      (value.factories !== undefined && typeof value.factories !== "boolean")
     )
       throw new Error("ownership is invalid or unpublished; recovery required");
     return value;
@@ -190,6 +197,7 @@ export class Ownership {
       schema: 1,
       ...(this.directory ? { directory: true } : {}),
       ...(this.sessions ? { sessions: true } : {}),
+      ...(this.factories ? { factories: true } : {}),
       scope: this.scope,
       incarnation: this.incarnation,
       pid: process.pid,

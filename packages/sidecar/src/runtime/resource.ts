@@ -19,9 +19,9 @@ import {
   allocate,
   canonical,
   digest,
+  type FactoryScope,
+  factoryScope,
   type Grant,
-  type Namespace,
-  namespace,
   type Registry,
   type Request,
   type Resource,
@@ -33,8 +33,7 @@ import { Ownership } from "./ownership.js";
 const durable = new Set<Resource>(["cache", "cas", "data", "logs"]);
 const transient = new Set<Resource>(["lock", "port", "socket", "staging"]);
 
-export interface ResourceOptions {
-  namespace: Namespace;
+export interface ResourceOptions extends FactoryScope {
   root: string;
 }
 
@@ -87,10 +86,16 @@ async function close(handle: Handle): Promise<void> {
   });
 }
 
-function registry(value: unknown, base: string, name: Namespace): Registry {
+function registry(value: unknown, base: string, scope: FactoryScope): Registry {
   if (!value || typeof value !== "object") throw new TypeError("invalid registry");
   const state = value as Registry;
-  if (state.namespace !== name || !Number.isSafeInteger(state.revision) || state.revision < 0) {
+  if (
+    state.schema !== 2 ||
+    state.namespace !== scope.namespace ||
+    state.channel !== scope.channel ||
+    !Number.isSafeInteger(state.revision) ||
+    state.revision < 0
+  ) {
     throw new TypeError("invalid registry");
   }
   if (!Array.isArray(state.grants)) throw new TypeError("invalid registry");
@@ -105,13 +110,15 @@ function registry(value: unknown, base: string, name: Namespace): Registry {
       throw new TypeError("invalid registry scheme");
     }
     if (grant.kind !== "port" && grant.scheme !== undefined) throw new TypeError("invalid registry scheme");
-    const scoped = grant.scope === "namespace" && grant.owner === undefined && durable.has(grant.kind);
+    const scoped = grant.scope === "factory" && grant.owner === undefined && durable.has(grant.kind);
     const attempted = grant.scope === "attempt" && Boolean(grant.owner) && transient.has(grant.kind);
     if (!scoped && !attempted) throw new TypeError("invalid registry scope");
     if (grant.kind !== "port" && grant.value !== path(base, grant, grant.lease)) {
       throw new TypeError("invalid registry path");
     }
   }
+  if (new Set(state.grants.map((grant) => grant.lease)).size !== state.grants.length)
+    throw new TypeError("duplicate registry lease");
   return state;
 }
 
@@ -125,6 +132,7 @@ export class Resources {
   #closed = false;
   #shutdown?: Promise<void>;
   readonly incarnation: string;
+  readonly scope: Readonly<FactoryScope>;
 
   private constructor(
     base: string,
@@ -132,27 +140,37 @@ export class Resources {
     private ownership: Ownership,
   ) {
     this.incarnation = ownership.incarnation;
+    this.scope = factoryScope(state);
     this.#base = base;
     this.#file = join(base, "registry.json");
     this.#state = state;
   }
 
   static async open(options: ResourceOptions): Promise<Resources> {
-    const name = namespace(options.namespace);
+    const scope = factoryScope(options);
     await mkdir(options.root, { mode: 0o700, recursive: true });
     const root = await realpath(options.root);
-    const namespaces = join(root, "namespaces");
+    try {
+      await lstat(join(root, "namespaces"));
+      throw new Error("legacy namespace resources; explicit migration required");
+    } catch (fault) {
+      if ((fault as NodeJS.ErrnoException).code !== "ENOENT") throw fault;
+    }
+    const namespaces = join(root, "factories");
     await mkdir(namespaces, { mode: 0o700, recursive: true });
     if (!(await lstat(namespaces)).isDirectory()) throw new Error("namespace root must be a regular directory");
-    const base = join(namespaces, name);
+    const lane = join(namespaces, scope.channel);
+    await mkdir(lane, { mode: 0o700, recursive: true });
+    if (!(await lstat(lane)).isDirectory()) throw new Error("factory channel must be a regular directory");
+    const base = join(lane, scope.namespace);
     await mkdir(base, { mode: 0o700, recursive: true });
     if (!(await lstat(base)).isDirectory()) throw new Error("namespace must be a regular directory");
     await chmod(base, 0o700);
-    const ownership = await Ownership.claim(join(base, "ownership.sqlite"));
+    const ownership = await Ownership.claim(join(base, "ownership.sqlite"), true);
     try {
-      let state: Registry = { grants: [], namespace: name, revision: 0 };
+      let state: Registry = { schema: 2, grants: [], ...scope, revision: 0 };
       try {
-        state = registry(JSON.parse(await readFile(join(base, "registry.json"), "utf8")), base, name);
+        state = registry(JSON.parse(await readFile(join(base, "registry.json"), "utf8")), base, scope);
       } catch (fault) {
         if ((fault as NodeJS.ErrnoException).code !== "ENOENT") throw fault;
         if (!ownership.fresh) throw new Error("resource registry missing; recovery required");
@@ -163,7 +181,7 @@ export class Resources {
         throw new Error("attempt resources have unpublished ownership; recovery required");
       state = {
         ...state,
-        grants: state.grants.filter((grant) => grant.scope === "namespace"),
+        grants: state.grants.filter((grant) => grant.scope === "factory"),
         revision: state.revision + (stale.length > 0 ? 1 : 0),
       };
       const host = new Resources(base, state, ownership);
@@ -232,7 +250,7 @@ export class Resources {
   async #grant(request: Request): Promise<Grant> {
     const current = this.#state.grants.find((item) => same(item, request));
     if (current) return current;
-    if (durable.has(request.kind) !== (request.scope === "namespace")) {
+    if (durable.has(request.kind) !== (request.scope === "factory")) {
       throw new TypeError("resource scope mismatch");
     }
     if (!durable.has(request.kind) && !transient.has(request.kind)) {

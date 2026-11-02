@@ -106,16 +106,21 @@ describe("server", () => {
     services.push(service);
     const client = new Client(endpoint, service.authority);
     const scope = namespace("main");
-    const grant = await client.grant(scope, {
-      kind: "staging",
-      name: "capsule",
-      owner: "attempt",
-      scope: "attempt",
-    });
+    const grant = await client.grant(
+      { channel: channel("stable"), namespace: scope },
+      {
+        kind: "staging",
+        name: "capsule",
+        owner: "attempt",
+        scope: "attempt",
+      },
+    );
 
-    expect((await client.resources(scope)).grants).toEqual([grant]);
-    await expect(new Client(endpoint, "forged").resources(scope)).rejects.toThrow("authority");
-    expect((await client.revoke(scope, grant.lease)).grants).toEqual([]);
+    expect((await client.resources({ channel: channel("stable"), namespace: scope })).grants).toEqual([grant]);
+    await expect(
+      new Client(endpoint, "forged").resources({ channel: channel("stable"), namespace: scope }),
+    ).rejects.toThrow("authority");
+    expect((await client.revoke({ channel: channel("stable"), namespace: scope }, grant.lease)).grants).toEqual([]);
   });
 
   it("issues attempt capabilities across channel and namespace boundaries", async () => {

@@ -96,7 +96,7 @@ export class Bindings {
   readonly #seen = new Set<string>();
 
   constructor(root: string) {
-    this.#root = resolve(root, "bindings");
+    this.#root = resolve(root, "factories");
   }
 
   read(scope: Namespace, lane: Channel): Promise<Journal> {
@@ -142,7 +142,7 @@ export class Bindings {
   }
 
   #path(scope: Namespace, lane: Channel): string {
-    return join(this.#root, lane, `${scope}.json`);
+    return join(this.#root, lane, scope, "binding.json");
   }
 
   #run<T>(scope: Namespace, lane: Channel, action: () => Promise<T>): Promise<T> {
@@ -161,7 +161,7 @@ export class Bindings {
   }
 
   async #save(scope: Namespace, lane: Channel, journal: Journal): Promise<void> {
-    const root = join(this.#root, lane);
+    const root = join(this.#root, lane, scope);
     const path = this.#path(scope, lane);
     const temporary = `${path}.tmp`;
     await mkdir(root, { mode: 0o700, recursive: true });

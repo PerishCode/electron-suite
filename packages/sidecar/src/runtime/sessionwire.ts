@@ -13,6 +13,7 @@ export interface Ambient {
 }
 export const ambient = new AsyncLocalStorage<Ambient>();
 export function lifecycleScope(request: Request): SessionScope | undefined {
+  if (["grant", "revoke", "forward", "binding", "resources"].includes(request.type)) return request as SessionScope;
   if (request.type === "start") return request.spec;
   if (request.type === "attach" || request.type === "release") return request.lease;
   if (request.type === "invoke" && request.operation === "stop") return request.descriptor;

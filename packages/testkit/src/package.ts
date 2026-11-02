@@ -52,16 +52,28 @@ async function launch(client: Client, app: string, manifest: Manifest, mount: Mo
   const scope = namespace(`installed${manifest.channel}`);
   const owner = `installed${manifest.channel}`;
   const capability = await client.issue({ channel: manifest.channel, namespace: scope, owner, service: "daemon" });
-  const data = await client.grant(scope, { kind: "data", name: "daemon", scope: "namespace" });
-  const carrier = await client.grant(scope, { kind: "data", name: "carrier", scope: "namespace" });
-  const socket = await client.grant(scope, { kind: "socket", name: "daemon", owner, scope: "attempt" });
-  const port = await client.grant(scope, {
-    kind: "port",
-    name: "daemon",
-    owner,
-    scheme: "http",
-    scope: "attempt",
-  });
+  const data = await client.grant(
+    { namespace: scope, channel: manifest.channel },
+    { kind: "data", name: "daemon", scope: "factory" },
+  );
+  const carrier = await client.grant(
+    { namespace: scope, channel: manifest.channel },
+    { kind: "data", name: "carrier", scope: "factory" },
+  );
+  const socket = await client.grant(
+    { namespace: scope, channel: manifest.channel },
+    { kind: "socket", name: "daemon", owner, scope: "attempt" },
+  );
+  const port = await client.grant(
+    { namespace: scope, channel: manifest.channel },
+    {
+      kind: "port",
+      name: "daemon",
+      owner,
+      scheme: "http",
+      scope: "attempt",
+    },
+  );
   const executable = join(app, "Contents", "MacOS", manifest.identity.scheme);
   const resources = join(app, "Contents", "Resources");
   let lease: Lease | undefined;
@@ -87,7 +99,7 @@ async function launch(client: Client, app: string, manifest: Manifest, mount: Mo
       ready: "ready",
       slot: "daemon",
     });
-    await client.forward(scope, port.lease, socket.lease);
+    await client.forward({ namespace: scope, channel: manifest.channel }, port.lease, socket.lease);
     child = spawn(executable, [], {
       env: {
         ...process.env,

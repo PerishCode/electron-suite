@@ -2,14 +2,17 @@ import type {
   Capability,
   Channel,
   Event,
+  FactoryScope,
   Grant,
   Namespace,
   Permit,
   Registry,
   Request as ResourceRequest,
 } from "@perishcode/protocol";
+import { factoryScope } from "@perishcode/protocol";
 import type { Change, Journal } from "./binding.js";
 import type { Directory } from "./control/directory.js";
+import { Factory } from "./control/factory.js";
 import { Peer } from "./control/peer.js";
 import type { SessionScope } from "./control/session.js";
 import type { Identity } from "./control/types.js";
@@ -41,6 +44,10 @@ export class Client {
   private send(request: Request): Promise<unknown> {
     return this.within(() => call(this.endpoint, request, this.timeout));
   }
+  factory(scope: FactoryScope): Factory {
+    return this.within(() => new Factory(this, scope));
+  }
+
   async session<T>(scope: SessionScope, operation: (client: Client) => Promise<T>): Promise<T> {
     return this.within(() =>
       remoteSession(this.endpoint, this.authority, scope, this.timeout, () => {
@@ -72,8 +79,8 @@ export class Client {
     return (await this.send({ lease, type: "release" })) as Release;
   }
 
-  async directory(namespace: Namespace): Promise<Directory> {
-    return (await this.send({ authority: this.authority, namespace, type: "directory" })) as Directory;
+  async directory(scope: FactoryScope): Promise<Directory> {
+    return (await this.send({ authority: this.authority, ...factoryScope(scope), type: "directory" })) as Directory;
   }
 
   async inspect(): Promise<Snapshot[]> {
@@ -119,39 +126,39 @@ export class Client {
     })) as boolean;
   }
 
-  async grant(namespace: Namespace, resource: ResourceRequest): Promise<Grant> {
+  async grant(scope: FactoryScope, resource: ResourceRequest): Promise<Grant> {
     return (await this.send({
       authority: this.authority,
-      namespace,
+      ...factoryScope(scope),
       resource,
       type: "grant",
     })) as Grant;
   }
 
-  async revoke(namespace: Namespace, lease: string, survivors: number[] = []): Promise<Registry> {
+  async revoke(scope: FactoryScope, lease: string, survivors: number[] = []): Promise<Registry> {
     return (await this.send({
       authority: this.authority,
       lease,
-      namespace,
+      ...factoryScope(scope),
       survivors,
       type: "revoke",
     })) as Registry;
   }
 
-  async forward(namespace: Namespace, port: string, socket: string): Promise<Registry> {
+  async forward(scope: FactoryScope, port: string, socket: string): Promise<Registry> {
     return (await this.send({
       authority: this.authority,
-      namespace,
+      ...factoryScope(scope),
       port,
       socket,
       type: "forward",
     })) as Registry;
   }
 
-  async resources(namespace: Namespace): Promise<Registry> {
+  async resources(scope: FactoryScope): Promise<Registry> {
     return (await this.send({
       authority: this.authority,
-      namespace,
+      ...factoryScope(scope),
       type: "resources",
     })) as Registry;
   }

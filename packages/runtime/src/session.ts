@@ -119,15 +119,24 @@ export class Session {
       owner,
       service: "daemon",
     });
-    const data = await this.client.grant(scope, { kind: "data", name: "daemon", scope: "namespace" });
-    const socket = await this.client.grant(scope, { kind: "socket", name: "daemon", owner, scope: "attempt" });
-    const port = await this.client.grant(scope, {
-      kind: "port",
-      name: "daemon",
-      owner,
-      scope: "attempt",
-      scheme: "http",
-    });
+    const data = await this.client.grant(
+      { namespace: scope, channel: this.manifest.channel },
+      { kind: "data", name: "daemon", scope: "factory" },
+    );
+    const socket = await this.client.grant(
+      { namespace: scope, channel: this.manifest.channel },
+      { kind: "socket", name: "daemon", owner, scope: "attempt" },
+    );
+    const port = await this.client.grant(
+      { namespace: scope, channel: this.manifest.channel },
+      {
+        kind: "port",
+        name: "daemon",
+        owner,
+        scope: "attempt",
+        scheme: "http",
+      },
+    );
     this.transient.push(port.lease, socket.lease);
     this.lease = await this.client.start({
       command: this.options.executable,
@@ -148,7 +157,7 @@ export class Session {
         PERISH_LIFELINE: "1",
       },
     });
-    await this.client.forward(scope, port.lease, socket.lease);
+    await this.client.forward({ namespace: scope, channel: this.manifest.channel }, port.lease, socket.lease);
     this.endpoint = port.value;
     const health = await this.request("health");
     if (health.pid !== this.lease.pid || health.generation !== this.mount.target || health.nonce !== this.nonce) {
@@ -202,7 +211,11 @@ export class Session {
       if (this.lease) result = await this.client.release(this.lease);
       if (result.survivors.length) throw new Error("daemon survived retirement");
       if (this.capability) await this.client.retire(this.capability);
-      for (const lease of this.transient) await this.client.revoke(namespace(this.options.namespace), lease);
+      for (const lease of this.transient)
+        await this.client.revoke(
+          { namespace: namespace(this.options.namespace), channel: this.manifest.channel },
+          lease,
+        );
       return result;
     } finally {
       await this.host.close();

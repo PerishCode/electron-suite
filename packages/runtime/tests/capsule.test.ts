@@ -85,7 +85,10 @@ describe("capsule", () => {
     for (const gate of gates) attempt = await capsule.ready(attempt, gate);
     const recovered = await capsule.commit(attempt);
     expect(recovered.state).toEqual({ channel: lane, current: first.envelope.digest, namespace: scope });
-    expect((await client.resources(scope)).grants.map((grant) => grant.kind)).toEqual(["cas", "data"]);
+    expect((await client.resources({ namespace: scope, channel: lane })).grants.map((grant) => grant.kind)).toEqual([
+      "cas",
+      "data",
+    ]);
   });
 
   it("rejects content before arming a generation", async () => {
@@ -104,6 +107,8 @@ describe("capsule", () => {
 
     await expect(capsule.stage(value.envelope, value.contents)).rejects.toThrow("verification");
     expect(await client.binding(scope, lane)).toMatchObject({ revision: 0, state: { channel: lane } });
-    expect((await client.resources(scope)).grants.map((grant) => grant.kind)).toEqual(["cas"]);
+    expect((await client.resources({ namespace: scope, channel: lane })).grants.map((grant) => grant.kind)).toEqual([
+      "cas",
+    ]);
   });
 });

@@ -1,9 +1,9 @@
-import type { Namespace } from "./identity.js";
+import type { FactoryScope } from "./identity.js";
 
 export const resources = ["port", "socket", "data", "cache", "logs", "cas", "staging", "lock"] as const;
 
 export type Resource = (typeof resources)[number];
-export type Scope = "namespace" | "attempt";
+export type Scope = "factory" | "attempt";
 
 export interface Request {
   kind: Resource;
@@ -18,9 +18,9 @@ export interface Grant extends Request {
   value: string;
 }
 
-export interface Registry {
+export interface Registry extends FactoryScope {
+  schema: 2;
   grants: Grant[];
-  namespace: Namespace;
   revision: number;
 }
 
@@ -34,7 +34,7 @@ export type Revocation =
 
 function valid(request: Request): boolean {
   if (!resources.includes(request.kind)) return false;
-  if (request.scope !== "namespace" && request.scope !== "attempt") return false;
+  if (request.scope !== "factory" && request.scope !== "attempt") return false;
   if (!/^[a-z][a-z0-9]*$/.test(request.name)) return false;
   if (request.kind === "port" && request.scheme !== undefined) {
     if (request.scheme !== "http" && request.scheme !== "tcp") return false;
@@ -74,7 +74,7 @@ export function allocate(state: Registry, grant: Grant): Allocation {
 export function revoke(state: Registry, lease: string, survivors: number[]): Revocation {
   const grant = state.grants.find((item) => item.lease === lease);
   if (!grant) return { fault: "unknown", ok: false, state };
-  if (grant.scope === "namespace") return { fault: "persistent", ok: false, state };
+  if (grant.scope === "factory") return { fault: "persistent", ok: false, state };
   if (survivors.length > 0) return { fault: "survivors", ok: false, state };
 
   return {

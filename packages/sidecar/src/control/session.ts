@@ -1,9 +1,6 @@
-import { type Channel, channel, type Namespace, namespace } from "@perishcode/protocol";
+import { type FactoryScope, factoryKey, factoryScope } from "@perishcode/protocol";
 
-export interface SessionScope {
-  namespace: Namespace;
-  channel: Channel;
-}
+export type SessionScope = FactoryScope;
 export interface SessionRecord extends SessionScope {
   incarnation: string;
   manager: string;
@@ -17,13 +14,8 @@ export interface SessionHint extends SessionScope {
   token: string;
   parent?: string;
 }
-export const sessionKey = (scope: SessionScope) => JSON.stringify([scope.namespace, scope.channel]);
-export function sessionScope(input: unknown): SessionScope {
-  const value = input as SessionScope;
-  if (!value || typeof value.namespace !== "string" || typeof value.channel !== "string")
-    throw new Error("invalid lifecycle scope");
-  return { namespace: namespace(value.namespace), channel: channel(value.channel) };
-}
+export const sessionKey = factoryKey;
+export const sessionScope = factoryScope;
 export function sessionHint(input: unknown): SessionHint {
   const scope = sessionScope(input);
   const value = input as SessionHint;

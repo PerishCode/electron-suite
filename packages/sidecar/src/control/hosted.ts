@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { digest, type Grant } from "@perishcode/protocol";
+import { digest, type FactoryScope, type Grant } from "@perishcode/protocol";
 import type { Catalog } from "../runtime/catalog.js";
 import type { Resources } from "../runtime/resource.js";
 import type { Sessions } from "../runtime/sessions.js";
@@ -35,7 +35,7 @@ export class Hosted {
   private entries = new Map<string, Entry>();
   private closing = false;
   constructor(
-    private open: (namespace: string) => Promise<Resources>,
+    private open: (scope: FactoryScope) => Promise<Resources>,
     private catalog?: Catalog,
     private sessions?: Sessions,
   ) {}
@@ -124,11 +124,11 @@ export class Hosted {
     try {
       this.catalog?.claim(scope, incarnation, "hosted");
       claimed = true;
-      resources = await this.open(scope.namespace);
-      const name = `h${digest(`${scope.channel}:${scope.service}`).slice(7, 31)}`;
-      const data = await resources.grant({ kind: "data", name, scope: "namespace" });
-      const logs = await resources.grant({ kind: "logs", name, scope: "namespace" });
-      const resource = await resources.grant({ kind: "cache", name, scope: "namespace" });
+      resources = await this.open(scope);
+      const name = `h${digest(scope.service).slice(7, 31)}`;
+      const data = await resources.grant({ kind: "data", name, scope: "factory" });
+      const logs = await resources.grant({ kind: "logs", name, scope: "factory" });
+      const resource = await resources.grant({ kind: "cache", name, scope: "factory" });
       const runtime = await resources.grant({ kind: "staging", name, owner: incarnation, scope: "attempt" });
       temporary = runtime.lease;
       const context: Context = Object.freeze({
@@ -141,32 +141,42 @@ export class Hosted {
           if (!["port", "socket", "lock"].includes(request.kind) || !/^[a-z][a-z0-9]*$/.test(request.name)) {
             return Promise.reject(new Error("invalid service resource"));
           }
-          const pending = (async () => {
-            const grant = await (resources as Resources).grant({
-              ...request,
-              name: `h${digest(`${scope.channel}:${scope.service}:${request.name}`).slice(7, 31)}`,
-              scope: "attempt",
-              owner: incarnation,
-            });
-            grants.set(grant.value, grant);
-            return { kind: grant.kind, value: grant.value };
-          })();
-          allocations.add(pending);
-          void pending.finally(() => allocations.delete(pending)).catch(() => {});
-          return pending;
+          const allocate = async () => {
+            if (!["initializing", "ready"].includes(entry.phase)) throw new Error("service is not allocating");
+            const pending = (async () => {
+              const grant = await (resources as Resources).grant({
+                ...request,
+                name: `h${digest(`${scope.service}:${request.name}`).slice(7, 31)}`,
+                scope: "attempt",
+                owner: incarnation,
+              });
+              grants.set(grant.value, grant);
+              return { kind: grant.kind, value: grant.value };
+            })();
+            allocations.add(pending);
+            try {
+              return await pending;
+            } finally {
+              allocations.delete(pending);
+            }
+          };
+          return this.sessions ? this.sessions.run(scope, allocate) : allocate();
         },
         forward: async (port: string, socket: string) => {
-          if (!["initializing", "ready"].includes(entry.phase)) throw new Error("service is not forwarding");
-          const p = grants.get(port);
-          const s = grants.get(socket);
-          if (p?.kind !== "port" || s?.kind !== "socket") throw new Error("service resource ownership mismatch");
-          const pending = (resources as Resources).forward(p.lease, s.lease);
-          allocations.add(pending);
-          try {
-            await pending;
-          } finally {
-            allocations.delete(pending);
-          }
+          const forward = async () => {
+            if (!["initializing", "ready"].includes(entry.phase)) throw new Error("service is not forwarding");
+            const p = grants.get(port),
+              s = grants.get(socket);
+            if (p?.kind !== "port" || s?.kind !== "socket") throw new Error("service resource ownership mismatch");
+            const pending = (resources as Resources).forward(p.lease, s.lease);
+            allocations.add(pending);
+            try {
+              await pending;
+            } finally {
+              allocations.delete(pending);
+            }
+          };
+          return this.sessions ? this.sessions.run(scope, forward) : forward();
         },
       });
       entry.context = context;

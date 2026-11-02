@@ -1,10 +1,13 @@
+export type { FactoryScope } from "@perishcode/protocol";
 export type {
   Change,
   Journal,
 } from "./binding.js";
 export { Bindings } from "./binding.js";
 export { Client } from "./client.js";
-export type { Directory, Instance, NamespaceEntry, Phase } from "./control/directory.js";
+export type { Directory, FactoryEntry, Instance, Phase } from "./control/directory.js";
+export { Factory } from "./control/factory.js";
+export type { LegacyDirectory } from "./control/legacy.js";
 export { Peer } from "./control/peer.js";
 export type { SessionRecord, SessionScope } from "./control/session.js";
 export type { Attachment, Context, Expose, Identity } from "./control/types.js";
@@ -21,7 +24,7 @@ export type {
   Stop,
 } from "./runner.js";
 export { launch } from "./runner.js";
-export { readDirectory } from "./runtime/catalog.js";
+export { readDirectory, readLegacyDirectory } from "./runtime/catalog.js";
 export type { ResourceOptions } from "./runtime/resource.js";
 export { Resources } from "./runtime/resource.js";
 export type { Service } from "./runtime/server.js";

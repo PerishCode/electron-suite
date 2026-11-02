@@ -125,19 +125,25 @@ export class Capsule {
     const expected = new Map(list(manifest).map((artifact) => [key(artifact), artifact]));
     if (expected.size !== contents.length) throw new Error("generation content mismatch");
     const nonce = randomUUID();
-    const staging = await this.client.grant(this.namespace, {
-      kind: "staging",
-      name: "capsule",
-      owner: nonce,
-      scope: "attempt",
-    });
+    const staging = await this.client.grant(
+      { namespace: this.namespace, channel: this.channel },
+      {
+        kind: "staging",
+        name: "capsule",
+        owner: nonce,
+        scope: "attempt",
+      },
+    );
 
     try {
-      const cas = await this.client.grant(this.namespace, {
-        kind: "cas",
-        name: "artifact",
-        scope: "namespace",
-      });
+      const cas = await this.client.grant(
+        { namespace: this.namespace, channel: this.channel },
+        {
+          kind: "cas",
+          name: "artifact",
+          scope: "factory",
+        },
+      );
       const store = await Store.open({ root: cas.value });
       await mkdir(staging.value, { mode: 0o700, recursive: true });
       for (const content of contents) {
@@ -150,11 +156,14 @@ export class Capsule {
         if (key(stored) !== key(artifact)) throw new Error("artifact identity mismatch");
       }
       if (expected.size > 0) throw new Error("generation content missing");
-      const data = await this.client.grant(this.namespace, {
-        kind: "data",
-        name: "capsule",
-        scope: "namespace",
-      });
+      const data = await this.client.grant(
+        { namespace: this.namespace, channel: this.channel },
+        {
+          kind: "data",
+          name: "capsule",
+          scope: "factory",
+        },
+      );
       await persist(join(data.value, "generations", `${manifest.digest.slice(7)}.json`), canonical(manifest));
       const initial = await this.client.binding(this.namespace, this.channel);
       const armed = changed(
@@ -180,7 +189,7 @@ export class Capsule {
         target: manifest.digest,
       };
     } catch (fault) {
-      await this.client.revoke(this.namespace, staging.lease);
+      await this.client.revoke({ namespace: this.namespace, channel: this.channel }, staging.lease);
       throw fault;
     }
   }
@@ -206,7 +215,7 @@ export class Capsule {
         type: "commit",
       }),
     );
-    await this.client.revoke(this.namespace, attempt.lease);
+    await this.client.revoke({ namespace: this.namespace, channel: this.channel }, attempt.lease);
     return journal;
   }
 
@@ -219,18 +228,21 @@ export class Capsule {
         type: "fail",
       }),
     );
-    await this.client.revoke(this.namespace, attempt.lease);
+    await this.client.revoke({ namespace: this.namespace, channel: this.channel }, attempt.lease);
     return journal;
   }
 
   async recover(target: Digest): Promise<Attempt> {
     const nonce = randomUUID();
-    const staging = await this.client.grant(this.namespace, {
-      kind: "staging",
-      name: "capsule",
-      owner: nonce,
-      scope: "attempt",
-    });
+    const staging = await this.client.grant(
+      { namespace: this.namespace, channel: this.channel },
+      {
+        kind: "staging",
+        name: "capsule",
+        owner: nonce,
+        scope: "attempt",
+      },
+    );
     try {
       const initial = await this.client.binding(this.namespace, this.channel);
       const recovered = changed(
@@ -255,7 +267,7 @@ export class Capsule {
         target,
       };
     } catch (fault) {
-      await this.client.revoke(this.namespace, staging.lease);
+      await this.client.revoke({ namespace: this.namespace, channel: this.channel }, staging.lease);
       throw fault;
     }
   }
@@ -278,25 +290,34 @@ export class Capsule {
   }
 
   private async materialize(target: Digest): Promise<Mount> {
-    const data = await this.client.grant(this.namespace, {
-      kind: "data",
-      name: "capsule",
-      scope: "namespace",
-    });
+    const data = await this.client.grant(
+      { namespace: this.namespace, channel: this.channel },
+      {
+        kind: "data",
+        name: "capsule",
+        scope: "factory",
+      },
+    );
     const receipt = join(data.value, "generations", `${target.slice(7)}.json`);
     const manifest = envelope(JSON.parse(await readFile(receipt, "utf8")));
     if (manifest.digest !== target) throw new Error("generation receipt mismatch");
     if (manifest.generation.carrier > this.carrier) throw new Error("incompatible carrier ABI");
-    const cas = await this.client.grant(this.namespace, {
-      kind: "cas",
-      name: "artifact",
-      scope: "namespace",
-    });
-    const runtime = await this.client.grant(this.namespace, {
-      kind: "data",
-      name: "runtime",
-      scope: "namespace",
-    });
+    const cas = await this.client.grant(
+      { namespace: this.namespace, channel: this.channel },
+      {
+        kind: "cas",
+        name: "artifact",
+        scope: "factory",
+      },
+    );
+    const runtime = await this.client.grant(
+      { namespace: this.namespace, channel: this.channel },
+      {
+        kind: "data",
+        name: "runtime",
+        scope: "factory",
+      },
+    );
     const root = join(runtime.value, target.slice(7));
     const store = await Store.open({ root: cas.value });
     await mkdir(root, { mode: 0o700, recursive: true });
