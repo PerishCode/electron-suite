@@ -139,8 +139,12 @@ export async function pack(root: string, lane: string, platform?: string, arch?:
     const name = `${build.manifest.identity.scheme}-${build.version}-${selected.platform}-${selected.arch}.${selected.platform === "linux" ? "tar.gz" : "zip"}`;
     const archive = await owned(root, join(base, name));
     if (selected.platform === "mac") await execute("ditto", ["-c", "-k", "--keepParent", result.app, archive]);
-    else
-      await execute("tar", [
+    else {
+      const archiver =
+        selected.platform === "win"
+          ? join(process.env.SystemRoot ?? process.env.SYSTEMROOT ?? "C:\\Windows", "System32", "tar.exe")
+          : "tar";
+      await execute(archiver, [
         selected.platform === "win" ? "-a" : "-z",
         "-cf",
         archive,
@@ -148,6 +152,7 @@ export async function pack(root: string, lane: string, platform?: string, arch?:
         join(result.app, ".."),
         basename(result.app),
       ]);
+    }
     const bytes = await readFile(archive);
     const digest = hash(bytes);
     const receipt: PackReceipt = {
