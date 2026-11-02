@@ -1,6 +1,6 @@
 {
   "name": "@perishcode/pipeline",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "type": "module",
   "exports": {
     ".": {
@@ -21,7 +21,8 @@
     "@perishcode/release": "workspace:*",
     "@perishcode/pack": "workspace:*",
     "@perishcode/guard": "workspace:*",
-    "yaml": "2.9.1"
+    "yaml": "2.9.1",
+    "@perishcode/automation": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

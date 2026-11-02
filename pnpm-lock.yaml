@@ -136,6 +136,21 @@ importers:
         specifier: 4.1.6
         version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
 
+  packages/automation:
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
+
   packages/blob:
     dependencies:
       '@perishcode/protocol':
@@ -291,6 +306,9 @@ importers:
 
   packages/pipeline:
     dependencies:
+      '@perishcode/automation':
+        specifier: workspace:*
+        version: link:../automation
       '@perishcode/guard':
         specifier: workspace:*
         version: link:../guard

@@ -207,6 +207,23 @@ it("publishes through a draft, enforces only explicit gates and leaves failures 
     request,
   });
   expect(result.state).toBe("published");
+  const artifacts = JSON.parse(await readFile(join(channelRoot(root, "beta"), "checks/artifacts.json"), "utf8"));
+  await json(join(channelRoot(root, "beta"), "checks/desktop.json"), {
+    ...artifacts,
+    gate: "desktop",
+    artifact: "wrong-archive",
+  });
+  await expect(
+    publish({
+      root,
+      channel: "beta",
+      repository: "owner/repo",
+      mode: "prerelease",
+      require: ["desktop"],
+      token: "fixture",
+      request,
+    }),
+  ).rejects.toThrow("quality evidence");
   expect(calls.at(-1)?.method).toBe("PATCH");
   expect(calls.find((item) => item.method === "POST" && item.url.endsWith("/releases"))?.body).toMatchObject({
     draft: true,

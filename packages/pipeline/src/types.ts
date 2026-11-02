@@ -43,7 +43,7 @@ export interface PackReceipt {
   inventory: string;
   artifact: { path: string; sha256: string; bytes: number };
 }
-export type Gate = "policy" | "tests" | "artifacts" | "installed";
+export type Gate = "policy" | "tests" | "artifacts" | "installed" | "desktop";
 export interface CheckReceipt {
   schema: 1;
   gate: Gate;
