@@ -76,25 +76,34 @@ describe("publish", () => {
     sidecars.push(host);
     const client = new Client(host.endpoint, host.authority);
     const scope = namespace("publisher");
-    const data = await client.grant(scope, { kind: "data", name: "publish", scope: "namespace" });
-    const socket = await client.grant(scope, {
-      kind: "socket",
-      name: "publish",
-      owner: "server",
-      scope: "attempt",
-    });
-    const port = await client.grant(scope, {
-      kind: "port",
-      name: "publish",
-      owner: "server",
-      scheme: "http",
-      scope: "attempt",
-    });
+    const data = await client.grant(
+      { namespace: scope, channel: channel("stable") },
+      { kind: "data", name: "publish", scope: "factory" },
+    );
+    const socket = await client.grant(
+      { namespace: scope, channel: channel("stable") },
+      {
+        kind: "socket",
+        name: "publish",
+        owner: "server",
+        scope: "attempt",
+      },
+    );
+    const port = await client.grant(
+      { namespace: scope, channel: channel("stable") },
+      {
+        kind: "port",
+        name: "publish",
+        owner: "server",
+        scheme: "http",
+        scope: "attempt",
+      },
+    );
     const trust = keys();
     const authority = await Authority.open({ privatekey: trust.privatekey, root: data.value });
     const server = await serve(authority, socket.value);
     services.push(server);
-    await client.forward(scope, port.lease, socket.lease);
+    await client.forward({ namespace: scope, channel: channel("stable") }, port.lease, socket.lease);
     const feed = new Feed(port.value, trust.publickey);
     const stable = channel("stable");
     const beta = channel("beta");

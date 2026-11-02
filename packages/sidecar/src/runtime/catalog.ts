@@ -1,14 +1,15 @@
 import { join } from "node:path";
-import { type Namespace, namespace } from "@perishcode/protocol";
+import { type FactoryScope, factoryKey, factoryScope } from "@perishcode/protocol";
 import {
   type Directory,
+  type FactoryEntry,
   type Instance,
-  type NamespaceEntry,
   type Observer,
   type Phase,
   parse,
   slot,
 } from "../control/directory.js";
+import { type LegacyDirectory, parse as parseLegacy } from "../control/legacy.js";
 import { type SessionRecord, sessionKey } from "../control/session.js";
 import type { Identity } from "../control/types.js";
 import { Ownership } from "./ownership.js";
@@ -21,27 +22,26 @@ export class Catalog {
   static open(owner: Ownership): Catalog {
     const prior = owner.readDirectory();
     if (prior === undefined && owner.previous?.directory) throw new Error("directory missing; recovery required");
-    const old =
-      prior === undefined ? undefined : parse(prior, owner.previous ?? owner.info, owner.previous?.sessions === true);
+    const old = prior === undefined ? undefined : parse(prior, owner.previous ?? owner.info);
     const state: Directory = {
-      schema: 1,
+      schema: 2,
       revision: (old?.revision ?? -1) + 1,
       manager: { incarnation: owner.incarnation, pid: owner.info.pid, phase: "active" },
-      namespaces: old?.namespaces ?? [],
+      factories: old?.factories ?? [],
       instances: old?.instances ?? [],
       sessions: old?.sessions ?? [],
     };
     owner.writeDirectory(state);
     return new Catalog(owner, state);
   }
-  snapshot(scope?: Namespace): Directory {
+  snapshot(scope?: FactoryScope): Directory {
     const info = this.owner.info;
-    const result = parse(this.state, info, true);
+    const result = parse(this.state, info);
     if (scope !== undefined) {
-      namespace(scope);
-      result.namespaces = result.namespaces.filter((entry) => entry.namespace === scope);
-      result.instances = result.instances.filter((entry) => entry.namespace === scope);
-      result.sessions = result.sessions.filter((entry) => entry.namespace === scope);
+      factoryScope(scope);
+      result.factories = result.factories.filter((entry) => factoryKey(entry) === factoryKey(scope));
+      result.instances = result.instances.filter((entry) => factoryKey(entry) === factoryKey(scope));
+      result.sessions = result.sessions.filter((entry) => factoryKey(entry) === factoryKey(scope));
     }
     return result;
   }
@@ -50,29 +50,29 @@ export class Catalog {
     const next = structuredClone(this.state);
     change(next);
     next.revision++;
-    const parsed = parse(next, this.owner.info, true);
+    const parsed = parse(next, this.owner.info);
     this.owner.writeDirectory(parsed);
     this.state = parsed;
   }
-  namespace(scope: Namespace, phase: NamespaceEntry["phase"], incarnation?: string): void {
-    namespace(scope);
+  factory(scope: FactoryScope, phase: FactoryEntry["phase"], incarnation?: string): void {
+    factoryScope(scope);
     this.update((next) => {
-      const index = next.namespaces.findIndex((entry) => entry.namespace === scope);
-      const entry: NamespaceEntry = {
-        namespace: scope,
+      const index = next.factories.findIndex((entry) => factoryKey(entry) === factoryKey(scope));
+      const entry: FactoryEntry = {
+        ...factoryScope(scope),
         manager: next.manager.incarnation,
         phase,
         ...(incarnation ? { incarnation } : {}),
       };
-      if (index < 0) next.namespaces.push(entry);
-      else next.namespaces[index] = entry;
+      if (index < 0) next.factories.push(entry);
+      else next.factories[index] = entry;
     });
   }
   claim(scope: Identity, incarnation: string, kind: Instance["kind"]): void {
     this.update((next) => {
       const index = next.instances.findIndex((entry) => slot(entry) === slot(scope));
-      if (!next.namespaces.some((entry) => entry.namespace === scope.namespace))
-        next.namespaces.push({ namespace: scope.namespace, manager: next.manager.incarnation, phase: "unopened" });
+      if (!next.factories.some((entry) => factoryKey(entry) === factoryKey(scope)))
+        next.factories.push({ ...factoryScope(scope), manager: next.manager.incarnation, phase: "unopened" });
       if (index >= 0 && next.instances[index]?.phase !== "retired") throw new Error("service already owned");
       const entry: Instance = {
         ...scope,
@@ -113,8 +113,8 @@ export class Catalog {
   }
   session(record: Omit<SessionRecord, "manager">): void {
     this.update((next) => {
-      if (!next.namespaces.some((entry) => entry.namespace === record.namespace))
-        next.namespaces.push({ namespace: record.namespace, manager: next.manager.incarnation, phase: "unopened" });
+      if (!next.factories.some((entry) => factoryKey(entry) === factoryKey(record)))
+        next.factories.push({ ...factoryScope(record), manager: next.manager.incarnation, phase: "unopened" });
       const index = next.sessions.findIndex((entry) => sessionKey(entry) === sessionKey(record));
       const prior = next.sessions[index];
       if (prior && record.phase !== "active" && prior.incarnation !== record.incarnation)
@@ -129,16 +129,35 @@ export class Catalog {
       throw new Error("directory has incomplete sessions");
     if (this.state.instances.some((entry) => entry.phase !== "retired"))
       throw new Error("directory has unretired instances");
-    if (this.state.namespaces.some((entry) => !["closed", "unopened"].includes(entry.phase)))
-      throw new Error("directory has unclosed namespaces");
+    if (this.state.factories.some((entry) => !["closed", "unopened"].includes(entry.phase)))
+      throw new Error("directory has unclosed factories");
   }
 }
 
 /** Last committed facts only; an interrupted manager does not imply its child PIDs are dead. */
-export async function readDirectory(root: string, scope?: Namespace): Promise<Directory> {
+export async function readDirectory(root: string, scope?: FactoryScope): Promise<Directory> {
   const snapshot = await Ownership.inspect(join(root, "manager.sqlite"));
+  if (!snapshot.owner.factories)
+    throw new Error("legacy directory; use readLegacyDirectory; explicit migration required");
   if (!snapshot.owner.directory) throw new Error("directory unavailable; recovery required");
-  const result = parse(
+  const result = parse(snapshot.directory, {
+    ...snapshot.owner,
+    phase: snapshot.owner.phase === "active" ? "interrupted" : "closed",
+  });
+  if (scope !== undefined) {
+    factoryScope(scope);
+    result.factories = result.factories.filter((entry) => factoryKey(entry) === factoryKey(scope));
+    result.instances = result.instances.filter((entry) => factoryKey(entry) === factoryKey(scope));
+    result.sessions = result.sessions.filter((entry) => factoryKey(entry) === factoryKey(scope));
+  }
+  return result;
+}
+
+/** Explicit legacy inspection never guesses a channel or permits writes. */
+export async function readLegacyDirectory(root: string): Promise<LegacyDirectory> {
+  const snapshot = await Ownership.inspect(join(root, "manager.sqlite"));
+  if (snapshot.owner.factories) throw new Error("directory is already factory format; use readDirectory");
+  return parseLegacy(
     snapshot.directory,
     {
       ...snapshot.owner,
@@ -146,11 +165,4 @@ export async function readDirectory(root: string, scope?: Namespace): Promise<Di
     },
     snapshot.owner.sessions === true,
   );
-  if (scope !== undefined) {
-    namespace(scope);
-    result.namespaces = result.namespaces.filter((entry) => entry.namespace === scope);
-    result.instances = result.instances.filter((entry) => entry.namespace === scope);
-    result.sessions = result.sessions.filter((entry) => entry.namespace === scope);
-  }
-  return result;
 }

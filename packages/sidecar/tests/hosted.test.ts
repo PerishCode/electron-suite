@@ -212,13 +212,13 @@ it("holds a managed port, forwards only owned sockets and releases resources aft
     new Promise<void>((done, reject) => http.close((error) => (error ? reject(error) : done())));
   const attached = await server.expose<Methods>(options);
   expect(await (await fetch(endpoint, { headers: { connection: "close" } })).text()).toBe("caller protocol");
-  const grants = (await client.resources(identity.namespace)).grants;
+  const grants = (await client.resources(identity)).grants;
   expect(grants.filter((g) => g.kind === "port" || g.kind === "socket")).toHaveLength(2);
   await attached.close();
   await expect(fetch(endpoint, { signal: AbortSignal.timeout(1000) })).rejects.toThrow();
   await expect(stat(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
   await expect(attached.context.allocate({ kind: "port", name: "late" })).rejects.toThrow("not allocating");
-  expect((await client.resources(identity.namespace)).grants.every((g) => g.scope === "namespace")).toBe(true);
+  expect((await client.resources(identity)).grants.every((g) => g.scope === "factory")).toBe(true);
 });
 
 it("keeps one service slot across generations until successful retirement", async () => {

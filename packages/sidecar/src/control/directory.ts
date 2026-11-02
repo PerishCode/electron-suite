@@ -1,4 +1,4 @@
-import { type Namespace, namespace } from "@perishcode/protocol";
+import { type FactoryScope, factoryKey, factoryScope } from "@perishcode/protocol";
 import { type SessionRecord, sessionKey, sessionScope } from "./session.js";
 import { type Identity, identity } from "./types.js";
 
@@ -10,17 +10,18 @@ export interface Instance extends Identity {
   phase: Phase;
   pid?: number;
 }
-export interface NamespaceEntry {
-  namespace: Namespace;
+export interface FactoryEntry {
+  channel: FactoryScope["channel"];
+  namespace: FactoryScope["namespace"];
   manager: string;
   incarnation?: string;
   phase: "unopened" | "opening" | "ready" | "failed" | "closed";
 }
 export interface Directory {
-  schema: 1;
+  schema: 2;
   revision: number;
   manager: { incarnation: string; pid: number; phase: "active" | "closed" | "interrupted" };
-  namespaces: NamespaceEntry[];
+  factories: FactoryEntry[];
   instances: Instance[];
   sessions: SessionRecord[];
 }
@@ -34,21 +35,20 @@ const uuid = (value: unknown): string => {
   if (typeof value !== "string" || !/^[0-9a-f-]{36}$/.test(value)) throw new Error("invalid directory incarnation");
   return value;
 };
-export function parse(input: unknown, owner: Directory["manager"], requiredSessions = false): Directory {
+export function parse(input: unknown, owner: Directory["manager"]): Directory {
   if (!input || typeof input !== "object") throw new Error("directory is missing; recovery required");
   const data = input as Directory;
   if (
-    data.schema !== 1 ||
+    data.schema !== 2 ||
     !Number.isSafeInteger(data.revision) ||
     data.revision < 0 ||
     data.manager?.incarnation !== owner.incarnation ||
     data.manager?.pid !== owner.pid ||
-    !Array.isArray(data.namespaces) ||
+    !Array.isArray(data.factories) ||
     !Array.isArray(data.instances)
   )
     throw new Error("invalid directory; recovery required");
-  if (requiredSessions && !Array.isArray(data.sessions))
-    throw new Error("session directory missing; recovery required");
+  if (!Array.isArray(data.sessions)) throw new Error("session directory missing; recovery required");
   const sessions = (data.sessions ?? []).map((entry): SessionRecord => {
     const scope = sessionScope(entry);
     if (
@@ -71,19 +71,19 @@ export function parse(input: unknown, owner: Directory["manager"], requiredSessi
   if (new Set(sessions.map(sessionKey)).size !== sessions.length) throw new Error("duplicate session scope");
   if (owner.phase === "closed" && sessions.some((entry) => !["completed", "failed"].includes(entry.phase)))
     throw new Error("closed manager has incomplete sessions");
-  const namespaces = data.namespaces.map((entry): NamespaceEntry => {
+  const factories = data.factories.map((entry): FactoryEntry => {
     if (!["unopened", "opening", "ready", "failed", "closed"].includes(entry.phase))
-      throw new Error("invalid namespace phase");
-    if (typeof entry.namespace !== "string") throw new Error("invalid namespace identity");
+      throw new Error("invalid factory phase");
+    const scope = factoryScope(entry);
     const value = {
-      namespace: namespace(entry.namespace),
+      ...scope,
       manager: uuid(entry.manager),
       phase: entry.phase,
       ...(entry.incarnation === undefined ? {} : { incarnation: uuid(entry.incarnation) }),
     };
-    if (value.phase === "ready" && !value.incarnation) throw new Error("namespace owner is unpublished");
+    if (value.phase === "ready" && !value.incarnation) throw new Error("factory owner is unpublished");
     if (!["unopened", "closed"].includes(value.phase) && value.manager !== owner.incarnation)
-      throw new Error("namespace owner mismatch");
+      throw new Error("factory owner mismatch");
     return value;
   });
   const instances = data.instances.map((entry): Instance => {
@@ -111,21 +111,24 @@ export function parse(input: unknown, owner: Directory["manager"], requiredSessi
     };
   });
   if (
-    new Set(namespaces.map((entry) => entry.namespace)).size !== namespaces.length ||
+    new Set(factories.map(factoryKey)).size !== factories.length ||
     new Set(instances.map(slot)).size !== instances.length
   )
     throw new Error("duplicate directory identity");
   if (
     owner.phase === "closed" &&
     (instances.some((entry) => entry.phase !== "retired") ||
-      namespaces.some((entry) => !["closed", "unopened"].includes(entry.phase)))
+      factories.some((entry) => !["closed", "unopened"].includes(entry.phase)))
   )
     throw new Error("closed manager has unretired directory entries");
+  const indexed = new Set(factories.map(factoryKey));
+  if ([...instances, ...sessions].some((entry) => !indexed.has(factoryKey(entry))))
+    throw new Error("directory entry has no factory authority");
   return {
-    schema: 1,
+    schema: 2,
     revision: data.revision,
     manager: { incarnation: owner.incarnation, pid: owner.pid, phase: owner.phase },
-    namespaces,
+    factories,
     instances,
     sessions,
   };

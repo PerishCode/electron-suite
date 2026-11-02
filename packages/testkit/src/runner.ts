@@ -283,24 +283,33 @@ export async function run(options: Options): Promise<Report> {
     host = await sidecar(endpoint);
     let client = new Client(host.endpoint, host.authority);
     const release = namespace("release");
-    const data = await client.grant(release, { kind: "data", name: "publish", scope: "namespace" });
-    const socket = await client.grant(release, {
-      kind: "socket",
-      name: "publish",
-      owner: "server",
-      scope: "attempt",
-    });
-    const port = await client.grant(release, {
-      kind: "port",
-      name: "publish",
-      owner: "server",
-      scheme: "http",
-      scope: "attempt",
-    });
+    const data = await client.grant(
+      { namespace: release, channel: channel("stable") },
+      { kind: "data", name: "publish", scope: "factory" },
+    );
+    const socket = await client.grant(
+      { namespace: release, channel: channel("stable") },
+      {
+        kind: "socket",
+        name: "publish",
+        owner: "server",
+        scope: "attempt",
+      },
+    );
+    const port = await client.grant(
+      { namespace: release, channel: channel("stable") },
+      {
+        kind: "port",
+        name: "publish",
+        owner: "server",
+        scheme: "http",
+        scope: "attempt",
+      },
+    );
     const keys = pem();
     const authority = await Authority.open({ privatekey: keys.privatekey, root: data.value });
     server = await publish(authority, socket.value);
-    await client.forward(release, port.lease, socket.lease);
+    await client.forward({ namespace: release, channel: channel("stable") }, port.lease, socket.lease);
     const feed = new Feed(port.value, keys.publickey);
     const published = await timed(async () => {
       await authority.publish(stable, 0, built.value.first.envelope, built.value.first.assets);

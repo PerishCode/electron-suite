@@ -64,16 +64,28 @@ describe("carrier", () => {
         owner,
         service: "daemon",
       });
-      const data = await client.grant(scope, { kind: "data", name: "daemon", scope: "namespace" });
-      const carrier = await client.grant(scope, { kind: "data", name: "carrier", scope: "namespace" });
-      const socket = await client.grant(scope, { kind: "socket", name: "daemon", owner, scope: "attempt" });
-      const port = await client.grant(scope, {
-        kind: "port",
-        name: "daemon",
-        owner,
-        scheme: "http",
-        scope: "attempt",
-      });
+      const data = await client.grant(
+        { namespace: scope, channel: channel("stable") },
+        { kind: "data", name: "daemon", scope: "factory" },
+      );
+      const carrier = await client.grant(
+        { namespace: scope, channel: channel("stable") },
+        { kind: "data", name: "carrier", scope: "factory" },
+      );
+      const socket = await client.grant(
+        { namespace: scope, channel: channel("stable") },
+        { kind: "socket", name: "daemon", owner, scope: "attempt" },
+      );
+      const port = await client.grant(
+        { namespace: scope, channel: channel("stable") },
+        {
+          kind: "port",
+          name: "daemon",
+          owner,
+          scheme: "http",
+          scope: "attempt",
+        },
+      );
       const manifest = resolve({}, { channel: channel("stable"), version: "1.0.0" });
       const release = await emit(root, manifest);
       const daemonenv = {
@@ -109,7 +121,7 @@ describe("carrier", () => {
           ready: "ready",
           slot: "daemon",
         });
-        await client.forward(scope, port.lease, socket.lease);
+        await client.forward({ namespace: scope, channel: channel("stable") }, port.lease, socket.lease);
         const spawned = spawn(electron, [join(here, "../dist/main.mjs")], {
           env: carrierenv,
           stdio: ["ignore", "pipe", "pipe"],

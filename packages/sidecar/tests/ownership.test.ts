@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
-import { namespace } from "@perishcode/protocol";
+import { channel, namespace } from "@perishcode/protocol";
 import { expect, it } from "vitest";
 import { Resources, serve } from "@";
 
@@ -15,9 +15,9 @@ const [root,mode,endpoint]=process.argv.slice(1);
 let service;
 try {
   if(mode==='manager') service=await serve(endpoint,undefined,undefined,root);
-  else service=await Resources.open({root,namespace:'main'});
+  else service=await Resources.open({ channel:'stable',root,namespace:'main'});
   const grant = service.authority
-    ? (request)=>new Client(service.endpoint,service.authority).grant('main',request)
+    ? (request)=>new Client(service.endpoint,service.authority).grant({channel:'stable',namespace:'main'},request)
     : (request)=>service.grant(request);
   const staging=await grant({kind:'staging',name:'probe',owner:'attempt',scope:'attempt'});
   const port=await grant({kind:'port',name:'probe',owner:'attempt',scope:'attempt'});
@@ -97,17 +97,19 @@ it("protects a namespace across processes and fences closed resource handles", a
     const owner = await child(root, "resource");
     try {
       expect(owner.result.result).toBe("owned");
-      const registry = join(root, "namespaces/main/registry.json");
+      const registry = join(root, "factories/stable/main/registry.json");
       const before = await readFile(registry, "utf8");
-      await expect(Resources.open({ root, namespace: namespace("main") })).rejects.toThrow("held");
+      await expect(Resources.open({ channel: channel("stable"), root, namespace: namespace("main") })).rejects.toThrow(
+        "held",
+      );
       expect(await readFile(registry, "utf8")).toBe(before);
       expect((await stat(owner.result.staging)).isDirectory()).toBe(true);
     } finally {
       await finish(owner.process);
     }
-    const first = await Resources.open({ root, namespace: namespace("main") });
+    const first = await Resources.open({ channel: channel("stable"), root, namespace: namespace("main") });
     await first.close();
-    const next = await Resources.open({ root, namespace: namespace("main") });
+    const next = await Resources.open({ channel: channel("stable"), root, namespace: namespace("main") });
     try {
       await expect(first.grant({ kind: "port", name: "late", owner: "late", scope: "attempt" })).rejects.toThrow(
         "closed",
@@ -126,13 +128,13 @@ it.each(["manager", "resource"])("keeps interrupted %s authority and resources a
   await fixture(async (root) => {
     const owner = await child(root, mode);
     expect(owner.result.result).toBe("owned");
-    const registry = join(root, "namespaces/main/registry.json");
+    const registry = join(root, "factories/stable/main/registry.json");
     const before = await readFile(registry, "utf8");
     await finish(owner.process, true);
     const reopen =
       mode === "manager"
         ? serve(join(root, "new.sock"), undefined, undefined, root)
-        : Resources.open({ root, namespace: namespace("main") });
+        : Resources.open({ channel: channel("stable"), root, namespace: namespace("main") });
     await expect(reopen).rejects.toThrow("interrupted; recovery required");
     expect(await readFile(registry, "utf8")).toBe(before);
     expect((await stat(owner.result.staging)).isDirectory()).toBe(true);
@@ -165,10 +167,10 @@ it("rejects a missing or malformed committed record instead of interpreting it a
 });
 it("retains uncertainty when a committed registry disappears and retries failed persistence accurately", async () => {
   await fixture(async (root) => {
-    const host = await Resources.open({ root, namespace: namespace("main") });
+    const host = await Resources.open({ channel: channel("stable"), root, namespace: namespace("main") });
     try {
       const grant = await host.grant({ kind: "staging", name: "probe", owner: "attempt", scope: "attempt" });
-      const pending = join(root, "namespaces/main/registry.tmp");
+      const pending = join(root, "factories/stable/main/registry.tmp");
       await mkdir(pending);
       await expect(host.release(grant.lease)).rejects.toThrow();
       expect(host.snapshot().grants).toContainEqual(grant);
@@ -178,8 +180,10 @@ it("retains uncertainty when a committed registry disappears and retries failed 
     } finally {
       await host.close();
     }
-    await rm(join(root, "namespaces/main/registry.json"));
-    await expect(Resources.open({ root, namespace: namespace("main") })).rejects.toThrow("registry missing");
+    await rm(join(root, "factories/stable/main/registry.json"));
+    await expect(Resources.open({ channel: channel("stable"), root, namespace: namespace("main") })).rejects.toThrow(
+      "registry missing",
+    );
   });
 });
 it.runIf(process.platform !== "win32")(
@@ -196,8 +200,10 @@ it.runIf(process.platform !== "win32")(
       }
       const outside = await mkdtemp(join(tmpdir(), "outside-resource-"));
       try {
-        await symlink(outside, join(root, "namespaces"), "dir");
-        await expect(Resources.open({ root, namespace: namespace("main") })).rejects.toThrow("regular directory");
+        await symlink(outside, join(root, "factories"), "dir");
+        await expect(
+          Resources.open({ channel: channel("stable"), root, namespace: namespace("main") }),
+        ).rejects.toThrow("regular directory");
         await expect(stat(join(outside, "main"))).rejects.toMatchObject({ code: "ENOENT" });
       } finally {
         await rm(outside, { recursive: true, force: true });

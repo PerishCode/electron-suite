@@ -3,6 +3,8 @@ import {
   type Channel,
   channel,
   type Event,
+  type FactoryScope,
+  factoryScope,
   type Gate,
   gates,
   type Namespace,
@@ -18,7 +20,7 @@ import type { Lease, Spec } from "../host.js";
 
 type Message =
   | ({ authority: string; type: "session" } & SessionScope)
-  | { authority: string; namespace: Namespace; type: "directory" }
+  | ({ authority: string; type: "directory" } & FactoryScope)
   | { authority: string; identity: Identity; type: "connect" }
   | { descriptor: Descriptor; operation: "call" | "probe" | "stop"; method?: string; input?: unknown; type: "invoke" }
   | { authority: string; spec: Spec; type: "start" }
@@ -36,10 +38,10 @@ type Message =
     }
   | { authority: string; permit: Permit; type: "issue" }
   | { authority: string; capability: Capability; type: "retire" }
-  | { authority: string; namespace: string; resource: ResourceRequest; type: "grant" }
-  | { authority: string; namespace: string; port: string; socket: string; type: "forward" }
-  | { authority: string; lease: string; namespace: string; survivors: number[]; type: "revoke" }
-  | { authority: string; namespace: string; type: "resources" };
+  | ({ authority: string; resource: ResourceRequest; type: "grant" } & FactoryScope)
+  | ({ authority: string; port: string; socket: string; type: "forward" } & FactoryScope)
+  | ({ authority: string; lease: string; survivors: number[]; type: "revoke" } & FactoryScope)
+  | ({ authority: string; type: "resources" } & FactoryScope);
 
 export type Request = Message & { session?: SessionHint };
 
@@ -121,7 +123,7 @@ function resource(value: unknown): ResourceRequest {
   const kind = text(data.kind, "resource.kind");
   const scope = text(data.scope, "resource.scope");
   if (!resources.includes(kind as ResourceRequest["kind"])) throw new TypeError("resource.kind is invalid");
-  if (scope !== "namespace" && scope !== "attempt") throw new TypeError("resource.scope is invalid");
+  if (scope !== "factory" && scope !== "attempt") throw new TypeError("resource.scope is invalid");
   const result: ResourceRequest = {
     kind: kind as ResourceRequest["kind"],
     name: text(data.name, "resource.name"),
@@ -249,7 +251,7 @@ function message(data: Record<string, unknown>): Message {
   if (data.type === "grant") {
     return {
       authority: text(data.authority, "authority"),
-      namespace: namespace(text(data.namespace, "namespace")),
+      ...factoryScope(data),
       resource: resource(data.resource),
       type: "grant",
     };
@@ -258,7 +260,7 @@ function message(data: Record<string, unknown>): Message {
   if (data.type === "forward") {
     return {
       authority: text(data.authority, "authority"),
-      namespace: namespace(text(data.namespace, "namespace")),
+      ...factoryScope(data),
       port: text(data.port, "port"),
       socket: text(data.socket, "socket"),
       type: "forward",
@@ -270,7 +272,7 @@ function message(data: Record<string, unknown>): Message {
     return {
       authority: text(data.authority, "authority"),
       lease: text(data.lease, "lease"),
-      namespace: namespace(text(data.namespace, "namespace")),
+      ...factoryScope(data),
       survivors: data.survivors.map((item) => number(item, "survivor")),
       type: "revoke",
     };
@@ -279,7 +281,7 @@ function message(data: Record<string, unknown>): Message {
   if (data.type === "directory" || data.type === "resources") {
     return {
       authority: text(data.authority, "authority"),
-      namespace: namespace(text(data.namespace, "namespace")),
+      ...factoryScope(data),
       type: data.type,
     };
   }

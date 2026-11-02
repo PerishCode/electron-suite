@@ -90,9 +90,18 @@ describe("daemon", () => {
     const scope = namespace("main");
     const owner = "attempt";
     const token = "fixturesecret";
-    const data = await client.grant(scope, { kind: "data", name: "daemon", scope: "namespace" });
-    const socket = await client.grant(scope, { kind: "socket", name: "daemon", owner, scope: "attempt" });
-    const port = await client.grant(scope, { kind: "port", name: "daemon", owner, scope: "attempt" });
+    const data = await client.grant(
+      { namespace: scope, channel: channel("stable") },
+      { kind: "data", name: "daemon", scope: "factory" },
+    );
+    const socket = await client.grant(
+      { namespace: scope, channel: channel("stable") },
+      { kind: "socket", name: "daemon", owner, scope: "attempt" },
+    );
+    const port = await client.grant(
+      { namespace: scope, channel: channel("stable") },
+      { kind: "port", name: "daemon", owner, scope: "attempt" },
+    );
     const env = {
       PERISH_DATA: data.value,
       PERISH_ORIGIN: "perish://carrier",
@@ -113,7 +122,7 @@ describe("daemon", () => {
         ready: "ready",
         slot: "daemon",
       });
-      await client.forward(scope, port.lease, socket.lease);
+      await client.forward({ namespace: scope, channel: channel("stable") }, port.lease, socket.lease);
 
       expect(await preflight(port.value, "https://forged.invalid")).toMatchObject({ status: 403 });
       expect(await preflight(port.value, "perish://carrier")).toEqual({
@@ -137,8 +146,8 @@ describe("daemon", () => {
       expect(await call(port.value, "/state", token)).toEqual({ body: { value: 42 }, status: 200 });
     } finally {
       if (lease) await client.release(lease);
-      await client.revoke(scope, port.lease);
-      await client.revoke(scope, socket.lease);
+      await client.revoke({ namespace: scope, channel: channel("stable") }, port.lease);
+      await client.revoke({ namespace: scope, channel: channel("stable") }, socket.lease);
     }
   });
 });

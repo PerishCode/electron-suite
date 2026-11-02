@@ -6,7 +6,7 @@ import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
 import { channel, digest, namespace } from "@perishcode/protocol";
 import { expect, it } from "vitest";
-import { Client, type Lease, readDirectory, type Service, type Spec, serve } from "@";
+import { Client, type Lease, readDirectory, readLegacyDirectory, type Service, type Spec, serve } from "@";
 import { Sessions } from "@/runtime/sessions.js";
 
 const scope = { namespace: namespace("main"), channel: channel("stable") };
@@ -104,9 +104,9 @@ it("serializes remote batches and commands while other namespace/channel lanes p
         trace.push("other");
       });
       expect(secondEntered).toBe(false);
-      expect(
-        (await client.directory(scope.namespace)).sessions.find((entry) => entry.channel === scope.channel)?.phase,
-      ).toBe("active");
+      expect((await client.directory(scope)).sessions.find((entry) => entry.channel === scope.channel)?.phase).toBe(
+        "active",
+      );
     } finally {
       gate.done();
     }
@@ -252,7 +252,7 @@ it("coordinates real independent controllers and retains an interrupted lane wit
     const first = await child(ownerProgram, [endpoint, authority, JSON.stringify(scope), "hold"]);
     children.push(first.process);
     const client = new Client(endpoint, authority);
-    const ready = await client.directory(scope.namespace);
+    const ready = await client.directory(scope);
     expect(ready.sessions[0]?.kind).toBe("remote");
     let entered = false;
     const next = client.session(scope, async () => {
@@ -265,12 +265,15 @@ it("coordinates real independent controllers and retains an interrupted lane wit
     expect(entered).toBe(false);
     await finish(first.process, "SIGKILL");
     await nextRejected;
-    const view = await client.directory(scope.namespace);
+    const view = await client.directory(scope);
     expect(view.sessions.find((entry) => entry.channel === scope.channel)).toMatchObject({
       phase: "interrupted",
       reason: "disconnect",
     });
     await expect(client.session(scope, async () => {})).rejects.toThrow("interrupted");
+    await expect(client.factory(scope).grant({ kind: "data", name: "late", scope: "factory" })).rejects.toThrow(
+      "interrupted",
+    );
     await client.session(other, async () => {});
     const lines = createInterface({ input: manager.process.stdout as NonNullable<ChildProcess["stdout"]> });
     const reply = new Promise<string>((done) =>
@@ -306,33 +309,27 @@ it("fails closed instead of hanging when terminal session publication fails", as
     expect(records).toEqual(failing === "closing" ? ["active", "closing"] : ["active", "closing", "completed"]);
   }
 });
-it("migrates closed legacy directory metadata but refuses a missing established session index", async () => {
+it("keeps old namespace directory inspection explicit and refuses implicit channel migration", async () => {
   const root = await mkdtemp(join(tmpdir(), "session-format-"));
-  const edit = (legacy: boolean) => {
-    const db = new DatabaseSync(join(root, "manager.sqlite"));
-    const row = db.prepare("SELECT record FROM directory WHERE id=1").get();
-    const value = JSON.parse(String(row?.record));
-    delete value.sessions;
-    db.prepare("UPDATE directory SET record=? WHERE id=1").run(JSON.stringify(value));
-    if (legacy) {
-      const entry = db.prepare("SELECT record FROM authority WHERE id=1").get();
-      const owner = JSON.parse(String(entry?.record));
-      delete owner.sessions;
-      db.prepare("UPDATE authority SET record=? WHERE id=1").run(JSON.stringify(owner));
-    }
-    db.close();
-  };
   try {
     const first = await serve(join(root, "one.sock"));
     await first.close();
-    edit(true);
-    const next = await serve(join(root, "two.sock"));
-    expect(next.directory().sessions).toEqual([]);
-    await next.close();
-    edit(false);
-    const before = await readFile(join(root, "manager.sqlite"));
-    await expect(readDirectory(root)).rejects.toThrow("session directory missing");
-    expect(await readFile(join(root, "manager.sqlite"))).toEqual(before);
+    const file = join(root, "manager.sqlite");
+    const db = new DatabaseSync(file);
+    const value = JSON.parse(String(db.prepare("SELECT record FROM directory WHERE id=1").get()?.record));
+    value.schema = 1;
+    value.namespaces = [];
+    delete value.factories;
+    db.prepare("UPDATE directory SET record=? WHERE id=1").run(JSON.stringify(value));
+    const owner = JSON.parse(String(db.prepare("SELECT record FROM authority WHERE id=1").get()?.record));
+    delete owner.factories;
+    db.prepare("UPDATE authority SET record=? WHERE id=1").run(JSON.stringify(owner));
+    db.close();
+    const before = await readFile(file);
+    expect((await readLegacyDirectory(root)).schema).toBe(1);
+    await expect(readDirectory(root)).rejects.toThrow("readLegacyDirectory");
+    await expect(serve(join(root, "two.sock"))).rejects.toThrow("explicit migration required");
+    expect(await readFile(file)).toEqual(before);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -358,5 +355,24 @@ it("does not quiesce a service before a competing lifecycle session releases its
     }
     await Promise.all([owner, stopped]);
     await expect(peer.probe()).rejects.toThrow("fenced");
+  });
+});
+
+it("rejects allocations queued behind service drain without waiting for itself", async () => {
+  await fixture(async (server, client) => {
+    const attached = await server.expose(options);
+    const entered = deferred(),
+      gate = deferred();
+    const owner = client.session(scope, async () => {
+      entered.done();
+      await gate.promise;
+    });
+    await entered.promise;
+    const stopping = attached.close();
+    const allocation = attached.context.allocate({ kind: "lock", name: "late" });
+    const rejected = expect(allocation).rejects.toThrow("not allocating");
+    gate.done();
+    await Promise.all([owner, stopping, rejected]);
+    expect(server.directory().instances[0]?.phase).toBe("retired");
   });
 });

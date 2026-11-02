@@ -1,10 +1,12 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { chmod } from "node:fs/promises";
+import { chmod, lstat } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
-import { type Capability, type Namespace, namespace, type Permit } from "@perishcode/protocol";
+import { type Capability, type FactoryScope, factoryKey, factoryScope, type Permit } from "@perishcode/protocol";
 import { Bindings } from "../binding.js";
+import { Client } from "../client.js";
 import type { Directory } from "../control/directory.js";
+import { Factory } from "../control/factory.js";
 import { Hosted } from "../control/hosted.js";
 import type { SessionScope } from "../control/session.js";
 import type { Attachment, Expose } from "../control/types.js";
@@ -21,7 +23,8 @@ export interface Service {
   close(): Promise<void>;
   endpoint: string;
   expose<M>(options: Expose<M>): Promise<Attachment>;
-  directory(scope?: Namespace): Directory;
+  directory(scope?: FactoryScope): Directory;
+  factory(scope: FactoryScope): Factory;
   session<T>(scope: SessionScope, operation: () => Promise<T>): Promise<T>;
 }
 
@@ -42,7 +45,7 @@ interface Runtime {
   host: Sidecar;
   hosted: Hosted;
   closing: boolean;
-  open(value: string): Promise<Resources>;
+  open(value: FactoryScope): Promise<Resources>;
 }
 
 function key(permit: Permit): string {
@@ -91,7 +94,7 @@ async function dispatch(runtime: Runtime, authority: string, request: Request) {
   if (request.type === "attach") return runtime.host.attach(request.lease);
   if (request.type === "release") return runtime.host.release(request.lease);
   if (!equal(request.authority, authority)) throw new Error("invalid authority");
-  if (request.type === "directory") return runtime.catalog.snapshot(request.namespace);
+  if (request.type === "directory") return runtime.catalog.snapshot(request);
   if (request.type === "inspect") return runtime.host.inspect();
   if (request.type === "binding") return runtime.bindings.read(request.namespace, request.channel);
   if (request.type === "transit") {
@@ -99,7 +102,7 @@ async function dispatch(runtime: Runtime, authority: string, request: Request) {
   }
   if (request.type === "issue") return issue(runtime, request.permit);
   if (request.type === "retire") return retire(runtime, request.capability);
-  const resources = await runtime.open(request.namespace);
+  const resources = await runtime.open(request);
   if (request.type === "grant") return resources.grant(request.resource);
   if (request.type === "forward") {
     await resources.forward(request.port, request.socket);
@@ -192,7 +195,15 @@ export async function serve(
   root = dirname(endpoint),
 ): Promise<Service> {
   root = resolve(root);
-  const ownership = await Ownership.claim(join(root, "manager.sqlite"));
+  for (const name of ["namespaces", "bindings"]) {
+    try {
+      await lstat(join(root, name));
+      throw new Error("legacy namespace layout; explicit migration required");
+    } catch (fault) {
+      if ((fault as NodeJS.ErrnoException).code !== "ENOENT") throw fault;
+    }
+  }
+  const ownership = await Ownership.claim(join(root, "manager.sqlite"), true);
   let catalog: Catalog;
   let sessions: Sessions;
   try {
@@ -207,9 +218,9 @@ export async function serve(
     ownership.abandon();
     throw fault;
   }
-  const hosts = new Map<Namespace, Promise<Resources>>();
-  const acquired = new Map<Namespace, Resources>();
-  const hosted = new Hosted(async (name) => runtime.open(name), catalog, sessions);
+  const hosts = new Map<string, Promise<Resources>>();
+  const acquired = new Map<string, Resources>();
+  const hosted = new Hosted(async (scope) => runtime.open(scope), catalog, sessions);
   const runtime: Runtime = {
     sessions,
     endpoint,
@@ -220,18 +231,19 @@ export async function serve(
     capabilities: new Map(),
     host,
     open: (value) => {
-      const name = namespace(value);
+      const scope = factoryScope(value);
+      const name = factoryKey(scope);
       let pending = hosts.get(name);
       if (!pending) {
-        catalog.namespace(name, "opening");
-        pending = Promise.resolve(acquired.get(name) ?? Resources.open({ namespace: name, root }))
+        catalog.factory(scope, "opening");
+        pending = Promise.resolve(acquired.get(name) ?? Resources.open({ ...scope, root }))
           .then((resources) => {
             acquired.set(name, resources);
-            catalog.namespace(name, "ready", resources.incarnation);
+            catalog.factory(scope, "ready", resources.incarnation);
             return resources;
           })
           .catch((fault) => {
-            catalog.namespace(name, "failed", acquired.get(name)?.incarnation);
+            catalog.factory(scope, "failed", acquired.get(name)?.incarnation);
             throw fault;
           });
         hosts.set(name, pending);
@@ -263,18 +275,20 @@ export async function serve(
       if (results.some((result) => result.status !== "stopped")) throw new Error("sidecar processes remain alive");
       if (server.listening) await close(server);
       await Promise.all(
-        [...acquired.entries()].map(async ([name, resources]) => {
+        [...acquired.values()].map(async (resources) => {
+          const scope = resources.scope;
           await resources.close();
-          catalog.namespace(name, "closed", resources.incarnation);
+          catalog.factory(scope, "closed", resources.incarnation);
         }),
       );
       catalog.drained();
       ownership.close();
     });
   };
-  return {
+  const service: Service = {
     authority,
     endpoint,
+    factory: (scope) => new Factory(new Client(endpoint, authority), scope, service),
     expose: (options) => {
       try {
         hosted.available(options.identity);
@@ -293,4 +307,5 @@ export async function serve(
       return shutdown;
     },
   };
+  return service;
 }

@@ -47,27 +47,36 @@ describe("update", () => {
     sidecars.push(host);
     const client = new Client(host.endpoint, host.authority);
     const release = namespace("release");
-    const data = await client.grant(release, { kind: "data", name: "publish", scope: "namespace" });
-    const socket = await client.grant(release, {
-      kind: "socket",
-      name: "publish",
-      owner: "server",
-      scope: "attempt",
-    });
-    const port = await client.grant(release, {
-      kind: "port",
-      name: "publish",
-      owner: "server",
-      scheme: "http",
-      scope: "attempt",
-    });
+    const data = await client.grant(
+      { namespace: release, channel: channel("stable") },
+      { kind: "data", name: "publish", scope: "factory" },
+    );
+    const socket = await client.grant(
+      { namespace: release, channel: channel("stable") },
+      {
+        kind: "socket",
+        name: "publish",
+        owner: "server",
+        scope: "attempt",
+      },
+    );
+    const port = await client.grant(
+      { namespace: release, channel: channel("stable") },
+      {
+        kind: "port",
+        name: "publish",
+        owner: "server",
+        scheme: "http",
+        scope: "attempt",
+      },
+    );
     const pair = generateKeyPairSync("ed25519");
     const privatekey = pair.privateKey.export({ format: "pem", type: "pkcs8" }).toString();
     const publickey = pair.publicKey.export({ format: "pem", type: "spki" }).toString();
     const authority = await Authority.open({ privatekey, root: data.value });
     const server = await serve(authority, socket.value);
     services.push(server);
-    await client.forward(release, port.lease, socket.lease);
+    await client.forward({ namespace: release, channel: channel("stable") }, port.lease, socket.lease);
     const feed = new Feed(port.value, publickey);
     const stable = channel("stable");
     const beta = channel("beta");

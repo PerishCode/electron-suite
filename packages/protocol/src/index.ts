@@ -40,10 +40,13 @@ export type {
 export { publish } from "./channel.js";
 export type {
   Channel,
+  FactoryScope,
   Namespace,
 } from "./identity.js";
 export {
   channel,
+  factoryKey,
+  factoryScope,
   namespace,
 } from "./identity.js";
 export type { Digest } from "./json.js";

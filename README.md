@@ -219,3 +219,32 @@ const manifest = resolve({}, { channel: descriptor.channel, version }, product);
 同一 descriptor 派生渠道安装 appid/name/scheme/origin 与 storagePrefix；parseReleaseVersion 支持从完整版本还原渠道，releaseMetadataVersionFields 统一生成 baseVersion/releaseVersion/releaseNumber（stable 为 stableVersion）。resolve、manifest parse/encode/decode 和 compose/emit 共享版本与渠道一致性检查；配置 version provider 也不能改变所属渠道。resolve 第三个参数传产品身份；省略仍使用 suite 参考产品默认值，产品消费者应显式传入。
 
 本增量只交付渠道版本与产品身份契约。平台 namespace 默认值、factory 存储/API、CLI 的完整 build/pack/release 身份传递、reservation/latest CAS、发布门槛与四单元运行时接入仍由 [#28](https://github.com/PerishCode/electron-suite/issues/28) 推进。渠道是否公开、GitHub 发布与存储后端由产品策略决定。
+
+## Sidecar 0.6：channel + namespace 资源 factory
+
+本节取代前文 0.5 的 namespace-only 边界。config/release 0.3 同步 protocol 0.3 的精确类型依赖，使分发 descriptor 的 channel 可直接交给 factory，不需要类型转换或重复解析。渠道契约继续沿用 release 0.2 的行为。
+
+承接 #28/#30 的渠道纠偏。选定产品数据根后，channel 与 namespace 共同确定 factory；版本/generation/service 是其内部管理对象，不改变 factory 的持久身份。protocol 0.3 提供 FactoryScope/factoryScope/factoryKey；namespace 支持小写词以单个连字符分隔，channel 保持 1–12 个小写字母或数字并允许开发 local。release 对 local 的不可发布约束仍由分发层管理。
+
+```ts
+const factory = service.factory({ channel, namespace });
+await factory.session(async (scoped) => {
+  const data = await scoped.grant({ kind: "data", name: "app", scope: "factory" });
+  const attached = await scoped.expose({ identity: { service: "daemon", generation }, handlers, lifecycle });
+});
+const remote = client.factory({ channel, namespace });
+await remote.session(async (scoped) => {
+  const lease = await scoped.start(spec);
+  await scoped.release(lease);
+});
+```
+
+绑定后的 start/connect/expose/issue 补齐作用域；传入冲突身份会拒绝，attach/release/retire 校验句柄属于当前 factory。远程 Factory 不提供本地 expose，须从 Service.factory 创建。会话回调后的 scoped Factory/Client 失效。产品调用方使用 factory，不自行拼路径或借底层 Resources/Bindings/Sidecar 另建编排。
+
+目录与 registry 升级为 schema 2，使用 factories 而非 namespaces。资源、ownership、registry 和 binding 位于受管根的 factories/<channel>/<namespace>；socket 短路径由完整受管 base 派生。FactoryEntry 与实例/会话记录使用同一身份；缺失索引、错配身份拒绝读取。持久 scope 从 namespace 改为 factory，临时资源仍为 attempt。相同 factory 的正常 manager 替换、generation 更替保留持久资源；同 namespace 不同 channel 的同名资源完全分离。
+
+资源申请/释放/转发、资源快照初次打开和 binding 读取也参与 factory 会话；控制端断链后的 interrupted lane 不能从资源 API 绕过。业务 handler 需要控制方先进入会话才能执行受管资源写入。停止先取得会话，再拒绝该服务后续分配；排在 stop 后的分配会拒绝，不计入 stop 等待集合。
+
+这是显式 API/存储格式变更：不再接受省略 channel 的 namespace-only 资源调用，不默认 stable。旧 owner/namespace/bindings 布局拒绝写入；readLegacyDirectory(root) 明确只读检查旧 schema-1 目录，readDirectory 只接受新 factory 目录。没有自动搬迁或清理旧资源，也没有恢复写入工具。
+
+root manager 仍以单个排他 authority 承载多个 factory；其他 channel 的操作可推进不意味着 manager 崩溃故障域独立。源四单元适配已使用显式 factory 作用域和 factory 持久 scope，但尚未发布新四单元 SDK。恢复写入、存活子进程接管、完整资源使用关系和完整渠道发布编排仍未验收；不得以本增量替代 #28 的后续交付。

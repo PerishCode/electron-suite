@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { allocate, type Grant, namespace, type Registry, revoke } from "@";
+import { allocate, channel, factoryKey, factoryScope, type Grant, namespace, type Registry, revoke } from "@";
 
 function registry(name: string): Registry {
-  return { grants: [], namespace: namespace(name), revision: 0 };
+  return { schema: 2, channel: channel("stable"), grants: [], namespace: namespace(name), revision: 0 };
 }
 
 function port(owner: string, value: string): Grant {
@@ -61,4 +61,20 @@ describe("namespace", () => {
       ok: true,
     });
   });
+});
+
+it("normalizes the complete factory identity without inferring channel from namespace", () => {
+  const value = factoryScope({ channel: "local", namespace: "release-shared" });
+  expect(value).toEqual({ channel: "local", namespace: "release-shared" });
+  expect(Object.isFrozen(value)).toBe(true);
+  expect(factoryKey(value)).not.toBe(factoryKey({ ...value, channel: channel("stable") }));
+  for (const input of [
+    { namespace: "release-stable" },
+    { channel: "stable" },
+    { channel: "stable", namespace: "../main" },
+    { channel: "stable", namespace: "bad--name" },
+    [],
+  ]) {
+    expect(() => factoryScope(input)).toThrow();
+  }
 });
