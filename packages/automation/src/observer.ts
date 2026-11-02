@@ -18,6 +18,9 @@ export class ObservationError extends Error {
   }
 }
 export class Observer {
+  get pid(): number | undefined {
+    return this.child.pid;
+  }
   private events: NativeEvent[] = [];
   private latest?: NativeEvent;
   private fault?: string;

@@ -86,14 +86,19 @@ let timer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { _ in
     }
 }
 signal(SIGTERM, SIG_IGN)
-let termination = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-termination.setEventHandler {
+func stop() {
     timer.invalidate()
     center.removeObserver(activation)
     emit(["event": "stopped"])
     exit(0)
 }
+let termination = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+termination.setEventHandler { stop() }
 termination.resume()
+DispatchQueue.global(qos: .utility).async {
+    while readLine() != nil {}
+    DispatchQueue.main.async { stop() }
+}
 emit(["event": "sample", "snapshot": snapshot()])
 RunLoop.main.run()
 `;
