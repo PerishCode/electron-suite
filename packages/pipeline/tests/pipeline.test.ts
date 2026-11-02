@@ -16,10 +16,27 @@ import {
   selectedVersion,
   validateWorkflows,
 } from "@";
-import { hash, inventory, json, revision } from "@/files.js";
+import { hash, inventory, json, pnpmCommand, revision } from "@/files.js";
 
 const roots: string[] = [],
   exec = promisify(execFile);
+it("resolves the pnpm JavaScript entry behind Windows cmd shims without a shell", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "pipeline-pnpm-")));
+  roots.push(root);
+  const bin = join(root, "node_modules/.bin"),
+    pkg = join(root, "node_modules/pnpm");
+  await mkdir(bin, { recursive: true });
+  await mkdir(join(pkg, "bin"), { recursive: true });
+  await writeFile(join(bin, "pnpm.cmd"), "@echo off\n");
+  await writeFile(join(pkg, "package.json"), JSON.stringify({ name: "pnpm", bin: { pnpm: "bin/pnpm.cjs" } }));
+  await writeFile(join(pkg, "bin/pnpm.cjs"), "process.stdout.write(JSON.stringify(process.argv.slice(2)));");
+  const command = await pnpmCommand({ Path: bin }, "win32");
+  expect(command.file).toBe(process.execPath);
+  expect(
+    JSON.parse((await exec(command.file, [...command.prefix, "space value", "a&b", "$(literal)"])).stdout),
+  ).toEqual(["space value", "a&b", "$(literal)"]);
+  await expect(pnpmCommand({ PATH: "" }, "win32")).rejects.toThrow("cannot locate");
+});
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });

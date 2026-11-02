@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, readlink, realpath, rename, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 
@@ -57,10 +58,32 @@ export async function revision(root: string): Promise<string | null> {
     return null;
   }
 }
+export async function pnpmCommand(env = process.env, platform: string = process.platform) {
+  const cli = env.npm_execpath;
+  if (cli && /^pnpm.*\.[cm]?js$/.test(basename(cli))) return { file: process.execPath, prefix: [cli] };
+  if (platform !== "win32") return { file: "pnpm", prefix: [] as string[] };
+  const path = Object.entries(env).find(([key]) => key.toLowerCase() === "path")?.[1] ?? "";
+  for (const directory of path.split(";").filter(Boolean)) {
+    const native = join(directory, "pnpm.exe");
+    try {
+      if ((await lstat(native)).isFile()) return { file: native, prefix: [] as string[] };
+    } catch {}
+    try {
+      const require = createRequire(join(resolve(directory), "pesuite-resolve.cjs"));
+      const manifest = require.resolve("pnpm/package.json");
+      const pkg = await read<{ bin?: string | { pnpm?: string } }>(manifest);
+      const bin = typeof pkg.bin === "string" ? pkg.bin : pkg.bin?.pnpm;
+      if (bin && /\.[cm]?js$/.test(bin)) {
+        const script = resolve(dirname(manifest), bin);
+        if ((await lstat(script)).isFile()) return { file: process.execPath, prefix: [script] };
+      }
+    } catch {}
+  }
+  throw new Error("cannot locate native pnpm or its JavaScript entry on Windows PATH");
+}
 export async function run(root: string, args: string[], env = process.env): Promise<void> {
-  const cli = process.env.npm_execpath;
-  const nodeCLI = cli && /^pnpm.*\.[cm]?js$/.test(basename(cli));
-  const result = await execute(nodeCLI ? process.execPath : "pnpm", nodeCLI ? [cli, ...args] : args, {
+  const command = await pnpmCommand(env);
+  const result = await execute(command.file, [...command.prefix, ...args], {
     cwd: root,
     env,
     timeout: 900000,
