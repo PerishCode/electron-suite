@@ -70,7 +70,13 @@ export async function pnpmCommand(env = process.env, platform: string = process.
     } catch {}
     try {
       const require = createRequire(join(resolve(directory), "pesuite-resolve.cjs"));
-      const manifest = require.resolve("pnpm/package.json");
+      let manifest: string;
+      try {
+        manifest = require.resolve("pnpm/package.json");
+      } catch {
+        manifest = require.resolve("pnpm");
+      }
+      if (basename(manifest) !== "package.json") continue;
       const pkg = await read<{ bin?: string | { pnpm?: string } }>(manifest);
       const bin = typeof pkg.bin === "string" ? pkg.bin : pkg.bin?.pnpm;
       if (bin && /\.[cm]?js$/.test(bin)) {

@@ -28,7 +28,14 @@ it("resolves the pnpm JavaScript entry behind Windows cmd shims without a shell"
   await mkdir(bin, { recursive: true });
   await mkdir(join(pkg, "bin"), { recursive: true });
   await writeFile(join(bin, "pnpm.cmd"), "@echo off\n");
-  await writeFile(join(pkg, "package.json"), JSON.stringify({ name: "pnpm", bin: { pnpm: "bin/pnpm.cjs" } }));
+  await writeFile(
+    join(pkg, "package.json"),
+    JSON.stringify({
+      name: "pnpm",
+      exports: { ".": "./package.json" },
+      bin: { pnpm: "bin/pnpm.cjs" },
+    }),
+  );
   await writeFile(join(pkg, "bin/pnpm.cjs"), "process.stdout.write(JSON.stringify(process.argv.slice(2)));");
   const command = await pnpmCommand({ Path: bin }, "win32");
   expect(command.file).toBe(process.execPath);
