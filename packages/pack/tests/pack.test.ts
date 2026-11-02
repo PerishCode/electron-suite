@@ -1,8 +1,9 @@
+import { join } from "node:path";
 import { channel } from "@perishcode/protocol";
 import { resolve } from "@perishcode/release";
 import { describe, expect, it } from "vitest";
 
-import { plan } from "@";
+import { layout, plan, target } from "@";
 
 describe("platform package", () => {
   it("derives install identity only from release identity", () => {
@@ -15,4 +16,12 @@ describe("platform package", () => {
       version: "2.1.0-beta.1",
     });
   });
+});
+
+it("plans native package paths for the supported platform/architecture pairs", () => {
+  expect(layout("/out", "probe", "mac", "x64").app).toBe(join("/out", "mac", "probe.app"));
+  expect(layout("/out", "probe", "linux", "arm64").executable).toBe(join("/out", "linux-arm64-unpacked", "probe"));
+  expect(layout("/out", "probe", "win", "x64").executable).toBe(join("/out", "win-unpacked", "probe.exe"));
+  expect(() => target("unknown", "x64")).toThrow("unsupported");
+  expect(() => target("mac", "ia32")).toThrow("unsupported");
 });
