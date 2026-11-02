@@ -1,7 +1,7 @@
 import type { Config, Context, Provider } from "@perishcode/config";
-import { channel } from "@perishcode/protocol";
-
+import { channelDescriptor, type ProductIdentity, releaseChannel } from "./channel.js";
 import { type Manifest, parse } from "./manifest.js";
+import { parseReleaseVersion } from "./version.js";
 
 function evaluate(provider: Provider | undefined, fallback: string, context: Readonly<Context>, name: string): string {
   if (!provider) return fallback;
@@ -11,18 +11,14 @@ function evaluate(provider: Provider | undefined, fallback: string, context: Rea
   return first;
 }
 
-function defaults(context: Readonly<Context>) {
-  const stable = context.channel === "stable";
-  return {
-    appid: stable ? "io.perish.electronsuite" : `io.perish.electronsuite.${context.channel}`,
-    name: stable ? "electron-suite" : `electron-suite ${context.channel}`,
-    scheme: stable ? "electronsuite" : `electronsuite-${context.channel}`,
-  };
-}
-
-export function resolve(config: Readonly<Config>, input: Context): Manifest {
-  const context = Object.freeze({ channel: channel(input.channel), version: input.version });
-  const base = defaults(context);
+export function resolve(
+  config: Readonly<Config>,
+  input: Context,
+  product: ProductIdentity = { appid: "io.perish.electronsuite", name: "electron-suite", scheme: "electronsuite" },
+): Manifest {
+  const context = Object.freeze({ channel: releaseChannel(input.channel), version: input.version });
+  parseReleaseVersion(context.version, context.channel);
+  const base = channelDescriptor(context.channel, product);
   const name = evaluate(config.name, base.name, context, "name");
   const scheme = evaluate(config.scheme, base.scheme, context, "scheme");
   const version = evaluate(config.version, context.version, context, "version");

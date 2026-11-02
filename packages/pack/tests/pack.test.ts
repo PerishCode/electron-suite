@@ -11,7 +11,7 @@ describe("platform package", () => {
     expect(value).toEqual({
       appId: "io.perish.electronsuite.beta",
       executableName: "electronsuite-beta",
-      productName: "electron-suite beta",
+      productName: "electron-suite Beta",
       version: "2.1.0-beta.1",
     });
   });

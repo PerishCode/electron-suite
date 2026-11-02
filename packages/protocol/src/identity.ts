@@ -15,7 +15,9 @@ function identity(value: string, name: string): string {
 }
 
 export function channel(value: string): Channel {
-  return identity(value, "channel") as Channel;
+  if (typeof value !== "string" || value.trim() !== value || !/^[a-z0-9]{1,12}$/.test(value))
+    throw new TypeError("channel must be 1-12 lowercase letters or digits");
+  return value as Channel;
 }
 
 export function namespace(value: string): Namespace {

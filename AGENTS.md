@@ -6,6 +6,7 @@
 - suite owns reusable mechanisms and distributes @perishcode npm packages through GitHub Packages; slim consumes fixed published versions and owns composition. Credentials stay in user .npmrc.
 - The current scope is four-unit skeletons and mechanism probes. Do not migrate OpenDesign features, business APIs or data models.
 - [#10](https://github.com/PerishCode/electron-suite/issues/10) owns sidecar convergence; [#11–#16](https://github.com/PerishCode/electron-suite/issues/1) cover inspect, serve, layered updates and blob. Sidecar 0.5 adds namespace/channel lifecycle sessions on the persistent directory. Recovery writes, instance/resource-use edges and live-process adoption remain unqualified; #26 records this increment.
+- [#28](https://github.com/PerishCode/electron-suite/issues/28) owns channel-model correction. Channel is product distribution identity; channel + namespace determines the resource factory. Sidecar 0.5 still allocates by namespace alone, so session evidence does not qualify cross-channel resource isolation. Fix this boundary before extending resource-use/recovery work.
 - Public capabilities use pesuite subcommands or explicit package APIs. package.json scripts contain only lint/test/build; the workspace root only dispatches `pnpm -r --if-present run <same-name>`. pnpm has no --if-exists option.
 - Modules run their own tools. Do not add install/prepare/pretest/prepack hooks, lifecycle aliases, root callbacks, or scripts directories. Extend policy explicitly when a real capability requires it.
 - guard is the engineering-policy authority. Run the relevant build/tests, root lint, direct root Biome check and guard before delivery. Missing execution evidence remains unqualified.
@@ -23,28 +24,30 @@
 
 ## Core file index
 
-| File or location                                               | Responsibility                                                           |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| package.json / pnpm-workspace.yaml / pnpm-lock.yaml            | standard dispatch, workspace membership and fixed dependency closure     |
-| pesuite.yaml / biome.json                                      | guard/runtime declarations and formatter/linter configuration            |
-| packages/guard/src/rules/tree.ts / scan/files.ts               | directory allowlists and inspected/pruned boundaries                     |
-| packages/guard/src/config/defaults.ts                          | policy defaults and rule index                                           |
-| packages/cli/src/index.ts / lifecycle.ts                       | sole public bin routing; guard/release/pack capabilities                 |
-| packages/sidecar/src/runtime/catalog.ts / control/directory.ts | namespace inventory, instance phases and read-only interrupted views     |
-| packages/sidecar/src/runtime/sessions.ts / sessionwire.ts      | lifecycle lanes, private nesting context and controller-owner connection |
-| packages/sidecar/src/runtime/ownership.ts                      | persistent exclusive owner records; interrupted/invalid ownership blocks |
-| packages/sidecar/src/control / runtime                         | hosted methods, resource ownership and management transport              |
-| packages/runtime/src/session.ts / capsule.ts                   | generation mounting, execution, activation and recovery                  |
-| packages/electron/src/host.ts / bridge.ts                      | installed host and narrow browser contract                               |
-| packages/release / blob / publish / pack                       | content identity, CAS, distribution primitives and unsigned packaging    |
-| packages/testkit/src/runner.ts / schema.ts                     | reference qualification API and evidence schema                          |
-| apps/carrier / capsule / web / daemon                          | reference runtime units, not product business code                       |
-| .github/workflows / .githooks/pre-commit                       | CI verification and optional local direct guard hook                     |
+| File or location                                               | Responsibility                                                            |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| package.json / pnpm-workspace.yaml / pnpm-lock.yaml            | standard dispatch, workspace membership and fixed dependency closure      |
+| pesuite.yaml / biome.json                                      | guard/runtime declarations and formatter/linter configuration             |
+| packages/guard/src/rules/tree.ts / scan/files.ts               | directory allowlists and inspected/pruned boundaries                      |
+| packages/guard/src/config/defaults.ts                          | policy defaults and rule index                                            |
+| packages/cli/src/index.ts / lifecycle.ts                       | sole public bin routing; guard/release/pack capabilities                  |
+| packages/sidecar/src/runtime/catalog.ts / control/directory.ts | namespace inventory, instance phases and read-only interrupted views      |
+| packages/sidecar/src/runtime/sessions.ts / sessionwire.ts      | lifecycle lanes, private nesting context and controller-owner connection  |
+| packages/sidecar/src/runtime/ownership.ts                      | persistent exclusive owner records; interrupted/invalid ownership blocks  |
+| packages/sidecar/src/control / runtime                         | hosted methods, resource ownership and management transport               |
+| packages/runtime/src/session.ts / capsule.ts                   | generation mounting, execution, activation and recovery                   |
+| packages/electron/src/host.ts / bridge.ts                      | installed host and narrow browser contract                                |
+| packages/release/src/channel.ts / version.ts                   | product-owned channel identity, counted versions and manifest consistency |
+| packages/release / blob / publish / pack                       | content identity, CAS, distribution primitives and unsigned packaging     |
+| packages/testkit/src/runner.ts / schema.ts                     | reference qualification API and evidence schema                           |
+| apps/carrier / capsule / web / daemon                          | reference runtime units, not product business code                        |
+| .github/workflows / .githooks/pre-commit                       | CI verification and optional local direct guard hook                      |
 
 ## Iteration workflows
 
 ### Local environment
 
+Local checkouts live under ~/Projects/perish.work/electron-suite and ~/Projects/perish.work/open-design-slim. Historical receipts retain their original absolute paths; rerun probes for current paths.
 Use Node24 and pnpm11.13.0. Configure GitHub Packages credentials in user .npmrc; repository .npmrc contains routing only.
 Run `pnpm install --frozen-lockfile`, then explicitly `pnpm build`. Installation does not build the workspace or configure Git hooks.
 If desired, enable the tracked hook after building with `git config core.hooksPath .githooks`.
