@@ -1,4 +1,5 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import * as paths from "node:path";
 import { dirname, join, resolve } from "node:path";
 
 import { canonical } from "@perishcode/protocol";
@@ -82,13 +83,21 @@ export async function bundle(
   return Buffer.from(canonical(parse(canonical({ files, schema: 1 }))));
 }
 
+export function bundleDestination(root: string, name: string, style = paths): string {
+  const target = style.resolve(root);
+  const destination = style.resolve(target, name);
+  const relative = style.relative(target, destination);
+  if (!relative || style.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${style.sep}`))
+    throw new Error("bundle escaped target");
+  return destination;
+}
+
 export async function materialize(input: string | Uint8Array, root: string): Promise<void> {
   const archive = parse(input);
   const target = resolve(root);
   await mkdir(target, { mode: 0o700, recursive: true });
   for (const file of archive.files) {
-    const destination = resolve(target, file.path);
-    if (!destination.startsWith(`${target}/`)) throw new Error("bundle escaped target");
+    const destination = bundleDestination(target, file.path);
     await mkdir(dirname(destination), { mode: 0o700, recursive: true });
     await writeFile(destination, Buffer.from(file.bytes, "base64"), { flag: "wx", mode: file.mode });
   }

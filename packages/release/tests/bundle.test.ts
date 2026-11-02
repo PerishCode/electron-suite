@@ -1,12 +1,13 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 
 import { define } from "@perishcode/config";
 import { channel, envelope } from "@perishcode/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { bundle, compose, decode, materialize, resolve } from "@";
+import { bundleDestination } from "@/bundle.js";
 
 const roots: string[] = [];
 
@@ -21,6 +22,11 @@ afterEach(async () => {
 });
 
 describe("bundle", () => {
+  it("contains Windows destinations using native path semantics", () => {
+    expect(bundleDestination("C:\\product", "nested/main.mjs", win32)).toBe("C:\\product\\nested\\main.mjs");
+    for (const name of ["../escape", "C:\\product-other\\file", "D:\\file", "."])
+      expect(() => bundleDestination("C:\\product", name, win32)).toThrow("escaped");
+  });
   it("packs deterministic files and materializes without path inference", async () => {
     const source = await root();
     const target = await root();
