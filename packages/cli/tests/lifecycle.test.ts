@@ -45,3 +45,15 @@ it("prepares actual content through the formal release entry and rejects invalid
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("routes short version and quality entries without injecting stable quality policy", async () => {
+  const messages: string[] = [];
+  const output = { stdout: (s: string) => messages.push(s), stderr: (s: string) => messages.push(s) };
+  expect(await run(["version", "--channel", "qa2", "--base", "1.2.3", "--number", "4"], "/missing", output)).toBe(0);
+  expect(JSON.parse(messages.at(-1) ?? "")).toEqual({ channel: "qa2", version: "1.2.3-qa2.4" });
+  expect(await run(["version", "--channel", "stable", "--version", "1.2.3"], "/missing", output)).toBe(0);
+  expect(await run(["version", "--channel", "stable", "--number", "4", "--base", "1.2.3"], "/missing", output)).toBe(2);
+  expect(await run(["version", "--channel", "qa2", "--number", "0", "--base", "1.2.3"], "/missing", output)).toBe(2);
+  expect(await run(["check", "--channel", "stable", "--gate", "unknown"], "/missing", output)).toBe(2);
+  expect(await run(["build", "--help"], "/missing", output)).toBe(0);
+});

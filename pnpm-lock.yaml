@@ -163,6 +163,9 @@ importers:
       '@perishcode/pack':
         specifier: workspace:*
         version: link:../pack
+      '@perishcode/pipeline':
+        specifier: workspace:*
+        version: link:../pipeline
       '@perishcode/release':
         specifier: workspace:*
         version: link:../release
@@ -273,6 +276,37 @@ importers:
       '@perishcode/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
+
+  packages/pipeline:
+    dependencies:
+      '@perishcode/guard':
+        specifier: workspace:*
+        version: link:../guard
+      '@perishcode/pack':
+        specifier: workspace:*
+        version: link:../pack
+      '@perishcode/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@perishcode/release':
+        specifier: workspace:*
+        version: link:../release
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
+    devDependencies:
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2

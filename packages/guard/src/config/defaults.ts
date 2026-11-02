@@ -21,6 +21,8 @@ export const defaults: Policy = {
     ".npmrc",
     ".gitkeep",
     "pre-commit",
+    "stable.release.yml",
+    "channel.release.yml",
   ],
   rules: {
     "directory.allowed": { enabled: true },

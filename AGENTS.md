@@ -7,6 +7,7 @@
 - The current scope is four-unit skeletons and mechanism probes. Do not migrate OpenDesign features, business APIs or data models.
 - [#10](https://github.com/PerishCode/electron-suite/issues/10) owns sidecar convergence; [#11–#16](https://github.com/PerishCode/electron-suite/issues/1) cover inspect, serve, layered updates and blob. Sidecar 0.6 binds allocator/registry/instance/session/binding management to channel+namespace factories and rejects implicit legacy migration. Recovery writes, instance/resource-use edges and live-process adoption remain unqualified; #26 records this increment.
 - [#28](https://github.com/PerishCode/electron-suite/issues/28) owns channel-model correction. Channel is product distribution identity; channel + namespace determines the resource factory. Factory delivery is tracked by #30; distribution orchestration and published four-unit SDK convergence remain pending in #28. Older 0.5 session evidence alone does not qualify factory isolation.
+- [#32](https://github.com/PerishCode/electron-suite/issues/32) owns shared distribution tooling. --channel selects identity; stable.release.yml/channel.release.yml explicitly select quality gates. Keep version/build/package/check/publish implementations in suite packages, not workflow shell, product scripts or composite actions. Tooling must not silently add stable-specific quality policy.
 - Public capabilities use pesuite subcommands or explicit package APIs. package.json scripts contain only lint/test/build; the workspace root only dispatches `pnpm -r --if-present run <same-name>`. pnpm has no --if-exists option.
 - Modules run their own tools. Do not add install/prepare/pretest/prepack hooks, lifecycle aliases, root callbacks, or scripts directories. Extend policy explicitly when a real capability requires it.
 - guard is the engineering-policy authority. Run the relevant build/tests, root lint, direct root Biome check and guard before delivery. Missing execution evidence remains unqualified.
@@ -24,25 +25,27 @@
 
 ## Core file index
 
-| File or location                                               | Responsibility                                                            |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| package.json / pnpm-workspace.yaml / pnpm-lock.yaml            | standard dispatch, workspace membership and fixed dependency closure      |
-| pesuite.yaml / biome.json                                      | guard/runtime declarations and formatter/linter configuration             |
-| packages/guard/src/rules/tree.ts / scan/files.ts               | directory allowlists and inspected/pruned boundaries                      |
-| packages/guard/src/config/defaults.ts                          | policy defaults and rule index                                            |
-| packages/cli/src/index.ts / lifecycle.ts                       | sole public bin routing; guard/release/pack capabilities                  |
-| packages/sidecar/src/runtime/catalog.ts / control/directory.ts | factory inventory, instance phases and read-only interrupted views        |
-| packages/sidecar/src/runtime/sessions.ts / sessionwire.ts      | lifecycle lanes, private nesting context and controller-owner connection  |
-| packages/sidecar/src/runtime/ownership.ts                      | persistent exclusive owner records; interrupted/invalid ownership blocks  |
-| packages/sidecar/src/control/factory.ts / legacy.ts            | bound factory API and explicit read-only schema-1 inspection              |
-| packages/sidecar/src/control / runtime                         | hosted methods, resource ownership and management transport               |
-| packages/runtime/src/session.ts / capsule.ts                   | generation mounting, execution, activation and recovery                   |
-| packages/electron/src/host.ts / bridge.ts                      | installed host and narrow browser contract                                |
-| packages/release/src/channel.ts / version.ts                   | product-owned channel identity, counted versions and manifest consistency |
-| packages/release / blob / publish / pack                       | content identity, CAS, distribution primitives and unsigned packaging     |
-| packages/testkit/src/runner.ts / schema.ts                     | reference qualification API and evidence schema                           |
-| apps/carrier / capsule / web / daemon                          | reference runtime units, not product business code                        |
-| .github/workflows / .githooks/pre-commit                       | CI verification and optional local direct guard hook                      |
+| File or location                                               | Responsibility                                                             |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| package.json / pnpm-workspace.yaml / pnpm-lock.yaml            | standard dispatch, workspace membership and fixed dependency closure       |
+| pesuite.yaml / biome.json                                      | guard/runtime declarations and formatter/linter configuration              |
+| packages/guard/src/rules/tree.ts / scan/files.ts               | directory allowlists and inspected/pruned boundaries                       |
+| packages/guard/src/config/defaults.ts                          | policy defaults and rule index                                             |
+| packages/cli/src/index.ts / lifecycle.ts / pipeline.ts         | sole public bin and legacy/short distribution entry routing                |
+| packages/pipeline/src                                          | channel identity, immutable build/package receipts, checks and publication |
+| packages/pack/src/platform.ts                                  | matching native platform/architecture layout and safe output separation    |
+| packages/sidecar/src/runtime/catalog.ts / control/directory.ts | factory inventory, instance phases and read-only interrupted views         |
+| packages/sidecar/src/runtime/sessions.ts / sessionwire.ts      | lifecycle lanes, private nesting context and controller-owner connection   |
+| packages/sidecar/src/runtime/ownership.ts                      | persistent exclusive owner records; interrupted/invalid ownership blocks   |
+| packages/sidecar/src/control/factory.ts / legacy.ts            | bound factory API and explicit read-only schema-1 inspection               |
+| packages/sidecar/src/control / runtime                         | hosted methods, resource ownership and management transport                |
+| packages/runtime/src/session.ts / capsule.ts                   | generation mounting, execution, activation and recovery                    |
+| packages/electron/src/host.ts / bridge.ts                      | installed host and narrow browser contract                                 |
+| packages/release/src/channel.ts / version.ts                   | product-owned channel identity, counted versions and manifest consistency  |
+| packages/release / blob / publish / pack                       | content identity, CAS, distribution primitives and unsigned packaging      |
+| packages/testkit/src/runner.ts / schema.ts                     | reference qualification API and evidence schema                            |
+| apps/carrier / capsule / web / daemon                          | reference runtime units, not product business code                         |
+| .github/workflows / .githooks/pre-commit                       | CI verification and optional local direct guard hook                       |
 
 ## Iteration workflows
 
@@ -79,7 +82,14 @@ node --input-type=module -e 'import { run } from "@perishcode/testkit"; const r=
 
 Set PERISH_PACKAGE=1 on macOS for unsigned installed qualification. Real Chromium has its separate explicit test above; a caller boolean is not evidence. Reports go under .artifacts. Signing, remote feeds and other platform guarantees require separate acceptance.
 
-### Content, package and distribution
+### Shared channel distribution
+
+The pipeline package consumes data-only pesuite.yaml/pipeline (four module roots and blob slots) plus the stable base runtime product identity. version/build accept --channel and a full --version or base/count. Build stages fingerprinted carrier/content and overrides the staged host.json, without editing product source configuration. It invalidates the current pointer before compiling; generated outputs cannot escape through symlinks. Runtime product-directory IO belongs to release; runtime re-exports it and does not acquire build-tool dependencies.
+Commands: pesuite version/build/check/pack/publish. check gates policy/tests/artifacts/installed are separate; installed currently runs actual macOS first/cold launch with PID/generation/nonce/drain evidence. pack accepts mac/linux/win on matching native runners/architectures and creates unsigned archives/SHA256. Packaging is not installed-runtime or signing acceptance on every platform.
+The two product release workflows contain one short pesuite call per run, with separate quality steps. Quality requirements belong to workflow; publish --require validates only explicitly selected receipts against the current artifact and clean source commit. Publication defaults draft; upload/verification precede any explicit promotion, duplicate tags reject, and failed uploads leave an unpromoted draft. Remote product publication is not required merely to validate tooling.
+Use pipeline module tests and independent slim registry CLI execution for acceptance. Stage tarball overrides only under .artifacts; delivered consumer manifests must use exact registry versions. Historical references to runtime 0.1 remain true until a separate SDK publication.
+
+### Reference content, package and npm distribution
 
 After module builds, prepare reference content through the formal capability:
 

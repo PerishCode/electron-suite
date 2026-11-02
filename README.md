@@ -248,3 +248,35 @@ await remote.session(async (scoped) => {
 这是显式 API/存储格式变更：不再接受省略 channel 的 namespace-only 资源调用，不默认 stable。旧 owner/namespace/bindings 布局拒绝写入；readLegacyDirectory(root) 明确只读检查旧 schema-1 目录，readDirectory 只接受新 factory 目录。没有自动搬迁或清理旧资源，也没有恢复写入工具。
 
 root manager 仍以单个排他 authority 承载多个 factory；其他 channel 的操作可推进不意味着 manager 崩溃故障域独立。源四单元适配已使用显式 factory 作用域和 factory 持久 scope，但尚未发布新四单元 SDK。恢复写入、存活子进程接管、完整资源使用关系和完整渠道发布编排仍未验收；不得以本增量替代 #28 的后续交付。
+
+## 共享 pipeline 与薄发布 workflow
+
+`@perishcode/pipeline` 提供版本、四单元资源构建、构建/打包收据、独立质量检测与 GitHub Release 发布机制；唯一 bin 仍为 pesuite。产品声明路径数据，不复制流程实现：
+
+```yaml
+pipeline:
+  carrier: apps/electron
+  capsule: apps/capsule
+  daemon: apps/daemon
+  web: apps/web
+  blobs:
+    probe: apps/capsule/dist/probe.bin
+```
+
+runtime 声明 stable 基础身份和版本；--channel 从基础产品派生安装身份，其他渠道通过 --number 或完整 --version 选择版本。version 也可用 --base 脱离仓库计算。build 运行各模块自有 build 工具，将 carrier、host.json 与经验证的 content 固化到 .artifacts/distribution/<channel>/versions/<version>/<fingerprint>，不会改源码配置。源码 Git 提交必须属于当前根，不能把外层仓库的提交记为嵌套消费者来源。产物/配置改变或失败构建不得复用旧成功证据。
+
+```sh
+pnpm exec pesuite version --channel preview --base 1.2.3 --number 1
+pnpm exec pesuite build --channel preview --number 1
+pnpm exec pesuite check --channel preview --gate tests
+pnpm exec pesuite pack --channel preview --platform mac
+pnpm exec pesuite check --channel preview --gate artifacts
+pnpm exec pesuite check --channel preview --gate installed
+```
+
+policy、tests、artifacts、installed 是独立 check gate；--channel 只决定身份，工具不为 stable 隐式添加门槛。policy 同时检查两个 release workflow 的 run 为短入口，不允许本地 composite action 藏实现。由 stable.release.yml/channel.release.yml 显式决定质量 gap 和平台矩阵。pack 支持匹配原生 runner/架构的 mac/linux/win 目录包及归档，默认 unsigned；installed 当前仅验收 macOS 的实际首次/冷启动与受管退出，不扩张为签名/公证或所有平台运行时支持。
+
+publish 需要明确 --repository，默认 --mode draft。--require 指定必须属于当前构建/产物/源码提交的通过记录；完整性和干净来源提交始终校验。工具先创建 draft、上传并核对资产，只有显式 release/prerelease 模式才提升，已有 tag 不覆盖，失败保留未公开的 draft 供检查。不在此版本实现跨平台资产聚合、远程更新信任或自动 latest feed。
+GitHub 发布接口契约参考 [GitHub Releases REST API](https://docs.github.com/en/rest/releases/releases)。产品 workflow 默认 publish=false；CI registry 认证参考 [GitHub Packages npm](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry)，token 通过环境注入，不能提交配置或日志。实际验收与未验收项见 #32。
+
+发布组合：guard/cli 0.5.0、release 0.4.0、pack 0.2.0、pipeline 0.1.0。release 统一拥有 product 目录 IO，runtime 保留其既有 API 的源码 re-export；已发布四单元 SDK 仍为 0.1.0，pipeline 交付不代表 SDK 已完成 factory 版本迁移。

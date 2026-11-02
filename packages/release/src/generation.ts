@@ -1,9 +1,20 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 
-import { type Artifact, digest, type Envelope, type Generation, identify, type Kind } from "@perishcode/protocol";
+import { join } from "node:path";
+import {
+  type Artifact,
+  canonical,
+  digest,
+  type Envelope,
+  envelope,
+  type Generation,
+  identify,
+  type Kind,
+  verify,
+} from "@perishcode/protocol";
 
 import { bundle } from "./bundle.js";
-import { encode, type Manifest } from "./manifest.js";
+import { decode, encode, type Manifest } from "./manifest.js";
 
 export interface Blob {
   path: string;
@@ -67,4 +78,28 @@ export async function compose(manifest: Manifest, source: Source): Promise<Produ
     envelope: { digest: identify(generation), generation, schema: 1 },
     manifest,
   };
+}
+
+export async function writeProduct(root: string, product: Product): Promise<void> {
+  await mkdir(root, { recursive: true });
+  for (const asset of product.assets) {
+    if (!verify(asset.artifact, asset.bytes)) throw new Error("product asset mismatch");
+    await writeFile(join(root, asset.artifact.digest.slice(7)), asset.bytes);
+  }
+  await writeFile(join(root, "release.json"), encode(product.manifest));
+  await writeFile(join(root, "generation.json"), canonical(product.envelope));
+}
+
+export async function readProduct(root: string): Promise<Product> {
+  const manifest = decode(await readFile(join(root, "release.json"), "utf8"));
+  const value = envelope(JSON.parse(await readFile(join(root, "generation.json"), "utf8")));
+  const g = value.generation;
+  const assets = await Promise.all(
+    [g.capsule, g.daemon, g.web, ...g.blobs].map(async (artifact) => {
+      const bytes = await readFile(join(root, artifact.digest.slice(7)));
+      if (!verify(artifact, bytes)) throw new Error("product asset verification failed");
+      return { artifact, bytes };
+    }),
+  );
+  return { assets, envelope: value, manifest };
 }

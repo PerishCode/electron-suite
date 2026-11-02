@@ -5,9 +5,16 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
+import { type Architecture, layout, nativePlatform, type Platform, separate, target } from "./platform.js";
+
+export type { Architecture, Platform } from "./platform.js";
+export { layout, nativePlatform, separate, target } from "./platform.js";
+
 import { encode, type Manifest, parse } from "@perishcode/release";
 
 export interface Input {
+  platform?: Platform;
+  arch?: Architecture;
   carrier: string;
   daemon: string;
   manifest: Manifest;
@@ -61,9 +68,12 @@ export async function inspect(app: string): Promise<Receipt> {
 }
 
 export async function pack(input: Input): Promise<Package> {
-  if (process.platform !== "darwin") throw new Error("macOS package requires darwin");
+  const selected = target(input.platform, input.arch);
+  if (selected.platform !== nativePlatform() || selected.arch !== process.arch)
+    throw new Error("pack requires the matching native runner and Electron architecture");
   const manifest = parse(input.manifest);
   const identity = plan(manifest);
+  await separate(input.output, [input.carrier, input.daemon, input.web, ...(input.seed ? [input.seed] : [])]);
   const temporary = await mkdtemp(join(tmpdir(), "perish-pack-"));
   const output = resolve(input.output);
   const release = join(temporary, "release.json");
@@ -98,6 +108,8 @@ export async function pack(input: Input): Promise<Package> {
       notarize: false,
       target: ["dir"],
     },
+    linux: { target: ["dir"], executableName: identity.executableName },
+    win: { target: ["dir"], signAndEditExecutable: false },
     nodeGypRebuild: false,
     npmRebuild: false,
     productName: identity.productName,
@@ -113,7 +125,9 @@ export async function pack(input: Input): Promise<Package> {
     await mkdir(output, { recursive: true });
     await execute(process.execPath, [
       locate("electron-builder/out/cli/cli.js"),
-      "--mac",
+      `--${selected.platform}`,
+      `--${selected.arch}`,
+      "--dir",
       "--projectDir",
       temporary,
       "--config",
@@ -121,13 +135,7 @@ export async function pack(input: Input): Promise<Package> {
       "--publish",
       "never",
     ]);
-    const app = join(output, `mac-${process.arch}`, `${identity.executableName}.app`);
-    const resources = join(app, "Contents", "Resources");
-    return {
-      app,
-      executable: join(app, "Contents", "MacOS", identity.executableName),
-      resources,
-    };
+    return layout(output, identity.executableName, selected.platform, selected.arch);
   } finally {
     await rm(temporary, { force: true, recursive: true });
   }
