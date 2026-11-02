@@ -201,3 +201,21 @@ await client.session(scope, async (scoped) => {
 Service.directory / Client.directory / readDirectory 的 sessions 记录只保留每个作用域当前或最近会话的阶段与 manager/incarnation，不公开 token 或回调异常正文。功能标记和记录原子提交；兼容正常关闭的旧版目录，但已建立的会话索引缺失将拒绝打开。
 
 普通业务消息不混入会话字段。若 handler 要启动/停止受管实例，控制方须先进入 Client.session，再在该上下文调用 Peer；普通业务 handler 中直接发起生命周期写入会拒绝，以免与排空互相等待。原始 grant/revoke/forward 仍是 namespace 资源分配能力；实例与资源使用关系将在后续增量统一。四单元 SDK 的控制面接入、恢复写入和存活子进程接管均未据此宣称完成。验收见 [#26](https://github.com/PerishCode/electron-suite/issues/26)。
+
+## 渠道分发契约纠偏（#28）
+
+channel 对标产品分发生命周期；与 namespace 共同确定资源管理 factory。Sidecar 0.5 的会话按二者串行，但 allocator/registry 仍按 namespace 管理，尚未实现 factory 资源隔离。恢复与资源使用关系工作先让位于这一基础纠偏，不把已有会话测试扩张为资源隔离证明。
+
+release 0.2 规范化 OpenDesign 的渠道实践：stable 使用 X.Y.Z；其他渠道使用 X.Y.Z-<channel>.N（N 为正安全整数）。渠道名为 1–12 个小写字母或数字；local 保留给开发运行时，不可发布。产品元数据使用不带 v 的规范版本，Git tag 的展示前缀不进入 manifest。不接纳含糊的 internal 后缀或 build metadata。protocol 0.2 提供统一渠道 token，config 0.2 与之保持类型依赖一致。
+
+```ts
+import { channelDescriptor, formatReleaseVersion, resolve } from "@perishcode/release";
+const product = { appid: "io.perish.slim", name: "Open Design Slim", scheme: "opendesignslim" };
+const descriptor = channelDescriptor("qa2", product);
+const version = formatReleaseVersion(descriptor.channel, "1.2.3", 7);
+const manifest = resolve({}, { channel: descriptor.channel, version }, product);
+```
+
+同一 descriptor 派生渠道安装 appid/name/scheme/origin 与 storagePrefix；parseReleaseVersion 支持从完整版本还原渠道，releaseMetadataVersionFields 统一生成 baseVersion/releaseVersion/releaseNumber（stable 为 stableVersion）。resolve、manifest parse/encode/decode 和 compose/emit 共享版本与渠道一致性检查；配置 version provider 也不能改变所属渠道。resolve 第三个参数传产品身份；省略仍使用 suite 参考产品默认值，产品消费者应显式传入。
+
+本增量只交付渠道版本与产品身份契约。平台 namespace 默认值、factory 存储/API、CLI 的完整 build/pack/release 身份传递、reservation/latest CAS、发布门槛与四单元运行时接入仍由 [#28](https://github.com/PerishCode/electron-suite/issues/28) 推进。渠道是否公开、GitHub 发布与存储后端由产品策略决定。

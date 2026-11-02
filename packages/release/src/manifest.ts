@@ -1,9 +1,10 @@
-import { type Channel, canonical, channel } from "@perishcode/protocol";
+import { type Channel, canonical } from "@perishcode/protocol";
+
+import { releaseChannel } from "./channel.js";
+import { parseReleaseVersion } from "./version.js";
 
 const appid = /^[a-z0-9]+(?:\.[a-z0-9]+)+$/;
 const scheme = /^[a-z][a-z0-9+.-]*$/;
-const semver =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export interface Identity {
   appid: string;
@@ -44,7 +45,7 @@ export function parse(value: unknown): Manifest {
   const identity = record(data.identity, "manifest.identity");
   keys(identity, ["appid", "name", "origin", "scheme", "version"], "manifest.identity");
   const result: Manifest = {
-    channel: channel(text(data.channel, "manifest.channel")),
+    channel: releaseChannel(text(data.channel, "manifest.channel")),
     identity: {
       appid: text(identity.appid, "manifest.identity.appid"),
       name: text(identity.name, "manifest.identity.name"),
@@ -60,7 +61,7 @@ export function parse(value: unknown): Manifest {
   if (!appid.test(result.identity.appid)) throw new TypeError("manifest.identity.appid is invalid");
   if (!result.identity.name.trim()) throw new TypeError("manifest.identity.name is invalid");
   if (!scheme.test(result.identity.scheme)) throw new TypeError("manifest.identity.scheme is invalid");
-  if (!semver.test(result.identity.version)) throw new TypeError("manifest.identity.version is invalid");
+  parseReleaseVersion(result.identity.version, result.channel);
   return result;
 }
 

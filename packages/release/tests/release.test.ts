@@ -34,13 +34,13 @@ describe("release", () => {
         return version;
       },
     });
-    const manifest = resolve(config, { channel: channel("canary"), version: "2.0.0" });
+    const manifest = resolve(config, { channel: channel("canary"), version: "2.0.0-canary.1" });
 
     expect(manifest.identity).toMatchObject({
       name: "Perish canary",
       origin: "perish-canary://carrier",
       scheme: "perish-canary",
-      version: "2.0.0",
+      version: "2.0.0-canary.1",
     });
     expect(seen).toEqual(["canary", "canary"]);
   });
