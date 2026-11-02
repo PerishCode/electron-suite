@@ -295,3 +295,13 @@ Capsule 和 Session 绑定 factory 管理资源、进程与 binding，多步 lif
 SIGKILL 后父管道仍使 daemon 收敛，但 manager 保留 interrupted 权威，重新启动必须报 recovery required。
 PESUITE_RECOVER 只恢复正常管理器内失败的 generation binding，不提供 manager 中断恢复或 live-child adoption。
 不得删除 authority/registry、改根或猜测 stable 来恢复旧布局。本增量不实现旧 SDK 数据迁移执行器。
+
+
+## 后台自动化 Electron 验证（#40）
+
+SDK 0.2.1 的 HostOptions.automation 将后台窗口行为与 probe 的 ready 后退出分开。
+probe 隐含 automation；长驻故障注入用 automation=true、probe=false，仍真实运行 BrowserWindow/renderer。
+macOS 在 ready 前设 accessory activation policy，自动化窗口 show=false/focusable=false；正常交互启动保持原行为。
+HostReceipt.automation 记录窗口 show/focus 事件与最终可见/可聚焦事实，自动化出现可见或聚焦窗口会拒绝验收。
+参考 carrier 共用相同策略。slim 的故障验证通过 PESUITE_AUTOMATION=1 启用，不能用普通交互启动替代后台探针。
+这些窗口事实不等价于所有系统配置下的 Space 保证；macOS 前台应用/Space 变化需独立只读观察。

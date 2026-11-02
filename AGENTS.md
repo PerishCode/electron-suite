@@ -40,6 +40,7 @@
 | packages/sidecar/src/control/factory.ts / legacy.ts            | bound factory API and explicit read-only schema-1 inspection               |
 | packages/sidecar/src/control / runtime                         | hosted methods, resource ownership and management transport                |
 | packages/runtime/src/session.ts / capsule.ts                   | generation mounting, execution, activation and recovery                    |
+| packages/electron/src/automation.ts                            | background validation policy and window visibility/focus evidence          |
 | packages/electron/src/host.ts / bridge.ts                      | installed host and narrow browser contract                                 |
 | packages/release/src/channel.ts / version.ts                   | product-owned channel identity, counted versions and manifest consistency  |
 | packages/release / blob / publish / pack                       | content identity, CAS, distribution primitives and unsigned packaging      |
@@ -65,6 +66,7 @@ Online inventory uses Service.directory or factory.directory; after interruption
 Group lifecycle writes with Service.session(scope, callback) or Client.session(scope, scopedClient => ...). The manager root plus namespace/channel is the lane; same-scope nesting reenters, cross-scope nesting fails. A scoped Client/Factory expires after its callback. Ordinary business handlers need an already-held controller session before lifecycle writes; business payloads remain caller-owned. Factory grant/revoke/forward/resources/binding entries participate in lifecycle sessions; hosted allocations also require controller sessions from business handlers. These do not provide multi-factory transactions or a resource-use graph.
 An unclean controller connection loss blocks its lane as interrupted after accepted operations drain. No timeout steals ownership; shutdown reports recovery required and retains authority. Do not clear records to resume.
 Hosted control tests are `pnpm --filter @perishcode/sidecar test`; the real Chromium probe is `PERISH_GUI=1 pnpm --filter @perishcode/carrier test` after building.
+Automated Electron runs use HostOptions.automation (probe implies it); retain automation for long-running crash injection. macOS uses accessory policy before ready and non-focusable hidden windows. HostReceipt includes actual show/focus evidence.
 The unified inspect/serve lifecycle entries are still tracked by #11/#12; do not invent root shortcuts as substitutes.
 
 ### Local build and checks
