@@ -5,7 +5,15 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { channel, type Digest, gates, namespace } from "@perishcode/protocol";
 import { decode, type Manifest } from "@perishcode/release";
-import { Client, type Lease, type Service, serve } from "@perishcode/sidecar";
+import {
+  Client,
+  type Directory,
+  type Factory,
+  type FactoryScope,
+  type Lease,
+  type Service,
+  serve,
+} from "@perishcode/sidecar";
 import { type Attempt, Capsule, type Mount } from "./capsule.js";
 import { readProduct } from "./product.js";
 
@@ -29,6 +37,8 @@ export interface SessionOptions {
   seed: string;
 }
 export interface Receipt {
+  factory: Readonly<FactoryScope>;
+  directory: Directory;
   capsule: string;
   daemon: Record<string, unknown>;
   generation: Digest;
@@ -44,11 +54,12 @@ export class Session {
   private capability?: Awaited<ReturnType<Client["issue"]>>;
   private transient: string[] = [];
   private closed = false;
+  private closing?: Promise<{ status: string; survivors: number[] }>;
   private ready = false;
   private constructor(
     readonly options: SessionOptions,
     private host: Service,
-    private client: Client,
+    private factory: Factory,
     private capsule: Capsule,
     readonly mount: Mount,
     readonly manifest: Manifest,
@@ -65,9 +76,10 @@ export class Session {
     const scope = namespace(options.namespace);
     const lane = channel(options.manifest.channel);
     const capsule = new Capsule(client, scope, lane, options.carrier);
+    const factory = capsule.factory;
     let attempt: Attempt | undefined;
     try {
-      const current = (await client.binding(scope, lane)).state;
+      const current = (await factory.binding()).state;
       if (options.recover) {
         if (!current.current) throw new Error("no committed generation to recover");
         attempt = await capsule.recover(current.current);
@@ -85,7 +97,13 @@ export class Session {
       }
       const mount = attempt ? await capsule.prepare(attempt) : await capsule.mount();
       const manifest = decode(await readFile(join(mount.capsule, "release.json"), "utf8"));
-      const session = new Session(options, host, client, capsule, mount, manifest, attempt?.nonce ?? randomUUID());
+      if (
+        manifest.channel !== lane ||
+        manifest.identity.appid !== options.manifest.identity.appid ||
+        manifest.identity.origin !== options.manifest.identity.origin
+      )
+        throw new Error("mounted identity mismatch");
+      const session = new Session(options, host, factory, capsule, mount, manifest, attempt?.nonce ?? randomUUID());
       session.attempt = attempt;
       return session;
     } catch (fault) {
@@ -111,38 +129,29 @@ export class Session {
   }
 
   async start(): Promise<void> {
-    const scope = namespace(this.options.namespace);
+    if (this.closed || this.closing || this.lease) throw new Error("session is closed or already started");
+    return this.factory.session(() => this.startWithin());
+  }
+
+  private async startWithin(): Promise<void> {
     const owner = `n${this.nonce.replaceAll("-", "")}`;
-    this.capability = await this.client.issue({
-      namespace: scope,
-      channel: this.manifest.channel,
+    this.capability = await this.factory.issue({
       owner,
       service: "daemon",
     });
-    const data = await this.client.grant(
-      { namespace: scope, channel: this.manifest.channel },
-      { kind: "data", name: "daemon", scope: "factory" },
-    );
-    const socket = await this.client.grant(
-      { namespace: scope, channel: this.manifest.channel },
-      { kind: "socket", name: "daemon", owner, scope: "attempt" },
-    );
-    const port = await this.client.grant(
-      { namespace: scope, channel: this.manifest.channel },
-      {
-        kind: "port",
-        name: "daemon",
-        owner,
-        scope: "attempt",
-        scheme: "http",
-      },
-    );
+    const data = await this.factory.grant({ kind: "data", name: "daemon", scope: "factory" });
+    const socket = await this.factory.grant({ kind: "socket", name: "daemon", owner, scope: "attempt" });
+    const port = await this.factory.grant({
+      kind: "port",
+      name: "daemon",
+      owner,
+      scope: "attempt",
+      scheme: "http",
+    });
     this.transient.push(port.lease, socket.lease);
-    this.lease = await this.client.start({
+    this.lease = await this.factory.start({
       command: this.options.executable,
       args: [join(this.mount.daemon, "main.mjs")],
-      channel: this.manifest.channel,
-      namespace: scope,
       generation: this.mount.target,
       slot: "daemon",
       ready: `ready:${this.mount.target}:${this.nonce}`,
@@ -157,7 +166,7 @@ export class Session {
         PERISH_LIFELINE: "1",
       },
     });
-    await this.client.forward({ namespace: scope, channel: this.manifest.channel }, port.lease, socket.lease);
+    await this.factory.forward(port.lease, socket.lease);
     this.endpoint = port.value;
     const health = await this.request("health");
     if (health.pid !== this.lease.pid || health.generation !== this.mount.target || health.nonce !== this.nonce) {
@@ -180,6 +189,10 @@ export class Session {
   }
 
   async confirm(payload: Payload, renderer: string): Promise<Receipt> {
+    return this.factory.session(() => this.confirmWithin(payload, renderer));
+  }
+
+  private async confirmWithin(payload: Payload, renderer: string): Promise<Receipt> {
     if (!renderer || !this.lease) throw new Error("runtime evidence missing");
     const daemon = await this.request("health");
     if (daemon.pid !== this.lease.pid || daemon.generation !== this.mount.target || daemon.nonce !== this.nonce) {
@@ -192,6 +205,8 @@ export class Session {
     }
     this.ready = true;
     return {
+      factory: this.factory.scope,
+      directory: await this.factory.directory(),
       capsule: payload.witness,
       daemon,
       generation: this.mount.target,
@@ -204,21 +219,26 @@ export class Session {
 
   async close(error = "runtime stopped before readiness"): Promise<{ status: string; survivors: number[] }> {
     if (this.closed) return { status: "stopped", survivors: [] };
-    this.closed = true;
+    this.closing ??= this.closeWithin(error).finally(() => {
+      this.closing = undefined;
+    });
+    return this.closing;
+  }
+
+  private async closeWithin(error: string): Promise<{ status: string; survivors: number[] }> {
     let result = { status: "stopped", survivors: [] as number[] };
-    try {
-      if (this.attempt && !this.ready) await this.capsule.fail(this.attempt, error);
-      if (this.lease) result = await this.client.release(this.lease);
-      if (result.survivors.length) throw new Error("daemon survived retirement");
-      if (this.capability) await this.client.retire(this.capability);
-      for (const lease of this.transient)
-        await this.client.revoke(
-          { namespace: namespace(this.options.namespace), channel: this.manifest.channel },
-          lease,
-        );
-      return result;
-    } finally {
-      await this.host.close();
-    }
+    await this.factory.session(async () => {
+      if (this.attempt && !this.ready) {
+        await this.capsule.fail(this.attempt, error);
+        this.attempt = undefined;
+      }
+      if (this.lease) result = await this.factory.release(this.lease);
+      if (result.status !== "stopped" || result.survivors.length) throw new Error("daemon retirement incomplete");
+      if (this.capability) await this.factory.retire(this.capability);
+      for (const lease of this.transient) await this.factory.revoke(lease);
+    });
+    await this.host.close();
+    this.closed = true;
+    return result;
   }
 }

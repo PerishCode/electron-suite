@@ -18,8 +18,8 @@ import {
   verify,
 } from "@perishcode/protocol";
 import type { Feed } from "@perishcode/publish";
-import { bundle, materialize } from "@perishcode/release";
-import type { Change, Client, Journal } from "@perishcode/sidecar";
+import { bundle, decode, materialize } from "@perishcode/release";
+import type { Change, Client, Factory, Journal } from "@perishcode/sidecar";
 
 export interface Content {
   artifact: Artifact;
@@ -103,47 +103,52 @@ async function restore(store: Store, artifact: Artifact, root: string): Promise<
 }
 
 export class Capsule {
+  readonly factory: Factory;
   constructor(
     readonly client: Client,
     readonly namespace: Namespace,
     readonly channel: Channel,
     readonly carrier = 1,
-  ) {}
+  ) {
+    this.factory = client.factory({ namespace, channel });
+  }
 
   async update(feed: Feed): Promise<Attempt | undefined> {
+    return this.factory.session(() => this.updateWithin(feed));
+  }
+
+  private async updateWithin(feed: Feed): Promise<Attempt | undefined> {
     const distribution = await feed.head(this.channel);
     if (!distribution.head) return undefined;
-    const binding = await this.client.binding(this.namespace, this.channel);
+    const binding = await this.factory.binding();
     if (binding.state.current === distribution.head.generation && !binding.state.handoff) return undefined;
     const release = await feed.release(this.channel, distribution.head);
     return this.stage(release.envelope, release.assets);
   }
 
   async stage(input: unknown, contents: Content[], mode: Mode = "update"): Promise<Attempt> {
+    return this.factory.session(() => this.stageWithin(input, contents, mode));
+  }
+
+  private async stageWithin(input: unknown, contents: Content[], mode: Mode = "update"): Promise<Attempt> {
     const manifest = envelope(input);
     if (manifest.generation.carrier > this.carrier) throw new Error("incompatible carrier ABI");
     const expected = new Map(list(manifest).map((artifact) => [key(artifact), artifact]));
     if (expected.size !== contents.length) throw new Error("generation content mismatch");
     const nonce = randomUUID();
-    const staging = await this.client.grant(
-      { namespace: this.namespace, channel: this.channel },
-      {
-        kind: "staging",
-        name: "capsule",
-        owner: nonce,
-        scope: "attempt",
-      },
-    );
+    const staging = await this.factory.grant({
+      kind: "staging",
+      name: "capsule",
+      owner: nonce,
+      scope: "attempt",
+    });
 
     try {
-      const cas = await this.client.grant(
-        { namespace: this.namespace, channel: this.channel },
-        {
-          kind: "cas",
-          name: "artifact",
-          scope: "factory",
-        },
-      );
+      const cas = await this.factory.grant({
+        kind: "cas",
+        name: "artifact",
+        scope: "factory",
+      });
       const store = await Store.open({ root: cas.value });
       await mkdir(staging.value, { mode: 0o700, recursive: true });
       for (const content of contents) {
@@ -156,25 +161,22 @@ export class Capsule {
         if (key(stored) !== key(artifact)) throw new Error("artifact identity mismatch");
       }
       if (expected.size > 0) throw new Error("generation content missing");
-      const data = await this.client.grant(
-        { namespace: this.namespace, channel: this.channel },
-        {
-          kind: "data",
-          name: "capsule",
-          scope: "factory",
-        },
-      );
+      const data = await this.factory.grant({
+        kind: "data",
+        name: "capsule",
+        scope: "factory",
+      });
       await persist(join(data.value, "generations", `${manifest.digest.slice(7)}.json`), canonical(manifest));
-      const initial = await this.client.binding(this.namespace, this.channel);
+      const initial = await this.factory.binding();
       const armed = changed(
-        await this.client.transit(this.namespace, this.channel, initial.revision, {
+        await this.factory.transit(initial.revision, {
           mode,
           target: manifest.digest,
           type: "arm",
         }),
       );
       const begun = changed(
-        await this.client.transit(this.namespace, this.channel, armed.revision, {
+        await this.factory.transit(armed.revision, {
           nonce,
           target: manifest.digest,
           type: "begin",
@@ -189,15 +191,20 @@ export class Capsule {
         target: manifest.digest,
       };
     } catch (fault) {
-      await this.client.revoke({ namespace: this.namespace, channel: this.channel }, staging.lease);
+      await this.factory.revoke(staging.lease);
       throw fault;
     }
   }
 
   async ready(attempt: Attempt, gate: Gate): Promise<Attempt> {
+    this.exact(attempt);
+    return this.factory.session(() => this.readyWithin(attempt, gate));
+  }
+
+  private async readyWithin(attempt: Attempt, gate: Gate): Promise<Attempt> {
     if (!gates.includes(gate)) throw new TypeError("invalid readiness gate");
     const journal = changed(
-      await this.client.transit(this.namespace, this.channel, attempt.revision, {
+      await this.factory.transit(attempt.revision, {
         gate,
         nonce: attempt.nonce,
         target: attempt.target,
@@ -208,51 +215,62 @@ export class Capsule {
   }
 
   async commit(attempt: Attempt): Promise<Journal> {
+    this.exact(attempt);
+    return this.factory.session(() => this.commitWithin(attempt));
+  }
+
+  private async commitWithin(attempt: Attempt): Promise<Journal> {
     const journal = changed(
-      await this.client.transit(this.namespace, this.channel, attempt.revision, {
+      await this.factory.transit(attempt.revision, {
         nonce: attempt.nonce,
         target: attempt.target,
         type: "commit",
       }),
     );
-    await this.client.revoke({ namespace: this.namespace, channel: this.channel }, attempt.lease);
+    await this.factory.revoke(attempt.lease);
     return journal;
   }
 
   async fail(attempt: Attempt, error: string): Promise<Journal> {
+    this.exact(attempt);
+    return this.factory.session(() => this.failWithin(attempt, error));
+  }
+
+  private async failWithin(attempt: Attempt, error: string): Promise<Journal> {
     const journal = changed(
-      await this.client.transit(this.namespace, this.channel, attempt.revision, {
+      await this.factory.transit(attempt.revision, {
         error,
         nonce: attempt.nonce,
         target: attempt.target,
         type: "fail",
       }),
     );
-    await this.client.revoke({ namespace: this.namespace, channel: this.channel }, attempt.lease);
+    await this.factory.revoke(attempt.lease);
     return journal;
   }
 
   async recover(target: Digest): Promise<Attempt> {
+    return this.factory.session(() => this.recoverWithin(target));
+  }
+
+  private async recoverWithin(target: Digest): Promise<Attempt> {
     const nonce = randomUUID();
-    const staging = await this.client.grant(
-      { namespace: this.namespace, channel: this.channel },
-      {
-        kind: "staging",
-        name: "capsule",
-        owner: nonce,
-        scope: "attempt",
-      },
-    );
+    const staging = await this.factory.grant({
+      kind: "staging",
+      name: "capsule",
+      owner: nonce,
+      scope: "attempt",
+    });
     try {
-      const initial = await this.client.binding(this.namespace, this.channel);
+      const initial = await this.factory.binding();
       const recovered = changed(
-        await this.client.transit(this.namespace, this.channel, initial.revision, {
+        await this.factory.transit(initial.revision, {
           target,
           type: "recover",
         }),
       );
       const begun = changed(
-        await this.client.transit(this.namespace, this.channel, recovered.revision, {
+        await this.factory.transit(recovered.revision, {
           nonce,
           target,
           type: "begin",
@@ -267,20 +285,29 @@ export class Capsule {
         target,
       };
     } catch (fault) {
-      await this.client.revoke({ namespace: this.namespace, channel: this.channel }, staging.lease);
+      await this.factory.revoke(staging.lease);
       throw fault;
     }
   }
 
   async mount(): Promise<Mount> {
-    const binding = await this.client.binding(this.namespace, this.channel);
+    return this.factory.session(() => this.mountWithin());
+  }
+
+  private async mountWithin(): Promise<Mount> {
+    const binding = await this.factory.binding();
     const selected = startup(binding.state);
     if (selected.mode !== "normal") throw new Error(`capsule startup is ${selected.mode}`);
     return this.materialize(selected.target);
   }
 
   async prepare(attempt: Attempt): Promise<Mount> {
-    const binding = await this.client.binding(this.namespace, this.channel);
+    this.exact(attempt);
+    return this.factory.session(() => this.prepareWithin(attempt));
+  }
+
+  private async prepareWithin(attempt: Attempt): Promise<Mount> {
+    const binding = await this.factory.binding();
     const active = binding.state.attempt;
     if (active?.status !== "running") throw new Error("capsule attempt is not running");
     if (active.nonce !== attempt.nonce || active.target !== attempt.target) {
@@ -289,35 +316,31 @@ export class Capsule {
     return this.materialize(attempt.target);
   }
 
+  private exact(attempt: Attempt): void {
+    if (attempt.channel !== this.channel || attempt.namespace !== this.namespace)
+      throw new Error("capsule attempt factory mismatch");
+  }
+
   private async materialize(target: Digest): Promise<Mount> {
-    const data = await this.client.grant(
-      { namespace: this.namespace, channel: this.channel },
-      {
-        kind: "data",
-        name: "capsule",
-        scope: "factory",
-      },
-    );
+    const data = await this.factory.grant({
+      kind: "data",
+      name: "capsule",
+      scope: "factory",
+    });
     const receipt = join(data.value, "generations", `${target.slice(7)}.json`);
     const manifest = envelope(JSON.parse(await readFile(receipt, "utf8")));
     if (manifest.digest !== target) throw new Error("generation receipt mismatch");
     if (manifest.generation.carrier > this.carrier) throw new Error("incompatible carrier ABI");
-    const cas = await this.client.grant(
-      { namespace: this.namespace, channel: this.channel },
-      {
-        kind: "cas",
-        name: "artifact",
-        scope: "factory",
-      },
-    );
-    const runtime = await this.client.grant(
-      { namespace: this.namespace, channel: this.channel },
-      {
-        kind: "data",
-        name: "runtime",
-        scope: "factory",
-      },
-    );
+    const cas = await this.factory.grant({
+      kind: "cas",
+      name: "artifact",
+      scope: "factory",
+    });
+    const runtime = await this.factory.grant({
+      kind: "data",
+      name: "runtime",
+      scope: "factory",
+    });
     const root = join(runtime.value, target.slice(7));
     const store = await Store.open({ root: cas.value });
     await mkdir(root, { mode: 0o700, recursive: true });
@@ -327,9 +350,12 @@ export class Capsule {
       await persist(path, await store.read(artifact));
       blobs[artifact.slot] = path;
     }
+    const capsule = await restore(store, manifest.generation.capsule, root);
+    const release = decode(await readFile(join(capsule, "release.json"), "utf8"));
+    if (release.channel !== this.channel) throw new Error("capsule release channel mismatch");
     return {
       blobs,
-      capsule: await restore(store, manifest.generation.capsule, root),
+      capsule,
       daemon: await restore(store, manifest.generation.daemon, root),
       target,
       web: await restore(store, manifest.generation.web, root),

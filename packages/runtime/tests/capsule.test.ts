@@ -71,6 +71,20 @@ describe("capsule", () => {
     const first = fixture("first");
     let attempt = await capsule.stage(first.envelope, first.contents);
 
+    const before = await capsule.factory.binding();
+    const grants = await capsule.factory.resources();
+    for (const foreign of [
+      { ...attempt, channel: channel("beta") },
+      { ...attempt, namespace: namespace("other") },
+    ]) {
+      await expect(capsule.ready(foreign, "capsule")).rejects.toThrow("factory mismatch");
+      await expect(capsule.commit(foreign)).rejects.toThrow("factory mismatch");
+      await expect(capsule.fail(foreign, "foreign")).rejects.toThrow("factory mismatch");
+      await expect(capsule.prepare(foreign)).rejects.toThrow("factory mismatch");
+    }
+    expect(await capsule.factory.binding()).toEqual(before);
+    expect(await capsule.factory.resources()).toEqual(grants);
+
     for (const gate of gates) attempt = await capsule.ready(attempt, gate);
     const committed = await capsule.commit(attempt);
     expect(committed.state.current).toBe(first.envelope.digest);
