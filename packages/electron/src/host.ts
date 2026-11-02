@@ -1,16 +1,24 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { Session, type SessionOptions } from "@perishcode/runtime";
+import { type Receipt, Session, type SessionOptions } from "@perishcode/runtime";
 import { app, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, ipcMain, protocol } from "electron";
 import { asset } from "./assets.js";
+import { type AutomationReceipt, observeAutomation, prepareAutomation } from "./automation.js";
 
 export interface HostOptions extends Omit<SessionOptions, "executable"> {
   preload: string;
   probe?: boolean;
+  automation?: boolean;
   receipt?: string;
 }
 
+export interface HostReceipt extends Receipt {
+  automation: AutomationReceipt;
+}
+
 export async function startElectron(options: HostOptions): Promise<void> {
+  const automated = !!(options.probe || options.automation);
+  prepareAutomation(automated);
   const root = resolve(options.root);
   app.setName(options.manifest.identity.name);
   app.setPath("userData", root);
@@ -24,7 +32,6 @@ export async function startElectron(options: HostOptions): Promise<void> {
       privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true },
     },
   ]);
-  if (options.probe) app.disableHardwareAcceleration();
   let session: Session | undefined;
   let closing = false;
   let window: BrowserWindow | undefined;
@@ -80,7 +87,8 @@ export async function startElectron(options: HostOptions): Promise<void> {
     });
     window = new BrowserWindow({
       title: payload.title,
-      show: !options.probe,
+      show: !automated,
+      focusable: !automated,
       webPreferences: {
         contextIsolation: true,
         sandbox: true,
@@ -88,6 +96,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
         preload: resolve(options.preload),
       },
     });
+    const automation = observeAutomation(window, automated);
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => event.preventDefault());
     await window.loadURL(options.manifest.identity.origin);
@@ -112,7 +121,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
       await new Promise((done) => setTimeout(done, 50));
     }
     if (!renderer) throw new Error("renderer readiness timeout");
-    const receipt = await active.confirm(payload, renderer);
+    const receipt: HostReceipt = { ...(await active.confirm(payload, renderer)), automation: automation() };
     if (options.receipt) {
       await mkdir(dirname(options.receipt), { recursive: true });
       await writeFile(options.receipt, JSON.stringify(receipt));

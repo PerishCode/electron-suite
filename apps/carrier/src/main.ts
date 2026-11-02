@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-
+import { observeAutomation, prepareAutomation } from "@perishcode/electron";
 import { app, BrowserWindow, ipcMain, protocol } from "electron";
 
 import { asset } from "./assets.js";
@@ -24,7 +24,7 @@ protocol.registerSchemesAsPrivileged([
     scheme: identity.scheme,
   },
 ]);
-if (options.probe) app.disableHardwareAcceleration();
+prepareAutomation(options.probe);
 app.setName(identity.name);
 app.setPath("userData", options.data);
 app.on("will-finish-launching", () => mark("launching"));
@@ -33,7 +33,7 @@ ipcMain.on("bootstrap", (event) => {
   event.returnValue = { daemon: options.daemon, token: options.token };
 });
 
-async function probe(window: BrowserWindow): Promise<void> {
+async function probe(window: BrowserWindow, automation: ReturnType<typeof observeAutomation>): Promise<void> {
   const limit = Date.now() + 10000;
   let last: unknown;
   while (Date.now() < limit) {
@@ -48,6 +48,7 @@ async function probe(window: BrowserWindow): Promise<void> {
           origin: identity.origin,
           status: "ready",
           version: identity.version,
+          automation: automation(),
         })}\n`,
       );
       app.quit();
@@ -65,6 +66,7 @@ async function launch(): Promise<void> {
   const here = fileURLToPath(new URL(".", import.meta.url));
   const window = new BrowserWindow({
     show: !options.probe,
+    focusable: !options.probe,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -72,13 +74,14 @@ async function launch(): Promise<void> {
       sandbox: true,
     },
   });
+  const automation = observeAutomation(window, options.probe);
   window.webContents.on("console-message", (details) => mark(`console:${details.message}`));
   window.webContents.on("did-fail-load", (_event, code, text) => mark(`load:${code}:${text}`));
   window.webContents.on("preload-error", (_event, _path, fault) => mark(`preload:${fault.message}`));
   await window.loadURL(identity.origin);
   mark("loadedweb");
   if (options.probe) {
-    await probe(window);
+    await probe(window, automation);
   }
 }
 
