@@ -1,22 +1,87 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  type LaunchResult,
+  ObservationError,
+  ObservationUnavailable,
+  Observer,
+  runElectron,
+  waitGone,
+} from "@perishcode/automation";
 import { guard } from "@perishcode/guard";
 import { inspect } from "@perishcode/pack";
+import { identify } from "@perishcode/protocol";
+import { readProduct, writeProduct } from "@perishcode/release";
 import { parseDocument } from "yaml";
 import { loadBuild, loadPackage } from "./build.js";
 import { channelRoot, configuration } from "./config.js";
-import { execute, json, located, run } from "./files.js";
-import type { CheckReceipt, Gate } from "./types.js";
+import { json, located, run } from "./files.js";
+import type { BuildReceipt, CheckReceipt, Gate, PackReceipt } from "./types.js";
 
-export const gates: Gate[] = ["policy", "tests", "artifacts", "installed"];
-function alive(pid: unknown): boolean {
-  if (!Number.isSafeInteger(pid) || Number(pid) < 1) throw new Error("invalid probe PID");
+export const gates: Gate[] = ["policy", "tests", "artifacts", "installed", "desktop"];
+interface HostProbe {
+  pid: number;
+  automation: unknown;
+  generation: string;
+  nonce: string;
+  capsule: string;
+  renderer: string;
+  daemon: { pid: number; generation: string; nonce: string };
+}
+function identity(build: BuildReceipt, result: LaunchResult<HostProbe>): HostProbe {
+  const observed = result.observed;
+  if (
+    !observed ||
+    observed.generation !== build.generation ||
+    observed.daemon?.generation !== build.generation ||
+    !observed.nonce ||
+    observed.nonce !== observed.daemon?.nonce ||
+    !observed.capsule ||
+    !observed.renderer
+  )
+    throw new Error("installed lifecycle evidence mismatch");
+  return observed;
+}
+async function desktop(root: string, lane: string, build: BuildReceipt, packaged: PackReceipt) {
+  const base = join(channelRoot(root, lane), "checks", `desktop-${Date.now()}`);
+  const product = await readProduct(await located(root, build.content));
+  const generation = { ...product.envelope.generation, carrier: build.carrierABI + 1 };
+  const candidate = join(base, "incompatible");
+  await writeProduct(candidate, {
+    ...product,
+    envelope: { ...product.envelope, generation, digest: identify(generation) },
+  });
+  const observer = await Observer.open({
+    directory: join(base, "observations"),
+    bundle: build.manifest.identity.appid,
+    requireFullscreen: true,
+  });
+  const cases: unknown[] = [];
   try {
-    process.kill(Number(pid), 0);
-    return true;
-  } catch (fault) {
-    if ((fault as NodeJS.ErrnoException).code === "ESRCH") return false;
-    throw fault;
+    for (const [name, mode] of [
+      ["normal-exit", "exit"],
+      ["failed-startup", "failure"],
+      ["sigkill", "kill"],
+    ] as const) {
+      const result = await runElectron<HostProbe>({
+        name,
+        mode,
+        observer,
+        cwd: root,
+        executable: await located(root, packaged.package.executable),
+        receipt: join(base, `${name}.json`),
+        env: {
+          PESUITE_DATA: join(base, `${name}-state`),
+          PESUITE_CANDIDATE: mode === "failure" ? candidate : undefined,
+        },
+        ...(mode === "failure" ? { message: "incompatible carrier ABI" } : {}),
+      });
+      if (mode !== "failure") await waitGone(identity(build, result).daemon.pid);
+      cases.push({ name, pid: result.pid, exit: result.exit, desktop: result.desktop });
+    }
+    return { cases, signing: "unqualified", remoteUpdates: "unqualified" };
+  } finally {
+    await observer.close();
   }
 }
 export async function check(
@@ -56,53 +121,53 @@ export async function check(
       if (gate === "artifacts") receipt.details = { archive: packaged.artifact.sha256, inventory: packaged.inventory };
       else {
         if (packaged.platform !== "mac" || process.platform !== "darwin")
-          throw new Error("installed SDK probe currently requires macOS");
+          throw new ObservationUnavailable("installed SDK probe currently requires macOS");
         const native = await inspect(await located(root, packaged.package.app));
         if (native.appid !== build.manifest.identity.appid || native.version !== build.version)
           throw new Error("native installed identity mismatch");
-        const base = join(channelRoot(root, lane), "checks", `installed-${Date.now()}`);
-        const launches: unknown[] = [];
-        for (const name of ["initial", "cold"]) {
-          const path = join(base, `${name}.json`);
-          const execution = execute(await located(root, packaged.package.executable), [], {
-            cwd: root,
-            timeout: 30000,
-            maxBuffer: 4 * 1024 * 1024,
-            env: { ...process.env, PESUITE_DATA: join(base, "state"), PESUITE_PROBE: "1", PESUITE_RECEIPT: path },
-          });
-          const pid = execution.child.pid;
-          await execution;
-          const observed = JSON.parse(await readFile(path, "utf8"));
-          const stop = JSON.parse(await readFile(`${path}.stop.json`, "utf8"));
-          if (
-            observed.pid !== pid ||
-            observed.generation !== build.generation ||
-            observed.daemon?.generation !== build.generation ||
-            !observed.nonce ||
-            observed.nonce !== observed.daemon?.nonce ||
-            !observed.capsule ||
-            !observed.renderer ||
-            stop.status !== "stopped" ||
-            !Array.isArray(stop.survivors) ||
-            stop.survivors.length ||
-            alive(pid) ||
-            alive(observed.daemon?.pid)
-          )
-            throw new Error("installed lifecycle evidence mismatch");
-          launches.push({
-            name,
-            pid,
-            daemonPid: observed.daemon.pid,
-            generation: observed.generation,
-            nonce: observed.nonce,
-            stopped: true,
-          });
+        if (gate === "desktop") receipt.details = { native, ...(await desktop(root, lane, build, packaged)) };
+        else {
+          const base = join(channelRoot(root, lane), "checks", `installed-${Date.now()}`);
+          const launches: unknown[] = [];
+          for (const name of ["initial", "cold"]) {
+            const result = await runElectron<HostProbe>({
+              name,
+              mode: "exit",
+              cwd: root,
+              executable: await located(root, packaged.package.executable),
+              receipt: join(base, `${name}.json`),
+              env: { PESUITE_DATA: join(base, "state"), PESUITE_CANDIDATE: undefined },
+            });
+            const observed = identity(build, result);
+            await waitGone(observed.daemon.pid);
+            launches.push({
+              name,
+              pid: result.pid,
+              daemonPid: observed.daemon.pid,
+              generation: observed.generation,
+              nonce: observed.nonce,
+              stopped: true,
+              automation: observed.automation,
+            });
+          }
+          receipt.details = { native, launches, signing: "unqualified", remoteUpdates: "unqualified" };
         }
-        receipt.details = { native, launches, signing: "unqualified", remoteUpdates: "unqualified" };
       }
     }
     receipt.result = "passed";
     return receipt;
+  } catch (fault) {
+    if (gate === "desktop")
+      receipt.details = {
+        result:
+          fault instanceof ObservationError
+            ? fault.receipt.result
+            : fault instanceof ObservationUnavailable
+              ? "unqualified"
+              : "failed",
+        error: String(fault),
+      };
+    throw fault;
   } finally {
     await json(join(channelRoot(root, lane), "checks", `${gate}.json`), receipt);
   }

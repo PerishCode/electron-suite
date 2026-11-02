@@ -3,7 +3,7 @@ import { build, check, type Gate, gates, pack, publish, selectedVersion } from "
 import type { Output } from "./index.js";
 
 export const pipelineHelp = `pesuite version|build --channel <name> [--version <X.Y.Z[-channel.N]> | --number <N>] [--base <X.Y.Z>] [--root <repo>]
-pesuite check --channel <name> --gate policy|tests|artifacts|installed [--platform mac|linux|win] [--arch arm64|x64]
+pesuite check --channel <name> --gate policy|tests|artifacts|installed|desktop [--platform mac|linux|win] [--arch arm64|x64]
 pesuite pack --channel <name> [--platform mac|linux|win] [--arch arm64|x64]
 pesuite publish --channel <name> --repository <owner/repo> [--mode draft|release|prerelease] [--require <gate,...>]
 

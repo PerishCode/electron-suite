@@ -44,7 +44,7 @@ export async function publish(options: Publication) {
         receipt.result !== "passed" ||
         receipt.fingerprint !== build.fingerprint ||
         receipt.source !== build.source ||
-        (["artifacts", "installed"].includes(gate) && receipt.artifact !== packaged.artifact.sha256)
+        (["artifacts", "installed", "desktop"].includes(gate) && receipt.artifact !== packaged.artifact.sha256)
       )
         throw new Error(`required ${gate} quality evidence is missing or stale`);
       return { gate, result: receipt.result, ...(receipt.artifact ? { artifact: receipt.artifact } : {}) };

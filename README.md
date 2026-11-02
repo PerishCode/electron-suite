@@ -305,3 +305,16 @@ macOS 在 ready 前设 accessory activation policy，自动化窗口 show=false/
 HostReceipt.automation 记录窗口 show/focus 事件与最终可见/可聚焦事实，自动化出现可见或聚焦窗口会拒绝验收。
 参考 carrier 共用相同策略。slim 的故障验证通过 PESUITE_AUTOMATION=1 启用，不能用普通交互启动替代后台探针。
 这些窗口事实不等价于所有系统配置下的 Space 保证；macOS 前台应用/Space 变化需独立只读观察。
+
+
+## 原生全屏回归验收（#42）
+
+`@perishcode/automation` 提供共享 `runElectron`、`Observer` 和证据判定。启动器强制后台参数，长驻 SIGKILL 场景使用 probe=0、automation=1；产品仅声明验证环境和业务断言，不复制原生实现。Observer 只读查询真实 Space ID/type，记录目标 PID 激活、ready 收据观察、终止请求与实际退出；退出后默认继续观察 1500ms。未处于原生全屏、原生符号不可用或采样缺失均不能通过验收。用户主动切换 Space 也会使本轮证据失败，不归因为应用故障。
+
+```sh
+pnpm exec pesuite check --channel preview --gate desktop
+```
+
+此关卡显式执行正常退出、失败启动和真实 SIGKILL；发布方可以明确选择 `--require desktop`。工具不根据 stable 暗加该门槛，现有无桌面上下文的 CI 不声称完成全屏验收。installed 关卡同时检查 SDK 的实际 automation 窗口收据，但不能替代 desktop。
+
+固定分发版本：automation 0.1.0、pipeline 0.2.0、cli 0.7.0。原生观察源码由受管测试目录编译，使用只读 SkyLight 查询；无符号/无 Swift 工具链明确拒绝。正常应用 SDK、正式安装包身份和系统设置不改变。
