@@ -11,6 +11,8 @@ export interface Options {
   generation?: string;
   nonce?: string;
   witness?: string;
+  unit?: string;
+  version?: string;
 }
 
 export interface Service {
@@ -110,7 +112,15 @@ async function handle(options: Options, request: IncomingMessage, response: Serv
     reply(
       response,
       200,
-      { ok: true, pid: process.pid, generation: options.generation, nonce: options.nonce, witness: options.witness },
+      {
+        ok: true,
+        pid: process.pid,
+        generation: options.generation,
+        nonce: options.nonce,
+        witness: options.witness,
+        unit: options.unit,
+        version: options.version,
+      },
       allowed,
     );
     return;
@@ -169,6 +179,8 @@ export async function serveDaemon(witness: string): Promise<Service> {
     generation,
     nonce,
     witness,
+    unit: process.env.PERISH_UNIT,
+    version: process.env.PERISH_VERSION,
   });
   let stopping: Promise<void> | undefined;
   const stop = () => {

@@ -19,6 +19,7 @@ export async function asset(root: string, request: Request, connect = "'none'"):
     if (!actual.startsWith(`${base}${sep}`)) return new Response("forbidden", { status: 403 });
     return new Response(await readFile(actual), {
       headers: {
+        "cache-control": "no-store",
         "content-type": types[extname(path)] ?? "application/octet-stream",
         "content-security-policy": `default-src 'self'; script-src 'self'; connect-src ${connect}; object-src 'none'; base-uri 'none'; frame-src 'none'`,
       },

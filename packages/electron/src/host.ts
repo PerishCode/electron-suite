@@ -1,17 +1,25 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { type Receipt, Session, type SessionOptions } from "@perishcode/runtime";
+import { type Options as UpdateOptions, watch } from "@perishcode/update";
 import { app, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, ipcMain, protocol } from "electron";
 import { asset } from "./assets.js";
 import { type AutomationReceipt, observeAutomation, prepareAutomation } from "./automation.js";
+import { renderer as rendererAdapter } from "./renderer.js";
 
 export interface HostOptions extends Omit<SessionOptions, "executable"> {
   preload: string;
   probe?: boolean;
   automation?: boolean;
   receipt?: string;
+  updates?: Omit<UpdateOptions, "activate"> & { activate?: boolean };
   /** Caller-owned debugging contract; manager credentials are never sent to the renderer. */
-  inspect?: (session: Session, receipt: HostReceipt, quit: () => void) => Promise<void>;
+  inspect?: (
+    session: Session,
+    receipt: HostReceipt,
+    quit: () => void,
+    snapshot: () => Promise<HostReceipt>,
+  ) => Promise<void>;
 }
 
 export interface HostReceipt extends Receipt {
@@ -61,7 +69,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
       !!window &&
       event.sender === window.webContents &&
       frame === window.webContents.mainFrame &&
-      frame.url === `${options.manifest.identity.origin}/`
+      frame.url === session?.webURL()
     );
   };
   try {
@@ -70,18 +78,18 @@ export async function startElectron(options: HostOptions): Promise<void> {
     const active = session;
     const payload = await active.activate();
     await active.start();
-    protocol.handle(options.manifest.identity.scheme, (request) => asset(active.mount.web, request));
-    ipcMain.on("pesuite:bootstrap", (event) => {
-      event.returnValue = allowed(event)
-        ? {
-            generation: active.mount.target,
-            nonce: active.nonce,
-            version: active.manifest.identity.version,
-          }
-        : null;
+    protocol.handle(options.manifest.identity.scheme, (request) => {
+      const url = new URL(request.url),
+        prefix = new URL(active.webURL()).pathname;
+      if (!url.pathname.startsWith(prefix)) return new Response("not found", { status: 404 });
+      url.pathname = `/${url.pathname.slice(prefix.length)}`;
+      return asset(active.mount.web, new Request(url, request));
     });
-    ipcMain.handle("pesuite:daemon", (event, operation: unknown, value: unknown) => {
-      if (!allowed(event)) throw new Error("untrusted renderer");
+    ipcMain.on("pesuite:bootstrap", (event) => {
+      event.returnValue = allowed(event) ? active.browser() : null;
+    });
+    ipcMain.handle("pesuite:daemon", (event, nonce: unknown, operation: unknown, value: unknown) => {
+      if (!allowed(event) || nonce !== active.documentNonce()) throw new Error("untrusted or expired renderer");
       if (operation !== "health" && operation !== "read" && operation !== "write") throw new Error("unknown operation");
       if (operation === "write" && Buffer.byteLength(JSON.stringify(value) ?? "") > 65536)
         throw new Error("payload too large");
@@ -101,30 +109,20 @@ export async function startElectron(options: HostOptions): Promise<void> {
     const automation = observeAutomation(window, automated);
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => event.preventDefault());
-    await window.loadURL(options.manifest.identity.origin);
-    const deadline = Date.now() + 10000;
-    let renderer = "";
-    while (Date.now() < deadline) {
-      const result = await window.webContents.executeJavaScript(`({
-        status: document.querySelector('output')?.textContent,
-        witness: document.querySelector('output')?.getAttribute('data-witness'),
-        generation: globalThis.pesuite?.bootstrap.generation,
-        nonce: globalThis.pesuite?.bootstrap.nonce
-      })`);
-      if (
-        result.status === "ready" &&
-        result.generation === active.mount.target &&
-        result.nonce === active.nonce &&
-        result.witness
-      ) {
-        renderer = result.witness;
-        break;
-      }
-      await new Promise((done) => setTimeout(done, 50));
-    }
-    if (!renderer) throw new Error("renderer readiness timeout");
+    const screen = rendererAdapter(window, active);
+    const renderer = await screen.reload();
     const receipt: HostReceipt = { ...(await active.confirm(payload, renderer)), automation: automation() };
-    await options.inspect?.(active, receipt, () => app.quit());
+    if (options.updates)
+      await watch(active, {
+        ...options.updates,
+        activate: options.updates.activate ? (release) => active.applyLeaf(release, screen) : undefined,
+      });
+    await options.inspect?.(
+      active,
+      receipt,
+      () => app.quit(),
+      async () => ({ ...(await active.snapshot()), automation: automation() }),
+    );
     if (options.receipt) {
       await mkdir(dirname(options.receipt), { recursive: true });
       await writeFile(options.receipt, JSON.stringify(receipt));

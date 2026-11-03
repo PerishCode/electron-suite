@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { channel, digest, type Generation, identify, namespace } from "@perishcode/protocol";
 import { Authority, Feed, type Release, writeFeed } from "@perishcode/publish";
 import { Sources } from "@perishcode/serve";
+import type { Context } from "@perishcode/sidecar";
 import { serve } from "@perishcode/sidecar";
 import { it } from "vitest";
 import { type Status, watch } from "@/index.js";
@@ -133,3 +134,78 @@ it("automatically prepares signed leaf candidates, rejects faults/regressions an
     await rm(root, { recursive: true, force: true });
   }
 }, 20000);
+
+it("starts a fresh controller for background activation without retaining the initialize session", async () => {
+  const root = await mkdtemp(join(tmpdir(), "activation-controller-")),
+    content = join(root, "public");
+  await mkdir(content);
+  const pair = generateKeyPairSync("ed25519"),
+    lane = channel("beta");
+  const authority = await Authority.open({
+    root: join(root, "authority"),
+    privatekey: pair.privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
+  });
+  const initial = release("one"),
+    incoming = release("two");
+  await authority.publish(lane, 0, initial.envelope, initial.assets);
+  await writeFeed(authority, lane, content);
+  const scope = { channel: lane, namespace: namespace("probe") };
+  const source = await Sources.open({ data: join(root, "source"), scope, sources: { feed: { directory: content } } });
+  const manager = await serve(join(root, "manager.sock"), undefined, undefined, join(root, "manager"));
+  const factory = manager.factory(scope);
+  let context: Context | undefined;
+  let applied = 0;
+  let actual = initial;
+  const observer = await watch(
+    {
+      content: async () => actual,
+      expose: (name, options) =>
+        factory.expose({
+          ...options,
+          identity: { service: name, generation: initial.envelope.digest },
+          lifecycle: {
+            ...options.lifecycle,
+            initialize: async (ctx) => {
+              context = ctx;
+              await options.lifecycle.initialize(ctx);
+            },
+          },
+        }),
+    },
+    {
+      endpoint: source.endpoints[0]?.url ?? "",
+      publickey: pair.publicKey.export({ format: "pem", type: "spki" }).toString(),
+      intervalMs: 50,
+      activate: async (candidate) => {
+        await factory.session(async (f) => {
+          await f.grant({ kind: "data", name: "activation", scope: "factory" });
+        });
+        applied++;
+        actual = candidate;
+        if (applied > 1) throw new Error("commit persisted; cleanup failed");
+        return { generation: candidate.envelope.digest };
+      },
+    },
+  );
+  try {
+    await until(observer.status, (s) => s.revision === 1 && s.phase === "idle");
+    assert.throws(() => context?.background(() => 1), /during initialization/);
+    await authority.publish(lane, 1, incoming.envelope, incoming.assets);
+    await writeFeed(authority, lane, content);
+    await until(observer.status, (s) => s.current === incoming.envelope.digest && s.phase === "idle");
+    assert.equal(applied, 1);
+    const committed = release("three");
+    await authority.publish(lane, 2, committed.envelope, committed.assets);
+    await writeFeed(authority, lane, content);
+    const failed = await until(observer.status, (s) => s.current === committed.envelope.digest && s.phase === "failed");
+    assert.match(failed.error ?? "", /cleanup failed/);
+    await new Promise((done) => setTimeout(done, 100));
+    assert.equal(observer.status().current, committed.envelope.digest);
+    assert.notEqual(observer.status().phase, "idle");
+  } finally {
+    await observer.close();
+    await source.close();
+    await manager.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

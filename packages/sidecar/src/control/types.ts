@@ -11,6 +11,8 @@ export interface Descriptor extends Identity {
   token: string;
 }
 export interface Context {
+  /** Create background controller tasks during initialize; stop must cancel and drain them. */
+  background<T>(operation: () => T): T;
   readonly identity: Readonly<Identity>;
   readonly incarnation: string;
   readonly roots: Readonly<{ data: string; logs: string; resource: string; runtime: string }>;

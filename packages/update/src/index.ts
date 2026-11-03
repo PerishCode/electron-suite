@@ -9,7 +9,7 @@ export interface Host {
 }
 export interface Status {
   current: Digest;
-  phase: "idle" | "checking" | "prepared" | "failed" | "stopped";
+  phase: "idle" | "checking" | "prepared" | "activating" | "failed" | "stopped";
   checks: number;
   revision?: number;
   prepared?: { target: Digest; changed: ("web" | "daemon")[] };
@@ -18,14 +18,21 @@ export interface Status {
 export interface Methods {
   status: { input: unknown; output: Status };
 }
-export async function watch(
-  host: Host,
-  options: { endpoint: string; publickey: string; intervalMs?: number; timeoutMs?: number; maxBytes?: number },
-) {
+export interface Options {
+  endpoint: string;
+  publickey: string;
+  intervalMs?: number;
+  timeoutMs?: number;
+  maxBytes?: number;
+  activate?: (release: Release) => Promise<{ generation: Digest }>;
+}
+export async function watch(host: Host, options: Options) {
   const interval = options.intervalMs ?? 5000;
   if (!Number.isSafeInteger(interval) || interval < 50 || interval > 3600000)
     throw new Error("invalid discovery interval");
   const initial = await host.content();
+  let current = initial;
+  const refused = new Map<Digest, string>();
   const feed = new Feed(options.endpoint, options.publickey, options);
   let state: Status = { current: initial.envelope.digest, phase: "idle", checks: 0 };
   let pending: Promise<void> | undefined;
@@ -54,7 +61,9 @@ export async function watch(
           throw new Error("distribution revision regressed or conflicted");
         observed = head;
         state.revision = head.revision;
-        if (!head.head || head.head.generation === initial.envelope.digest) {
+        if (head.head && refused.has(head.head.generation))
+          throw new Error(`candidate activation refused: ${refused.get(head.head.generation)}`);
+        if (!head.head || head.head.generation === current.envelope.digest) {
           prepared = undefined;
           state = { ...state, phase: "idle", prepared: undefined };
           return;
@@ -63,7 +72,7 @@ export async function watch(
           signal: abort.signal,
           cached: async (artifact) => ((await store.has(artifact)) ? store.read(artifact) : undefined),
         });
-        const before = initial.envelope.generation,
+        const before = current.envelope.generation,
           after = release.envelope.generation;
         if (
           before.carrier !== after.carrier ||
@@ -83,6 +92,28 @@ export async function watch(
         abort.signal.throwIfAborted();
         prepared = release.envelope;
         state = { ...state, phase: "prepared", prepared: { target: prepared.digest, changed: [...changed] } };
+        if (options.activate) {
+          state.phase = "activating";
+          try {
+            const result = await options.activate(release);
+            if (result.generation !== release.envelope.digest) throw new Error("activation receipt target mismatch");
+            current = release;
+            prepared = undefined;
+            state = { ...state, phase: "idle", current: result.generation, prepared: undefined };
+          } catch (error) {
+            refused.set(release.envelope.digest, String(error));
+            // A controller may report failure after its commit persisted. Read its
+            // current content rather than inventing a rollback in the watcher.
+            try {
+              const actual = await host.content();
+              current = actual;
+              state.current = actual.envelope.digest;
+            } catch {
+              /* Runtime failure remains explicit; current is last confirmed. */
+            }
+            throw error;
+          }
+        }
       } catch (error) {
         if (!stopped) state = { ...state, phase: "failed", error: String(error).slice(0, 1000) };
       }
@@ -113,9 +144,11 @@ export async function watch(
           await store.put(asset.artifact.kind, asset.artifact.slot, asset.bytes);
         }
         // Start after initialize returns, so service publication precedes polling.
-        timer = setTimeout(() => {
-          void schedule();
-        }, 0);
+        timer = context.background(() =>
+          setTimeout(() => {
+            void schedule();
+          }, 0),
+        );
       },
       stop: async () => {
         stopped = true;

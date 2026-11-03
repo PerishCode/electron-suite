@@ -1,0 +1,45 @@
+import type { Session } from "@perishcode/runtime";
+import type { BrowserWindow } from "electron";
+
+export function renderer(window: BrowserWindow, session: Session) {
+  window.webContents.on("did-start-navigation", (event) => {
+    if (event.isMainFrame && !event.isSameDocument) session.documentStart();
+  });
+  const probe = async () => {
+    const until = Date.now() + 10000;
+    while (Date.now() < until) {
+      const expected = session.browser();
+      const result = await window.webContents.executeJavaScript(`(async()=>({
+        status: document.querySelector('output')?.textContent,
+        witness: document.querySelector('output')?.getAttribute('data-witness'),
+        generation: globalThis.pesuite?.bootstrap.generation,
+        nonce: globalThis.pesuite?.bootstrap.nonce,
+        health: await globalThis.pesuite?.health()
+      }))()`);
+      if (
+        result.status === "ready" &&
+        result.generation === expected.generation &&
+        result.nonce === expected.nonce &&
+        result.witness
+      ) {
+        const health = await session.request("health");
+        if (
+          result.health?.pid !== health.pid ||
+          result.health?.generation !== health.generation ||
+          result.health?.nonce !== health.nonce
+        )
+          throw new Error("renderer daemon identity mismatch");
+        return result.witness as string;
+      }
+      await new Promise((done) => setTimeout(done, 50));
+    }
+    throw new Error("renderer readiness timeout");
+  };
+  return {
+    probe,
+    reload: async () => {
+      await window.loadURL(session.webURL());
+      return probe();
+    },
+  };
+}
