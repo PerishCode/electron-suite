@@ -2,10 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { channel, type Digest, type Generation, gates, namespace } from "@perishcode/protocol";
 import type { Release } from "@perishcode/publish";
-import { decode, type Manifest } from "@perishcode/release";
+import { decode, type Manifest, readProduct } from "@perishcode/release";
 import {
   Client,
   type Directory,
@@ -16,19 +15,9 @@ import {
   serve,
 } from "@perishcode/sidecar";
 import { Agent } from "./agent.js";
-import { type Attempt, Capsule, type Mount } from "./capsule.js";
-import { readProduct } from "./product.js";
+import { type Attempt, Generations, type Mount } from "./generations.js";
+import { type Composition, Product, type ProductReceipt } from "./lifecycle.js";
 import { leaf, unitFile } from "./units.js";
-
-export interface Context {
-  blobs: Record<string, string>;
-  generation: Digest;
-  nonce: string;
-}
-export interface Payload {
-  title: string;
-  witness: string;
-}
 export interface ActivationCheckpoint {
   stage: "prepared" | "daemon-stopped" | "ready" | "committed";
   target: Digest;
@@ -55,6 +44,7 @@ export interface Receipt {
   factory: Readonly<FactoryScope>;
   directory: Directory;
   capsule: string;
+  product?: ProductReceipt;
   daemon: Record<string, unknown>;
   generation: Digest;
   nonce: string;
@@ -77,7 +67,9 @@ export class Session {
   private closed = false;
   private closing?: Promise<{ status: string; survivors: number[] }>;
   private ready = false;
-  private payload?: Payload;
+  private payload?: Composition;
+  private product?: Product;
+  private activation?: Promise<Composition>;
   private witness = "";
   private current: Mount;
   private view: Mount;
@@ -98,7 +90,7 @@ export class Session {
     readonly options: SessionOptions,
     private host: Service,
     private factory: Factory,
-    private capsule: Capsule,
+    private generations: Generations,
     mount: Mount,
     readonly manifest: Manifest,
     readonly nonce: string,
@@ -111,7 +103,7 @@ export class Session {
   }
   content() {
     if (this.closed || this.closing) throw new Error("session is closed");
-    return this.capsule.content(this.current.target);
+    return this.generations.content(this.current.target);
   }
   async expose<M>(service: string, options: Omit<Expose<M>, "identity">) {
     if (this.closed || this.closing) throw new Error("session is closed");
@@ -153,14 +145,14 @@ export class Session {
     const client = new Client(host.endpoint, host.authority);
     const scope = namespace(options.namespace);
     const lane = channel(options.manifest.channel);
-    const capsule = new Capsule(client, scope, lane, options.carrier);
-    const factory = capsule.factory;
+    const generations = new Generations(client, scope, lane, options.carrier);
+    const factory = generations.factory;
     let attempt: Attempt | undefined;
     try {
       const current = (await factory.binding()).state;
       if (options.recover) {
         if (!current.current) throw new Error("no committed generation to recover");
-        attempt = await capsule.recover(current.current);
+        attempt = await generations.recover(current.current);
       } else if (options.candidate || !current.current) {
         const product = await readProduct(options.candidate ?? options.seed);
         const incoming = product.manifest;
@@ -171,9 +163,9 @@ export class Session {
         )
           throw new Error("candidate identity mismatch");
         if (current.current !== product.envelope.digest)
-          attempt = await capsule.stage(product.envelope, product.assets);
+          attempt = await generations.stage(product.envelope, product.assets);
       }
-      const mount = attempt ? await capsule.prepare(attempt) : await capsule.mount();
+      const mount = attempt ? await generations.prepare(attempt) : await generations.mount();
       const manifest = decode(await readFile(join(mount.capsule, "release.json"), "utf8"));
       if (
         manifest.channel !== lane ||
@@ -181,34 +173,34 @@ export class Session {
         manifest.identity.origin !== options.manifest.identity.origin
       )
         throw new Error("mounted identity mismatch");
-      const session = new Session(options, host, factory, capsule, mount, manifest, attempt?.nonce ?? randomUUID());
+      const session = new Session(options, host, factory, generations, mount, manifest, attempt?.nonce ?? randomUUID());
       session.attempt = attempt;
       return session;
     } catch (fault) {
-      if (attempt) await capsule.fail(attempt, String(fault));
+      if (attempt) await generations.fail(attempt, String(fault));
       await host.close();
       throw fault;
     }
   }
 
-  async activate(): Promise<Payload> {
-    const module = (await import(pathToFileURL(join(this.mount.capsule, "index.mjs")).href)) as {
-      activate(context: Context): Promise<Payload>;
-    };
-    if (typeof module.activate !== "function") throw new Error("capsule activate entry required");
-    const payload = await module.activate({
-      blobs: this.mount.blobs,
-      generation: this.mount.target,
-      nonce: this.nonce,
-    });
-    if (typeof payload.title !== "string" || typeof payload.witness !== "string")
-      throw new Error("invalid capsule result");
-    this.payload = payload;
-    return payload;
+  activate(): Promise<Composition> {
+    if (this.closed || this.closing || this.activation)
+      return Promise.reject(new Error("capsule is closed or already initialized"));
+    this.activation = this.initializeProduct();
+    return this.activation;
+  }
+  private async initializeProduct(): Promise<Composition> {
+    const generation = (await this.content()).envelope.generation.capsule.digest;
+    if (this.closed || this.closing) throw new Error("session is closed");
+    this.product = new Product(this.host.factory(this.factory.scope), this.mount, this.nonce, generation);
+    this.payload = await this.product.initialize();
+    return this.payload;
   }
 
   async start(): Promise<void> {
     if (this.closed || this.closing || this.agent) throw new Error("session is closed or already started");
+    this.product?.assertReady();
+    if (!this.product) throw new Error("capsule is not initialized");
     await this.factory.session(async () => {
       this.viewGeneration = (await this.content()).envelope.generation;
       this.webVersion = (await unitFile(this.view.web, "web"))?.version;
@@ -234,15 +226,17 @@ export class Session {
     if (this.closed || !this.agent) throw new Error("session is closed or not started");
     return this.agent.request(operation, value);
   }
-  async confirm(payload: Payload, renderer: string): Promise<Receipt> {
+  async confirm(payload: Composition, renderer: string): Promise<Receipt> {
     return this.factory.session(async () => {
+      this.product?.assertReady();
+      if (!this.product || payload !== this.payload) throw new Error("capsule composition mismatch");
       if (!renderer || !this.agent) throw new Error("runtime evidence missing");
       this.agent.exact(await this.agent.request("health"));
       this.payload = payload;
       this.witness = renderer;
       if (this.attempt) {
-        for (const gate of gates) this.attempt = await this.capsule.ready(this.attempt, gate);
-        await this.capsule.commit(this.attempt);
+        for (const gate of gates) this.attempt = await this.generations.ready(this.attempt, gate);
+        await this.generations.commit(this.attempt);
         this.attempt = undefined;
       }
       this.ready = true;
@@ -276,6 +270,7 @@ export class Session {
       error: this.error,
       candidate: this.target,
       capsule: this.payload?.witness ?? "",
+      product: this.product?.snapshot(),
       daemon,
       renderer: this.witness,
       pid: process.pid,
@@ -300,6 +295,7 @@ export class Session {
   async applyLeaf(release: Release, renderer: Renderer): Promise<Receipt> {
     if (this.closed || this.closing || !this.ready || this.phase !== "ready")
       throw new Error("runtime is not accepting leaf activation");
+    this.product?.assertReady();
     return this.factory.session(async () => {
       if (this.phase !== "ready") throw new Error("runtime is not accepting leaf activation");
       const before = await this.content(),
@@ -312,8 +308,8 @@ export class Session {
       this.target = release.envelope.digest;
       this.error = undefined;
       try {
-        this.attempt = await this.capsule.stage(release.envelope, release.assets);
-        const next = await this.capsule.prepare(this.attempt);
+        this.attempt = await this.generations.stage(release.envelope, release.assets);
+        const next = await this.generations.prepare(this.attempt);
         await this.checkpoint("prepared");
         this.phase = "activating";
         if (plan.changed.includes("web")) {
@@ -337,10 +333,10 @@ export class Session {
         } else this.witness = await renderer.probe();
         if (!this.witness || !this.agent) throw new Error("leaf renderer evidence missing");
         this.agent.exact(await this.agent.request("health"));
-        for (const gate of gates) this.attempt = await this.capsule.ready(this.attempt, gate);
+        for (const gate of gates) this.attempt = await this.generations.ready(this.attempt, gate);
         await this.checkpoint("ready");
         committing = true;
-        await this.capsule.commit(this.attempt);
+        await this.generations.commit(this.attempt);
         await this.checkpoint("committed");
         this.attempt = undefined;
         this.current = next;
@@ -374,7 +370,7 @@ export class Session {
           this.error += `; rollback: ${String(rollback)}`;
         }
         if (this.attempt) {
-          await this.capsule.fail(this.attempt, this.error);
+          await this.generations.fail(this.attempt, this.error);
           this.attempt = undefined;
         }
         throw new Error(`leaf activation failed; baseline restored=${restored}: ${this.error}`);
@@ -403,9 +399,10 @@ export class Session {
   private async closeWithin(error: string) {
     await this.factory.session(async () => {
       if (this.attempt && !this.ready) {
-        await this.capsule.fail(this.attempt, error);
+        await this.generations.fail(this.attempt, error);
         this.attempt = undefined;
       }
+      await this.product?.close();
       await this.agent?.close();
     });
     await this.host.close();

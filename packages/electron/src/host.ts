@@ -96,7 +96,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
       return active.request(operation, value);
     });
     window = new BrowserWindow({
-      title: payload.title,
+      title: payload.window.title,
       show: !automated,
       focusable: !automated,
       webPreferences: {

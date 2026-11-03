@@ -26,36 +26,36 @@
 
 ## Core file index
 
-| File or location                                               | Responsibility                                                                       |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| package.json / pnpm-workspace.yaml / pnpm-lock.yaml            | standard dispatch, workspace membership and fixed dependency closure                 |
-| pesuite.yaml / biome.json                                      | guard/runtime declarations and formatter/linter configuration                        |
-| packages/guard/src/rules/tree.ts / scan/files.ts               | directory allowlists and inspected/pruned boundaries                                 |
-| packages/guard/src/config/defaults.ts                          | policy defaults and rule index                                                       |
-| packages/cli/src/index.ts / lifecycle.ts / pipeline.ts         | sole public bin and legacy/short distribution entry routing                          |
-| packages/pipeline/src                                          | channel identity, immutable build/package receipts, checks and publication           |
-| packages/pack/src/platform.ts                                  | matching native platform/architecture layout and safe output separation              |
-| packages/sidecar/src/runtime/catalog.ts / control/directory.ts | factory inventory, instance phases and read-only interrupted views                   |
-| packages/sidecar/src/runtime/sessions.ts / sessionwire.ts      | lifecycle lanes, private nesting context and controller-owner connection             |
-| packages/sidecar/src/state/recovery.ts / inventory.ts          | root-wide exclusive recovery, exact snapshots, dead-owner proof and resumable intent |
-| packages/sidecar/src/runtime/ownership.ts                      | persistent exclusive owner records; interrupted/invalid ownership blocks             |
-| packages/sidecar/src/control/factory.ts / process/observe.ts   | bound factory API and OS-visible ownership observations                              |
-| packages/sidecar/src/control / runtime                         | hosted methods, resource ownership and management transport                          |
-| packages/runtime/src/agent.ts / units.ts                       | daemon lease lifecycle and version/API compatibility preflight                       |
-| packages/electron/src/renderer.ts                              | actual document epochs and bridge readiness                                          |
-| packages/runtime/src/session.ts / capsule.ts                   | generation mounting, execution, activation and recovery                              |
-| packages/electron/src/automation.ts                            | background validation policy and window visibility/focus evidence                    |
-| packages/electron/src/host.ts / bridge.ts                      | installed host and narrow browser contract                                           |
-| packages/release/src/channel.ts / version.ts                   | product-owned channel identity, counted versions and manifest consistency            |
-| packages/release / blob / publish / pack                       | content identity, CAS, distribution primitives and unsigned packaging                |
-| packages/update/src/index.ts                                   | sidecar-hosted discovery/preparation and optional SDK activation delegation          |
-| packages/publish/src/static.ts / client.ts                     | public static feed projection and bounded/cancellable verified retrieval             |
-| packages/automation/src                                        | shared background launcher, native desktop observation and verdicts                  |
-| packages/sidecar/src/control/connection.ts                     | private manager rendezvous; online identity verification, no inventory authority     |
-| packages/inspect/src / packages/serve/src                      | scoped inspection and managed local static sources                                   |
-| packages/testkit/src/runner.ts / schema.ts                     | reference qualification API and evidence schema                                      |
-| apps/carrier / capsule / web / daemon                          | reference runtime units, not product business code                                   |
-| .github/workflows / .githooks/pre-commit                       | CI verification and optional local direct guard hook                                 |
+| File or location                                                | Responsibility                                                                       |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| package.json / pnpm-workspace.yaml / pnpm-lock.yaml             | standard dispatch, workspace membership and fixed dependency closure                 |
+| pesuite.yaml / biome.json                                       | guard/runtime declarations and formatter/linter configuration                        |
+| packages/guard/src/rules/tree.ts / scan/files.ts                | directory allowlists and inspected/pruned boundaries                                 |
+| packages/guard/src/config/defaults.ts                           | policy defaults and rule index                                                       |
+| packages/cli/src/index.ts / lifecycle.ts / pipeline.ts          | sole public bin and legacy/short distribution entry routing                          |
+| packages/pipeline/src                                           | channel identity, immutable build/package receipts, checks and publication           |
+| packages/pack/src/platform.ts                                   | matching native platform/architecture layout and safe output separation              |
+| packages/sidecar/src/runtime/catalog.ts / control/directory.ts  | factory inventory, instance phases and read-only interrupted views                   |
+| packages/sidecar/src/runtime/sessions.ts / sessionwire.ts       | lifecycle lanes, private nesting context and controller-owner connection             |
+| packages/sidecar/src/state/recovery.ts / inventory.ts           | root-wide exclusive recovery, exact snapshots, dead-owner proof and resumable intent |
+| packages/sidecar/src/runtime/ownership.ts                       | persistent exclusive owner records; interrupted/invalid ownership blocks             |
+| packages/sidecar/src/control/factory.ts / process/observe.ts    | bound factory API and OS-visible ownership observations                              |
+| packages/sidecar/src/control / runtime                          | hosted methods, resource ownership and management transport                          |
+| packages/runtime/src/agent.ts / units.ts                        | daemon lease lifecycle and version/API compatibility preflight                       |
+| packages/electron/src/renderer.ts                               | actual document epochs and bridge readiness                                          |
+| packages/runtime/src/session.ts / generations.ts / lifecycle.ts | generation mounting, execution, activation and recovery                              |
+| packages/electron/src/automation.ts                             | background validation policy and window visibility/focus evidence                    |
+| packages/electron/src/host.ts / bridge.ts                       | installed host and narrow browser contract                                           |
+| packages/release/src/channel.ts / version.ts                    | product-owned channel identity, counted versions and manifest consistency            |
+| packages/release / blob / publish / pack                        | content identity, CAS, distribution primitives and unsigned packaging                |
+| packages/update/src/index.ts                                    | sidecar-hosted discovery/preparation and optional SDK activation delegation          |
+| packages/publish/src/static.ts / client.ts                      | public static feed projection and bounded/cancellable verified retrieval             |
+| packages/automation/src                                         | shared background launcher, native desktop observation and verdicts                  |
+| packages/sidecar/src/control/connection.ts                      | private manager rendezvous; online identity verification, no inventory authority     |
+| packages/inspect/src / packages/serve/src                       | scoped inspection and managed local static sources                                   |
+| packages/testkit/src/runner.ts / schema.ts                      | reference qualification API and evidence schema                                      |
+| apps/carrier / capsule / web / daemon                           | reference runtime units, not product business code                                   |
+| .github/workflows / .githooks/pre-commit                        | CI verification and optional local direct guard hook                                 |
 
 ## Iteration workflows
 
@@ -153,3 +153,10 @@ The standalone supervisor program is embedded at package build time so actual in
 Use inspect to obtain a fingerprint, then apply that exact intent. The root SQLite recovery record persists the baseline before resource retirement. Atomic file before/after states and intent-owned pending files make SIGKILL/IO failures retryable; the final directory/manager retirement and complete record commit together. Durable data/CAS remain; a running binding attempt becomes failed without changing current. This does not select product content: subsequent explicit binding recovery may replay the last committed generation. Prepared-but-unpublished authorities and absent committed baselines need separate product handling.
 Current format only: owner schema3 records birth and endpoint inode identity, directory schema4 records birth and binding authority before file publication. No old readers or migration. Binding implementation lives in src/state; control/ownership tests are grouped under tests/control, and recovery faults under tests/recovery. Public raw Resources/Bindings exports are removed. Preserve previous experiment roots as history.
 OnCheckpoint is diagnostic observation under root-wide exclusion; do not re-enter that root from it. Recovery never logs/copies control.json credentials. Only declared temporary paths and the exact stale manager endpoint/rendezvous are removed. Full unknown-helper census, live adoption, power-loss safety and native fullscreen remain unqualified; ordinary startup never silently initiates recovery.
+
+
+### Capsule product lifecycle
+
+#58 under #14 defines the current product module contract: export create(), returning a fresh body with caller-owned handlers, initialize(CapsuleContext) and stop(). create/module evaluation must not start unmanaged work. initialize returns a window title composition and actual execution witness; resources come from the injected sidecar Context. No binding/controller credentials are injected into the product.
+The stable runtime owns the Capsule hosted attachment and its artifact-digest identity/incarnation. initialize completes before ready; accepted product methods drain before stop; stop cancels/drains background work before temporary resources retire. Failed stop retains authority/resources and is explicitly retryable. Session shutdown drains Capsule before Daemon. directory remains lifecycle truth; the product receipt only identifies the exact hosted instance.
+Generations owns content preparation, mounting and binding operations; it is distinct from the Capsule product interface. The former Capsule content class and activate-only module protocol are removed without aliases or fallback. Each cold launch creates a fresh body even when the ESM module remains cached. This is lifecycle groundwork, not automatic Capsule replacement or ESM unloading; #14 remains Open for actual handoff and coordinated updates.
