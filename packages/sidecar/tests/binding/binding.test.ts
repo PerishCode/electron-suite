@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { channel, digest, namespace } from "@perishcode/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { Bindings } from "@";
+import { Bindings, readBinding, serve } from "@";
 
 const roots: string[] = [];
 
@@ -61,4 +61,22 @@ describe("bindings", () => {
       state: { attempt: { error: "sidecar restart", status: "failed" } },
     });
   });
+});
+
+it("reads offline binding without changing it and rejects online inspection", async () => {
+  const root = await mkdtemp(join(tmpdir(), "offline-binding-"));
+  roots.push(root);
+  const scope = { channel: channel("stable"), namespace: namespace("probe") };
+  const host = await serve(join(root, "manager.sock"), undefined, undefined, root);
+  const factory = host.factory(scope);
+  // Initialize the factory's persistent ownership and bind an armed candidate.
+  await factory.grant({ kind: "data", name: "probe", scope: "factory" });
+  await factory.transit(0, { type: "arm", mode: "update", target: digest("candidate") });
+  await expect(readBinding(root, scope)).rejects.toThrow("held");
+  const expected = await factory.binding();
+  await host.close();
+  const actual = await readBinding(root, scope);
+  expect(actual.directory.manager.phase).toBe("closed");
+  expect(actual.journal).toEqual(expected);
+  expect(await readBinding(root, scope)).toEqual(actual);
 });

@@ -149,7 +149,10 @@ export class Ownership {
       throw fault;
     }
   }
-  static async inspect(path: string): Promise<{ owner: OwnerRecord; directory: unknown }> {
+  static async inspect<T = undefined>(
+    path: string,
+    read?: () => Promise<T>,
+  ): Promise<{ owner: OwnerRecord; directory: unknown; value?: T }> {
     const scope = join(await realpath(dirname(path)), basename(path));
     if (!(await lstat(scope)).isFile()) throw new Error("ownership must be a regular file");
     const db = new DatabaseSync(scope, { readOnly: true, timeout: 0 });
@@ -158,8 +161,9 @@ export class Ownership {
       const row = db.prepare("SELECT record FROM authority WHERE id=1").get();
       const owner = Ownership.parse(row?.record, scope);
       const directory = Ownership.data(db);
+      const value = await read?.();
       db.exec("COMMIT");
-      return { owner, directory };
+      return { owner, directory, value };
     } catch (fault) {
       if ([5, 6].includes((fault as { errcode?: number }).errcode ?? 0))
         throw new Error("directory is held; query the active manager", { cause: fault });

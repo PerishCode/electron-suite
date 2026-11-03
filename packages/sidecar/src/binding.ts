@@ -1,4 +1,5 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import {
@@ -94,9 +95,22 @@ export class Bindings {
   readonly #root: string;
   readonly #pending = new Map<string, Promise<void>>();
   readonly #seen = new Set<string>();
+  readonly #known = new Set<string>();
+  readonly #uncertain = new Set<string>();
 
   constructor(root: string) {
     this.#root = resolve(root, "factories");
+  }
+
+  /** Exact on-disk facts only; does not fail or recover a running attempt. */
+  static async inspect(root: string, scope: Namespace, lane: Channel): Promise<Journal> {
+    namespace(scope);
+    channel(lane);
+    return parse(
+      JSON.parse(await readFile(join(resolve(root), "factories", lane, scope, "binding.json"), "utf8")),
+      scope,
+      lane,
+    );
   }
 
   read(scope: Namespace, lane: Channel): Promise<Journal> {
@@ -118,16 +132,21 @@ export class Bindings {
 
   async #load(scope: Namespace, lane: Channel): Promise<Journal> {
     const identity = `${lane}:${scope}`;
+    if (this.#uncertain.has(identity)) throw new Error("binding persistence uncertain; recovery required");
     let journal: Journal;
     try {
       journal = parse(JSON.parse(await readFile(this.#path(scope, lane), "utf8")), scope, lane);
+      this.#known.add(identity);
     } catch (fault) {
       if ((fault as NodeJS.ErrnoException).code !== "ENOENT") throw fault;
+      if (this.#known.has(identity)) throw new Error("binding missing; recovery required");
       journal = { revision: 0, state: { channel: lane, namespace: scope } };
     }
     if (this.#seen.has(identity)) return journal;
-    this.#seen.add(identity);
-    if (journal.state.attempt?.status !== "running") return journal;
+    if (journal.state.attempt?.status !== "running") {
+      this.#seen.add(identity);
+      return journal;
+    }
     const attempt = journal.state.attempt;
     const transition = reduce(journal.state, {
       error: "sidecar restart",
@@ -138,6 +157,7 @@ export class Bindings {
     if (!transition.ok) throw new Error(`binding recovery ${transition.fault}`);
     const recovered = { revision: journal.revision + 1, state: transition.state };
     await this.#save(scope, lane, recovered);
+    this.#seen.add(identity);
     return recovered;
   }
 
@@ -163,9 +183,35 @@ export class Bindings {
   async #save(scope: Namespace, lane: Channel, journal: Journal): Promise<void> {
     const root = join(this.#root, lane, scope);
     const path = this.#path(scope, lane);
-    const temporary = `${path}.tmp`;
+    const temporary = `${path}.${randomUUID()}.tmp`;
     await mkdir(root, { mode: 0o700, recursive: true });
-    await writeFile(temporary, `${canonical(journal)}\n`, { mode: 0o600 });
-    await rename(temporary, path);
+    let renamed = false;
+    try {
+      const file = await open(temporary, "wx", 0o600);
+      try {
+        await file.writeFile(`${canonical(journal)}\n`);
+        await file.sync();
+      } finally {
+        await file.close();
+      }
+      await rename(temporary, path);
+      renamed = true;
+      this.#known.add(`${lane}:${scope}`);
+      // Windows does not support opening directory handles through this API.
+      // File synchronization + atomic rename are used there; power-loss durability is unqualified.
+      if (process.platform !== "win32") {
+        const directory = await open(root, "r");
+        try {
+          await directory.sync();
+        } finally {
+          await directory.close();
+        }
+      }
+    } catch (error) {
+      if (renamed) this.#uncertain.add(`${lane}:${scope}`);
+      throw error;
+    } finally {
+      await rm(temporary, { force: true }).catch(() => {});
+    }
   }
 }

@@ -338,3 +338,5 @@ prepared 不表示 activated：本轮不修改 binding、不替换运行中的�
 #48 在已准备候选上增加 runtime/Electron 唯一激活入口。unit.json 随实际资源字节校验，声明独立版本和接口：Web-only 保留 daemon PID，Daemon-only 保留当前文档，协同更新在旧文档被围栏后切换。兼容集合 binding、进程 artifact 身份和文档 nonce 分别记录。
 
 HostOptions.updates.activate 为显式开关，默认仍只准备。失败会报告实际基线恢复结果并保留失败 binding，正常退出后可显式恢复已提交代际。数据保留不表示回滚业务写入；manager adoption、提交中断安全及完整原生全屏仍未验收。版本、实际消费与 CI 证据见 #48。
+
+Activation interruption probes are tracked by #50 under #13. Optional runtime onActivation checkpoints observe preparation, daemon retirement, readiness and durable commit without replacing actual readiness gates. Sidecar readBinding provides offline journal/directory facts under manager exclusion. File/rename/parent-directory synchronization failures are not reported as successful commits; ambiguous post-rename failures fence the live binding owner. Interrupted-manager startup remains blocked, including explicit binding recover: safe refusal is not manager recovery. No power-loss, adoption or native fullscreen claim follows from these probes.

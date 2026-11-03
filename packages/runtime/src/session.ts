@@ -29,7 +29,15 @@ export interface Payload {
   title: string;
   witness: string;
 }
+export interface ActivationCheckpoint {
+  stage: "prepared" | "daemon-stopped" | "ready" | "committed";
+  target: Digest;
+  nonce: string;
+  previous: Digest;
+}
 export interface SessionOptions {
+  /** Diagnostic observation only; never substitutes for runtime readiness. */
+  onActivation?: (checkpoint: Readonly<ActivationCheckpoint>) => Promise<void>;
   carrier: number;
   candidate?: string;
   executable: string;
@@ -306,6 +314,7 @@ export class Session {
       try {
         this.attempt = await this.capsule.stage(release.envelope, release.assets);
         const next = await this.capsule.prepare(this.attempt);
+        await this.checkpoint("prepared");
         this.phase = "activating";
         if (plan.changed.includes("web")) {
           this.docNonce = randomUUID();
@@ -316,6 +325,7 @@ export class Session {
           daemonTouched = true;
           await this.agent?.close();
           this.agent = undefined;
+          await this.checkpoint("daemon-stopped");
           await this.launch(next, release.envelope.generation);
         }
         this.view = next;
@@ -328,8 +338,10 @@ export class Session {
         if (!this.witness || !this.agent) throw new Error("leaf renderer evidence missing");
         this.agent.exact(await this.agent.request("health"));
         for (const gate of gates) this.attempt = await this.capsule.ready(this.attempt, gate);
+        await this.checkpoint("ready");
         committing = true;
         await this.capsule.commit(this.attempt);
+        await this.checkpoint("committed");
         this.attempt = undefined;
         this.current = next;
         this.phase = "ready";
@@ -369,6 +381,17 @@ export class Session {
       }
       return this.snapshot();
     });
+  }
+  private async checkpoint(stage: ActivationCheckpoint["stage"]) {
+    if (!this.attempt) throw new Error("activation attempt missing");
+    await this.options.onActivation?.(
+      Object.freeze({
+        stage,
+        target: this.attempt.target,
+        nonce: this.attempt.nonce,
+        previous: this.current.target,
+      }),
+    );
   }
   async close(error = "runtime stopped before readiness"): Promise<{ status: string; survivors: number[] }> {
     if (this.closed) return { status: "stopped", survivors: [] };
