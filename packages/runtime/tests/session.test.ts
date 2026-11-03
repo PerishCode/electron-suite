@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { channel } from "@perishcode/protocol";
 import { compose, resolve } from "@perishcode/release";
-import { readDirectory } from "@perishcode/sidecar";
+import { connectRoot, readDirectory } from "@perishcode/sidecar";
 import { afterEach, expect, it } from "vitest";
 import { Session, type SessionOptions, writeProduct } from "@";
 
@@ -60,6 +60,16 @@ it("executes the payload, binds daemon evidence and preserves data across cold s
   await first.request("write", { value: "retained" });
   const receipt = await first.confirm(payload, "renderer1");
   expect(receipt.daemon).toMatchObject({ generation: receipt.generation, nonce: receipt.nonce, witness: "daemon1" });
+  await first.expose<{ echo: { input: unknown; output: unknown } }>("probe", {
+    handlers: { echo: (value) => value },
+    lifecycle: { initialize: async () => {}, stop: async () => {} },
+  });
+  const { factory } = await connectRoot(options.root, receipt.factory);
+  const probe = await factory.connect<{ echo: { input: unknown; output: unknown } }>({
+    service: "probe",
+    generation: receipt.generation,
+  });
+  expect(await probe.call("echo", { nonce: receipt.nonce })).toEqual({ nonce: receipt.nonce });
   expect(await first.close()).toEqual({ status: "stopped", survivors: [] });
   await expect(first.request("health")).rejects.toThrow("closed");
   const second = await Session.open(options);

@@ -84,9 +84,15 @@ async function retire(child: ChildProcess, grace: number): Promise<Stop> {
 function wait(child: ChildProcess, marker: string, timeout: number): Promise<void> {
   return new Promise((resolve, reject) => {
     let output = "";
+    let errors = "";
+    const stderr = (chunk: Buffer) => {
+      errors = (errors + chunk.toString("utf8")).slice(-16384);
+    };
+    child.stderr?.on("data", stderr);
     const timer = setTimeout(() => reject(new Error("readiness timeout")), timeout);
     const done = (operation: () => void) => {
       clearTimeout(timer);
+      child.stderr?.off("data", stderr);
       operation();
     };
 
@@ -95,7 +101,9 @@ function wait(child: ChildProcess, marker: string, timeout: number): Promise<voi
       if (output.includes(marker)) done(resolve);
     });
     child.once("error", (error) => done(() => reject(error)));
-    child.once("exit", (code) => done(() => reject(new Error(`process exited before readiness: ${code}`))));
+    child.once("exit", (code) =>
+      done(() => reject(new Error(`process exited before readiness: ${code}${errors ? `\n${errors}` : ""}`))),
+    );
   });
 }
 

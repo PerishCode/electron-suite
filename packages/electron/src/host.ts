@@ -10,6 +10,8 @@ export interface HostOptions extends Omit<SessionOptions, "executable"> {
   probe?: boolean;
   automation?: boolean;
   receipt?: string;
+  /** Caller-owned debugging contract; manager credentials are never sent to the renderer. */
+  inspect?: (session: Session, receipt: HostReceipt, quit: () => void) => Promise<void>;
 }
 
 export interface HostReceipt extends Receipt {
@@ -122,6 +124,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
     }
     if (!renderer) throw new Error("renderer readiness timeout");
     const receipt: HostReceipt = { ...(await active.confirm(payload, renderer)), automation: automation() };
+    await options.inspect?.(active, receipt, () => app.quit());
     if (options.receipt) {
       await mkdir(dirname(options.receipt), { recursive: true });
       await writeFile(options.receipt, JSON.stringify(receipt));

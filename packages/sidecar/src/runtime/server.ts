@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { type Capability, type FactoryScope, factoryKey, factoryScope, type Permit } from "@perishcode/protocol";
 import { Bindings } from "../binding.js";
 import { Client } from "../client.js";
+import { advertise } from "../control/connection.js";
 import type { Directory } from "../control/directory.js";
 import { Factory } from "../control/factory.js";
 import { Hosted } from "../control/hosted.js";
@@ -254,9 +255,11 @@ export async function serve(
   };
   const server = createServer();
   accept(server, runtime, authority);
+  let unpublish: (() => Promise<void>) | undefined;
   try {
     await listen(server, endpoint);
     if (process.platform !== "win32") await chmod(endpoint, 0o600);
+    unpublish = await advertise(root, ownership.incarnation, endpoint, authority);
   } catch (fault) {
     if (server.listening) await close(server);
     catalog.drained();
@@ -282,6 +285,7 @@ export async function serve(
         }),
       );
       catalog.drained();
+      await unpublish?.();
       ownership.close();
     });
   };

@@ -27,3 +27,8 @@ runtime:
   namespace: primary
   scheme: electronsuite
   version: 1.0.0
+serve:
+  data: .state/serve
+  sources:
+    web:
+      directory: apps/web/dist
