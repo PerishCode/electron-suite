@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { canonical, digest, type FactoryScope } from "@perishcode/protocol";
 import { type Attachment, type Identity, type Service, serve } from "@perishcode/sidecar";
+import { type Fault, fault } from "./fault.js";
 import { staticServer } from "./static.js";
 
 export { configuration } from "./config.js";
+export type { Fault } from "./fault.js";
 
 export interface Source {
   directory: string;
@@ -18,6 +20,7 @@ export interface Endpoint extends Identity {
 }
 export interface Methods {
   status: { input: unknown; output: Endpoint };
+  fault: { input: Fault | null; output: Fault | null };
 }
 async function canonicalPath(path: string): Promise<string> {
   try {
@@ -53,9 +56,14 @@ export class Sources {
       for (const { name, directory } of sources) {
         let http: Awaited<ReturnType<typeof staticServer>> | undefined;
         let endpoint: Endpoint | undefined;
+        let fixture: Fault | undefined;
         const attachment: Attachment = await factory.expose<Methods>({
           identity: { service: name, generation: digest(canonical({ directory, name })) },
           handlers: {
+            fault: (input) => {
+              fixture = fault(input);
+              return fixture ?? null;
+            },
             status: () => {
               if (!endpoint) throw new Error("source not ready");
               return endpoint;
@@ -65,7 +73,7 @@ export class Sources {
             initialize: async (context) => {
               const socket = await context.allocate({ kind: "socket", name: "static" });
               const port = await context.allocate({ kind: "port", name: "static", scheme: "http" });
-              http = await staticServer(directory, socket.value);
+              http = await staticServer(directory, socket.value, () => fixture);
               await context.forward(port.value, socket.value);
               endpoint = { ...context.identity, incarnation: context.incarnation, url: port.value, directory };
             },
@@ -91,5 +99,11 @@ export class Sources {
   }
   close() {
     return this.manager.close();
+  }
+  async fault(service: string, input: Fault | null) {
+    const endpoint = this.endpoints.find((value) => value.service === service);
+    if (!endpoint) throw new Error("static source not found");
+    const peer = await this.manager.factory(endpoint).connect<Methods>(endpoint);
+    return peer.call("fault", input);
   }
 }

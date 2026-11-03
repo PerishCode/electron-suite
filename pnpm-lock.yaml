@@ -570,6 +570,37 @@ importers:
         specifier: 4.1.6
         version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
 
+  packages/update:
+    dependencies:
+      '@perishcode/blob':
+        specifier: workspace:*
+        version: link:../blob
+      '@perishcode/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@perishcode/publish':
+        specifier: workspace:*
+        version: link:../publish
+      '@perishcode/sidecar':
+        specifier: workspace:*
+        version: link:../sidecar
+    devDependencies:
+      '@perishcode/serve':
+        specifier: workspace:*
+        version: link:../serve
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
+
 packages:
 
   7zip-bin@5.2.0:

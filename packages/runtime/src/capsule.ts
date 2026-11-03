@@ -104,6 +104,23 @@ async function restore(store: Store, artifact: Artifact, root: string): Promise<
 
 export class Capsule {
   readonly factory: Factory;
+  async content(target: Digest): Promise<{ envelope: Envelope; assets: Content[] }> {
+    return this.factory.session(async () => {
+      const data = await this.factory.grant({ kind: "data", name: "capsule", scope: "factory" });
+      const manifest = envelope(
+        JSON.parse(await readFile(join(data.value, "generations", `${target.slice(7)}.json`), "utf8")),
+      );
+      if (manifest.digest !== target) throw new Error("generation receipt mismatch");
+      const cas = await this.factory.grant({ kind: "cas", name: "artifact", scope: "factory" });
+      const store = await Store.open({ root: cas.value });
+      return {
+        envelope: manifest,
+        assets: await Promise.all(
+          list(manifest).map(async (artifact) => ({ artifact, bytes: await store.read(artifact) })),
+        ),
+      };
+    });
+  }
   constructor(
     readonly client: Client,
     readonly namespace: Namespace,

@@ -45,6 +45,8 @@
 | packages/electron/src/host.ts / bridge.ts                      | installed host and narrow browser contract                                       |
 | packages/release/src/channel.ts / version.ts                   | product-owned channel identity, counted versions and manifest consistency        |
 | packages/release / blob / publish / pack                       | content identity, CAS, distribution primitives and unsigned packaging            |
+| packages/update/src/index.ts                                   | sidecar-hosted leaf candidate discovery/preparation; never binding activation    |
+| packages/publish/src/static.ts / client.ts                     | public static feed projection and bounded/cancellable verified retrieval         |
 | packages/automation/src                                        | shared background launcher, native desktop observation and verdicts              |
 | packages/sidecar/src/control/connection.ts                     | private manager rendezvous; online identity verification, no inventory authority |
 | packages/inspect/src / packages/serve/src                      | scoped inspection and managed local static sources                               |
@@ -116,3 +118,9 @@ Build first. `pesuite serve --channel stable --namespace primary` reads serve.da
 `pesuite inspect list --data <manager-root> --channel <channel> --namespace <namespace>` queries the active manager. probe/call/stop also select service and exact generation; call/stop require the listed incarnation. Arbitrary method/input contracts belong to callers. All CLI output is JSON; operational failure exits 2.
 Sidecar owns private control.json publication/removal. It contains local management credentials: never log, copy into receipts or expose it as static content or renderer bootstrap. Online directory identity must match its manager incarnation. It is a rendezvous, not a second resource authority. SIGKILL retains interrupted ownership; stale discovery does not permit reopening or cleanup. No manager adoption is implied.
 Session.expose binds caller-owned handlers to the mounted product generation/factory. HostOptions.inspect may register these once all four units are ready; normal startup is unchanged unless the caller opts in. The callback must not await full host shutdown inside its hosted stop handler; schedule quit after the method drains.
+
+### Candidate discovery and preparation
+
+#46 adds publish.writeFeed (public protocol bytes, channel pointer last), bounded/cancellable Feed retrieval and @perishcode/update.watch. The watcher attaches through Session.expose or another caller-owned sidecar Host; Context.roots.resource owns its verified cache and stop aborts/drains network work. inspect service updates/status reports current, phase, revision, prepared target/changed units and errors.
+Current and prepared are distinct. watch never arms/commits binding, replaces current processes or activates candidate code. It pins baseline capsule/carrier/blob identities; only web/daemon byte changes are prepared. Cached seed bytes are verified, metadata/proofs are fetched and checked each time, download limits/timeouts are explicit, redirects reject, observed head revision regression/conflict rejects. Head monotonicity is a local observation, not a signed freshness guarantee. Only loopback HTTP is qualified.
+Serve's private fault method selects exact path and missing/corrupt/truncate/stall, or null to clear. It does not expose an HTTP mutation endpoint. Use it for deterministic fixtures rather than replacing the resource manager. Full minimal-impact activation, compatibility and interrupted commits remain #13; public-feed trust and resume are separate.
