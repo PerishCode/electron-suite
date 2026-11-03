@@ -23,7 +23,7 @@ function spec(name: string): Spec {
     grace: 200,
     namespace: namespace("main"),
     ready: "ready",
-    slot: "daemon",
+    service: "daemon",
     timeout: 500,
   };
 }

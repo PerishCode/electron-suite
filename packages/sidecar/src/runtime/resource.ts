@@ -152,7 +152,7 @@ export class Resources {
     const root = await realpath(options.root);
     try {
       await lstat(join(root, "namespaces"));
-      throw new Error("legacy namespace resources; explicit migration required");
+      throw new Error("unsupported resource layout");
     } catch (fault) {
       if ((fault as NodeJS.ErrnoException).code !== "ENOENT") throw fault;
     }
@@ -166,7 +166,7 @@ export class Resources {
     await mkdir(base, { mode: 0o700, recursive: true });
     if (!(await lstat(base)).isDirectory()) throw new Error("namespace must be a regular directory");
     await chmod(base, 0o700);
-    const ownership = await Ownership.claim(join(base, "ownership.sqlite"), true);
+    const ownership = await Ownership.claim(join(base, "ownership.sqlite"));
     try {
       let state: Registry = { schema: 2, grants: [], ...scope, revision: 0 };
       try {

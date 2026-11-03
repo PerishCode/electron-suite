@@ -54,7 +54,7 @@ it("automatically prepares signed leaf candidates, rejects faults/regressions an
   const first = await writeFeed(authority, lane, content);
   const scope = { channel: lane, namespace: namespace("probe") };
   const source = await Sources.open({ data: join(root, "source"), scope, sources: { feed: { directory: content } } });
-  const manager = await serve(join(root, "manager.sock"), undefined, undefined, join(root, "manager"));
+  const manager = await serve(join(root, "manager.sock"), { root: join(root, "manager") });
   const factory = manager.factory(scope),
     before = await factory.binding();
   const observer = await watch(
@@ -151,7 +151,7 @@ it("starts a fresh controller for background activation without retaining the in
   await writeFeed(authority, lane, content);
   const scope = { channel: lane, namespace: namespace("probe") };
   const source = await Sources.open({ data: join(root, "source"), scope, sources: { feed: { directory: content } } });
-  const manager = await serve(join(root, "manager.sock"), undefined, undefined, join(root, "manager"));
+  const manager = await serve(join(root, "manager.sock"), { root: join(root, "manager") });
   const factory = manager.factory(scope);
   let context: Context | undefined;
   let applied = 0;

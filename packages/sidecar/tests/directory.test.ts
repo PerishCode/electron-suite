@@ -14,7 +14,7 @@ const scope = { namespace: namespace("main"), channel: channel("stable"), servic
 const spec = (generation = scope.generation): Spec => ({
   namespace: scope.namespace,
   channel: scope.channel,
-  slot: scope.service,
+  service: scope.service,
   generation,
   command: process.execPath,
   args: ["-e", "process.stdout.write('ready\\n');setInterval(()=>{},1000)"],
@@ -138,20 +138,18 @@ it.runIf(process.platform !== "win32")(
     await fixture(async (server, _root, client) => {
       const lease = await client.start(spec());
       const kill = process.kill.bind(process);
-      const spy = vi.spyOn(process, "kill").mockImplementation(((pid: number, signal?: NodeJS.Signals | number) => {
-        if (pid === -lease.pid && signal === "SIGTERM")
-          throw Object.assign(new Error("injected signal denial"), { code: "EPERM" });
-        return kill(pid, signal);
-      }) as typeof process.kill);
+      const supervisor = server.directory().instances[0]?.process?.root.pid;
+      if (!supervisor) throw new Error("supervisor witness missing");
+      kill(supervisor, "SIGSTOP");
       try {
-        await expect(client.release(lease)).rejects.toThrow("signal denial");
+        expect(await client.release(lease)).toMatchObject({ status: "partial" });
         expect(kill(lease.pid, 0)).toBe(true);
         expect(server.directory().instances[0]?.phase).toBe("failed");
         expect((await client.inspect())[0]?.attachments).toBe(1);
         await expect(client.attach(lease)).rejects.toThrow("not accepting");
         await expect(client.start(spec(digest("next")))).rejects.toThrow("already owned");
       } finally {
-        spy.mockRestore();
+        kill(supervisor, "SIGCONT");
       }
       expect(await client.release(lease)).toMatchObject({ status: "stopped" });
       expect(await client.release(lease)).toMatchObject({ status: "stopped" });
@@ -159,6 +157,7 @@ it.runIf(process.platform !== "win32")(
       expect(() => kill(lease.pid, 0)).toThrow();
     });
   },
+  15000,
 );
 it("records observed startup cleanup and keeps namespace filters isolated", async () => {
   await fixture(async (server, _root, client) => {
@@ -224,7 +223,14 @@ it("reads last committed hosted and process identities after SIGKILL without rew
   try {
     child = spawn(
       process.execPath,
-      ["--input-type=module", "-e", body, root, JSON.stringify(scope), JSON.stringify({ ...spec(), slot: "daemon" })],
+      [
+        "--input-type=module",
+        "-e",
+        body,
+        root,
+        JSON.stringify(scope),
+        JSON.stringify({ ...spec(), service: "daemon" }),
+      ],
       { stdio: ["pipe", "pipe", "pipe"] },
     );
     const lines = createInterface({ input: child.stdout as NonNullable<ChildProcess["stdout"]> });

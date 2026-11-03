@@ -10,9 +10,9 @@ import {
   parse,
   slot,
 } from "../control/directory.js";
-import { type LegacyDirectory, parse as parseLegacy } from "../control/legacy.js";
 import { type SessionRecord, sessionKey } from "../control/session.js";
 import type { Identity } from "../control/types.js";
+import type { ProcessInstance } from "../process/observe.js";
 import { Ownership } from "./ownership.js";
 
 export class Catalog {
@@ -25,7 +25,7 @@ export class Catalog {
     if (prior === undefined && owner.previous?.directory) throw new Error("directory missing; recovery required");
     const old = prior === undefined ? undefined : parse(prior, owner.previous ?? owner.info);
     const state: Directory = {
-      schema: 2,
+      schema: 3,
       revision: (old?.revision ?? -1) + 1,
       manager: { incarnation: owner.incarnation, pid: owner.info.pid, phase: "active" },
       factories: old?.factories ?? [],
@@ -87,7 +87,7 @@ export class Catalog {
       else next.instances[index] = entry;
     });
   }
-  change(scope: Identity, incarnation: string, phase: Phase, pid?: number): void {
+  change(scope: Identity, incarnation: string, phase: Phase, pid?: number, process?: ProcessInstance): void {
     const current = this.state.instances.find((entry) => slot(entry) === slot(scope));
     if (!current || current.incarnation !== incarnation || current.generation !== scope.generation)
       throw new Error("directory incarnation is fenced");
@@ -104,12 +104,13 @@ export class Catalog {
       const entry = next.instances.find((entry) => slot(entry) === slot(scope)) as Instance;
       entry.phase = phase;
       if (pid !== undefined) entry.pid = pid;
+      if (process !== undefined) entry.process = process;
     });
   }
   observer(): Observer {
     return {
       claim: (scope, id) => this.claim(scope, id, "process"),
-      change: (scope, id, phase, pid) => this.change(scope, id, phase, pid),
+      change: (scope, id, phase, pid, process) => this.change(scope, id, phase, pid, process),
     };
   }
   session(record: Omit<SessionRecord, "manager">): void {
@@ -138,8 +139,6 @@ export class Catalog {
 /** Last committed facts only; an interrupted manager does not imply its child PIDs are dead. */
 export async function readDirectory(root: string, scope?: FactoryScope): Promise<Directory> {
   const snapshot = await Ownership.inspect(join(root, "manager.sqlite"));
-  if (!snapshot.owner.factories)
-    throw new Error("legacy directory; use readLegacyDirectory; explicit migration required");
   if (!snapshot.owner.directory) throw new Error("directory unavailable; recovery required");
   const result = parse(snapshot.directory, {
     ...snapshot.owner,
@@ -154,20 +153,6 @@ export async function readDirectory(root: string, scope?: FactoryScope): Promise
   return result;
 }
 
-/** Explicit legacy inspection never guesses a channel or permits writes. */
-export async function readLegacyDirectory(root: string): Promise<LegacyDirectory> {
-  const snapshot = await Ownership.inspect(join(root, "manager.sqlite"));
-  if (snapshot.owner.factories) throw new Error("directory is already factory format; use readDirectory");
-  return parseLegacy(
-    snapshot.directory,
-    {
-      ...snapshot.owner,
-      phase: snapshot.owner.phase === "active" ? "interrupted" : "closed",
-    },
-    snapshot.owner.sessions === true,
-  );
-}
-
 /** Offline, read-only binding and directory facts under the same manager exclusion lock. */
 export async function readBinding(
   root: string,
@@ -177,8 +162,7 @@ export async function readBinding(
   const snapshot = await Ownership.inspect(join(root, "manager.sqlite"), () =>
     Bindings.inspect(root, identity.namespace, identity.channel),
   );
-  if (!snapshot.owner.factories || !snapshot.owner.directory)
-    throw new Error("factory directory unavailable; recovery required");
+  if (!snapshot.owner.directory) throw new Error("factory directory unavailable; recovery required");
   const directory = parse(snapshot.directory, {
     ...snapshot.owner,
     phase: snapshot.owner.phase === "active" ? "interrupted" : "closed",

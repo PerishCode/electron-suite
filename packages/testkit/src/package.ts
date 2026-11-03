@@ -97,7 +97,7 @@ async function launch(client: Client, app: string, manifest: Manifest, mount: Mo
       generation: digest(`installed${manifest.channel}`),
       namespace: scope,
       ready: "ready",
-      slot: "daemon",
+      service: "daemon",
     });
     await client.forward({ namespace: scope, channel: manifest.channel }, port.lease, socket.lease);
     child = spawn(executable, [], {

@@ -1,8 +1,12 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  define: {
+    PESUITE_SUPERVISOR_SOURCE: JSON.stringify(readFileSync(new URL("./dist/supervisor.mjs", import.meta.url), "utf8")),
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

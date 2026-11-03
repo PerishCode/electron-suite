@@ -149,7 +149,7 @@ export class Session {
     // The Electron adapter holds an OS single-instance lock for this root.
     const key = createHash("sha256").update(options.root).digest("hex").slice(0, 20);
     const endpoint = join(tmpdir(), `pesuite-${key}-${process.pid}.sock`);
-    const host = await serve(endpoint, undefined, undefined, options.root);
+    const host = await serve(endpoint, { root: options.root });
     const client = new Client(host.endpoint, host.authority);
     const scope = namespace(options.namespace);
     const lane = channel(options.manifest.channel);

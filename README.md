@@ -245,7 +245,7 @@ await remote.session(async (scoped) => {
 
 资源申请/释放/转发、资源快照初次打开和 binding 读取也参与 factory 会话；控制端断链后的 interrupted lane 不能从资源 API 绕过。业务 handler 需要控制方先进入会话才能执行受管资源写入。停止先取得会话，再拒绝该服务后续分配；排在 stop 后的分配会拒绝，不计入 stop 等待集合。
 
-这是显式 API/存储格式变更：不再接受省略 channel 的 namespace-only 资源调用，不默认 stable。旧 owner/namespace/bindings 布局拒绝写入；readLegacyDirectory(root) 明确只读检查旧 schema-1 目录，readDirectory 只接受新 factory 目录。没有自动搬迁或清理旧资源，也没有恢复写入工具。
+这是显式 API/存储格式变更：不再接受省略 channel 的 namespace-only 资源调用，不默认 stable。只接受当前 stamped-supervisor owner 与目录格式；旧格式拒绝读写，不提供旧格式读取或迁移适配。没有自动搬迁或清理旧资源，也没有恢复写入工具。
 
 root manager 仍以单个排他 authority 承载多个 factory；其他 channel 的操作可推进不意味着 manager 崩溃故障域独立。源四单元适配已使用显式 factory 作用域和 factory 持久 scope，但尚未发布新四单元 SDK。恢复写入、存活子进程接管、完整资源使用关系和完整渠道发布编排仍未验收；不得以本增量替代 #28 的后续交付。
 
@@ -340,3 +340,5 @@ prepared 不表示 activated：本轮不修改 binding、不替换运行中的�
 HostOptions.updates.activate 为显式开关，默认仍只准备。失败会报告实际基线恢复结果并保留失败 binding，正常退出后可显式恢复已提交代际。数据保留不表示回滚业务写入；manager adoption、提交中断安全及完整原生全屏仍未验收。版本、实际消费与 CI 证据见 #48。
 
 Activation interruption probes are tracked by #50 under #13. Optional runtime onActivation checkpoints observe preparation, daemon retirement, readiness and durable commit without replacing actual readiness gates. Sidecar readBinding provides offline journal/directory facts under manager exclusion. File/rename/parent-directory synchronization failures are not reported as successful commits; ambiguous post-rename failures fence the live binding owner. Interrupted-manager startup remains blocked, including explicit binding recover: safe refusal is not manager recovery. No power-loss, adoption or native fullscreen claim follows from these probes.
+
+Sidecar 1.0 uses stamped supervisors as stable process roots. Factory.start declares service identity and arbitrary workload; private supervisor/IPC/OS observation/stop escalation remain package-owned. observeProcesses reports actual root/descendant identities independently of the manager, while directory schema 3 retains birth witnesses. Only owner schema 2/stamped-supervisor is supported: no old-format reader, dual runner or migration shim. Old experiment roots remain historical evidence. macOS/Linux process observation is supported; other platforms reject runtime launch. See #53 and AGENTS.md.

@@ -14,7 +14,7 @@ const body = `import {serve,Resources,Client} from ${JSON.stringify(module)};
 const [root,mode,endpoint]=process.argv.slice(1);
 let service;
 try {
-  if(mode==='manager') service=await serve(endpoint,undefined,undefined,root);
+  if(mode==='manager') service=await serve(endpoint, { root: root });
   else service=await Resources.open({ channel:'stable',root,namespace:'main'});
   const grant = service.authority
     ? (request)=>new Client(service.endpoint,service.authority).grant({channel:'stable',namespace:'main'},request)
@@ -133,7 +133,7 @@ it.each(["manager", "resource"])("keeps interrupted %s authority and resources a
     await finish(owner.process, true);
     const reopen =
       mode === "manager"
-        ? serve(join(root, "new.sock"), undefined, undefined, root)
+        ? serve(join(root, "new.sock"), { root: root })
         : Resources.open({ channel: channel("stable"), root, namespace: namespace("main") });
     await expect(reopen).rejects.toThrow("interrupted; recovery required");
     expect(await readFile(registry, "utf8")).toBe(before);
@@ -194,7 +194,7 @@ it.runIf(process.platform !== "win32")(
       await symlink(root, alias, "dir");
       const manager = await serve(join(root, "m.sock"));
       try {
-        await expect(serve(join(root, "other.sock"), undefined, undefined, alias)).rejects.toThrow("held");
+        await expect(serve(join(root, "other.sock"), { root: alias })).rejects.toThrow("held");
       } finally {
         await manager.close();
       }

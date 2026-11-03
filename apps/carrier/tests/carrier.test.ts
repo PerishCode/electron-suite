@@ -119,7 +119,7 @@ describe("carrier", () => {
           generation: digest("carrierdaemon"),
           namespace: scope,
           ready: "ready",
-          slot: "daemon",
+          service: "daemon",
         });
         await client.forward({ namespace: scope, channel: channel("stable") }, port.lease, socket.lease);
         const spawned = spawn(electron, [join(here, "../dist/main.mjs")], {

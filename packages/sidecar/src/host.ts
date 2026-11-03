@@ -1,5 +1,4 @@
 import { randomBytes, randomUUID } from "node:crypto";
-
 import {
   type Channel,
   canonical,
@@ -10,26 +9,27 @@ import {
   namespace,
   valid,
 } from "@perishcode/protocol";
-
 import type { Observer } from "./control/directory.js";
 import type { Identity } from "./control/types.js";
-import { type Launch, LaunchFault, launch, type Running, type Stop } from "./runner.js";
+import { rootKey } from "./process/identity.js";
+import { type Launch, LaunchFault, launch, type Running, type Stop } from "./process/runner.js";
 
 export interface Spec extends Launch {
   channel: Channel;
   generation: Digest;
   namespace: Namespace;
-  slot: string;
+  service: string;
 }
 
 export interface Lease {
+  incarnation: string;
   attachment: string;
   capability: string;
   channel: Channel;
   generation: Digest;
   namespace: Namespace;
   pid: number;
-  slot: string;
+  service: string;
 }
 
 export interface Snapshot {
@@ -38,7 +38,7 @@ export interface Snapshot {
   generation: Digest;
   namespace: Namespace;
   pid: number;
-  slot: string;
+  service: string;
   state: "running" | "exited" | "stopping" | "failed";
 }
 
@@ -59,7 +59,7 @@ interface Entry {
   generation: Digest;
   namespace: Namespace;
   running: Running;
-  slot: string;
+  service: string;
 }
 
 interface Retired {
@@ -81,8 +81,8 @@ function fingerprint(spec: Spec): Digest {
   );
 }
 
-function key(value: Pick<Spec, "channel" | "generation" | "namespace" | "slot">): string {
-  return [value.namespace, value.channel, value.slot, value.generation].join(":");
+function key(value: Pick<Spec, "channel" | "generation" | "namespace" | "service">): string {
+  return [value.namespace, value.channel, value.service, value.generation].join(":");
 }
 
 function lease(entry: Entry): Lease {
@@ -93,23 +93,27 @@ function lease(entry: Entry): Lease {
   return {
     attachment,
     capability,
+    incarnation: entry.incarnation,
     channel: entry.channel,
     generation: entry.generation,
     namespace: entry.namespace,
     pid: entry.running.pid,
-    slot: entry.slot,
+    service: entry.service,
   };
 }
 
-const scope = (value: Pick<Spec, "namespace" | "channel" | "generation" | "slot">): Identity => ({
+const scope = (value: Pick<Spec, "namespace" | "channel" | "generation" | "service">): Identity => ({
   namespace: value.namespace,
   channel: value.channel,
   generation: value.generation,
-  service: value.slot,
+  service: value.service,
 });
 
 export class Sidecar {
-  constructor(private observer?: Observer) {}
+  constructor(
+    private root: string,
+    private observer?: Observer,
+  ) {}
   /** @internal Bind an empty host to its one persistent manager before launching. */
   observe(observer: Observer): void {
     if (this.observer || this.#entries.size || this.#released.size) throw new Error("host is already in use");
@@ -133,14 +137,14 @@ export class Sidecar {
       generation: spec.generation,
       namespace: spec.namespace,
       running: value,
-      slot: spec.slot,
+      service: spec.service,
       incarnation,
       state,
       fault,
     });
     try {
-      running = await launch(spec);
-      this.observer?.change(scope(spec), incarnation, "ready", running.pid);
+      running = await launch(spec, { ...scope(spec), root: rootKey(this.root), incarnation });
+      this.observer?.change(scope(spec), incarnation, "ready", running.pid, running.instance);
       return entry(running, "running");
     } catch (fault) {
       let stopped: Stop;
@@ -210,7 +214,7 @@ export class Sidecar {
     if (!valid(spec.generation)) throw new TypeError("invalid generation");
     channel(spec.channel);
     namespace(spec.namespace);
-    if (!/^[a-z][a-z0-9]*$/.test(spec.slot)) throw new TypeError("invalid slot");
+    if (!/^[a-z][a-z0-9]*$/.test(spec.service)) throw new TypeError("invalid service");
     const mark = fingerprint(spec);
     const identity = key(spec);
     let pending = this.#entries.get(identity);
@@ -225,7 +229,7 @@ export class Sidecar {
     const entry = await pending;
     if (entry.fingerprint !== mark) throw new Error("generation config mismatch");
     if (entry.state !== "running") throw entry.fault ?? new Error("generation is not accepting attachments");
-    if (!entry.running.active()) throw new Error("generation process exited");
+    if (!(await entry.running.active())) throw new Error("generation process exited");
     return lease(entry);
   }
 
@@ -234,12 +238,12 @@ export class Sidecar {
     if (!pending) throw new Error("generation unavailable");
     const entry = await pending;
 
-    if (entry.attachments.get(value.attachment) !== value.capability) {
+    if (value.incarnation !== entry.incarnation || entry.attachments.get(value.attachment) !== value.capability) {
       throw new Error("invalid capability");
     }
 
     if (entry.state !== "running") throw entry.fault ?? new Error("generation is not accepting attachments");
-    if (!entry.running.active()) throw new Error("generation process exited");
+    if (!(await entry.running.active())) throw new Error("generation process exited");
     return lease(entry);
   }
 
@@ -252,7 +256,7 @@ export class Sidecar {
     if (!pending) throw new Error("generation unavailable");
     const entry = await pending;
 
-    if (entry.attachments.get(value.attachment) !== value.capability) {
+    if (value.incarnation !== entry.incarnation || entry.attachments.get(value.attachment) !== value.capability) {
       throw new Error("invalid capability");
     }
 
@@ -269,15 +273,17 @@ export class Sidecar {
   async inspect(): Promise<Snapshot[]> {
     const entries = await Promise.all(this.#entries.values());
 
-    return entries.map((entry) => ({
-      attachments: entry.attachments.size,
-      channel: entry.channel,
-      generation: entry.generation,
-      namespace: entry.namespace,
-      pid: entry.running.pid,
-      slot: entry.slot,
-      state: entry.state === "running" ? (entry.running.active() ? "running" : "exited") : entry.state,
-    }));
+    return Promise.all(
+      entries.map(async (entry) => ({
+        attachments: entry.attachments.size,
+        channel: entry.channel,
+        generation: entry.generation,
+        namespace: entry.namespace,
+        pid: entry.running.pid,
+        service: entry.service,
+        state: entry.state === "running" ? ((await entry.running.active()) ? "running" : "exited") : entry.state,
+      })),
+    );
   }
 
   async close(): Promise<Stop[]> {

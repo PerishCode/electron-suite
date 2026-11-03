@@ -3,19 +3,18 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { DatabaseSync } from "node:sqlite";
 import { channel, digest, namespace } from "@perishcode/protocol";
 import { expect, it } from "vitest";
-import { Client, type Lease, readDirectory, readLegacyDirectory, type Service, type Spec, serve } from "@";
+import { Client, type Lease, readDirectory, type Service, type Spec, serve } from "@";
 import { Sessions } from "@/runtime/sessions.js";
 
 const scope = { namespace: namespace("main"), channel: channel("stable") };
 const identity = { ...scope, service: "probe", generation: digest("one") };
 const other = { ...scope, channel: channel("beta") };
 const options = { identity, handlers: {}, lifecycle: { initialize: async () => {}, stop: async () => {} } };
-const spec = (slot = "daemon"): Spec => ({
+const spec = (service = "daemon"): Spec => ({
   ...scope,
-  slot,
+  service,
   generation: identity.generation,
   command: process.execPath,
   args: ["-e", "process.stdout.write('ready\\n');setInterval(()=>{},1000)"],
@@ -244,7 +243,7 @@ it("coordinates real independent controllers and retains an interrupted lane wit
   try {
     const manager = await child(
       `import {serve} from ${JSON.stringify(module)};
-      const s=await serve(process.argv[1],undefined,process.argv[2]);console.log('ready');process.stdin.resume();
+      const s=await serve(process.argv[1], { authority: process.argv[2] });console.log('ready');process.stdin.resume();
       process.stdin.on('data',async()=>{try{await s.close();console.log('closed');process.stdin.destroy();}catch(error){console.log(error.message);}});`,
       [endpoint, authority],
     );
@@ -307,31 +306,6 @@ it("fails closed instead of hanging when terminal session publication fails", as
     await expect(sessions.local(scope, async () => {})).rejects.toThrow("interrupted");
     await expect(sessions.shutdown(async () => {})).rejects.toThrow("recovery required");
     expect(records).toEqual(failing === "closing" ? ["active", "closing"] : ["active", "closing", "completed"]);
-  }
-});
-it("keeps old namespace directory inspection explicit and refuses implicit channel migration", async () => {
-  const root = await mkdtemp(join(tmpdir(), "session-format-"));
-  try {
-    const first = await serve(join(root, "one.sock"));
-    await first.close();
-    const file = join(root, "manager.sqlite");
-    const db = new DatabaseSync(file);
-    const value = JSON.parse(String(db.prepare("SELECT record FROM directory WHERE id=1").get()?.record));
-    value.schema = 1;
-    value.namespaces = [];
-    delete value.factories;
-    db.prepare("UPDATE directory SET record=? WHERE id=1").run(JSON.stringify(value));
-    const owner = JSON.parse(String(db.prepare("SELECT record FROM authority WHERE id=1").get()?.record));
-    delete owner.factories;
-    db.prepare("UPDATE authority SET record=? WHERE id=1").run(JSON.stringify(owner));
-    db.close();
-    const before = await readFile(file);
-    expect((await readLegacyDirectory(root)).schema).toBe(1);
-    await expect(readDirectory(root)).rejects.toThrow("readLegacyDirectory");
-    await expect(serve(join(root, "two.sock"))).rejects.toThrow("explicit migration required");
-    expect(await readFile(file)).toEqual(before);
-  } finally {
-    await rm(root, { recursive: true, force: true });
   }
 });
 

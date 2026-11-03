@@ -1,5 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { chmod, lstat } from "node:fs/promises";
+import { chmod, lstat, realpath } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { type Capability, type FactoryScope, factoryKey, factoryScope, type Permit } from "@perishcode/protocol";
@@ -12,6 +12,7 @@ import { Hosted } from "../control/hosted.js";
 import type { SessionScope } from "../control/session.js";
 import type { Attachment, Expose } from "../control/types.js";
 import { Sidecar } from "../host.js";
+import { observeProcesses } from "../process/observe.js";
 import { Catalog } from "./catalog.js";
 import { Ownership } from "./ownership.js";
 import { Resources } from "./resource.js";
@@ -189,25 +190,25 @@ function close(server: Server): Promise<void> {
   });
 }
 
-export async function serve(
-  endpoint: string,
-  host = new Sidecar(),
-  authority = randomBytes(32).toString("base64url"),
-  root = dirname(endpoint),
-): Promise<Service> {
-  root = resolve(root);
+export async function serve(endpoint: string, options: { authority?: string; root?: string } = {}): Promise<Service> {
+  let root = resolve(options.root ?? dirname(endpoint));
+  const authority = options.authority ?? randomBytes(32).toString("base64url");
   for (const name of ["namespaces", "bindings"]) {
     try {
       await lstat(join(root, name));
-      throw new Error("legacy namespace layout; explicit migration required");
+      throw new Error("unsupported manager layout");
     } catch (fault) {
       if ((fault as NodeJS.ErrnoException).code !== "ENOENT") throw fault;
     }
   }
-  const ownership = await Ownership.claim(join(root, "manager.sqlite"), true);
+  const ownership = await Ownership.claim(join(root, "manager.sqlite"));
+  root = await realpath(root);
+  const host = new Sidecar(root);
   let catalog: Catalog;
   let sessions: Sessions;
   try {
+    if (["darwin", "linux"].includes(process.platform) && (await observeProcesses(root)).length)
+      throw new Error("unowned stamped processes remain; reconciliation required");
     host.observe({
       claim: (...args) => catalog.observer().claim(...args),
       change: (...args) => catalog.observer().change(...args),
@@ -285,6 +286,8 @@ export async function serve(
         }),
       );
       catalog.drained();
+      if (["darwin", "linux"].includes(process.platform) && (await observeProcesses(root)).length)
+        throw new Error("stamped processes remain; reconciliation required");
       await unpublish?.();
       ownership.close();
     });

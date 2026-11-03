@@ -115,7 +115,7 @@ it.each(["prepared", "daemon-stopped", "ready", "committed"] as const)(
       const files = ["manager.sqlite", "factories/stable/probe/binding.json", "factories/stable/probe/registry.json"];
       const before = await Promise.all(files.map((file) => readFile(join(options.root, file))));
       await assert.rejects(
-        serve(join(tmpdir(), `interrupted-${process.pid}.sock`), undefined, undefined, options.root),
+        serve(join(tmpdir(), `interrupted-${process.pid}.sock`), { root: options.root }),
         /interrupted; recovery required/,
       );
       const { Session } = await import("@");

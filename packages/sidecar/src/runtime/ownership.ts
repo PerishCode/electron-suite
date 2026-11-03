@@ -4,10 +4,9 @@ import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 export interface OwnerRecord {
-  schema: 1;
-  directory?: boolean;
-  sessions?: boolean;
-  factories?: boolean;
+  schema: 2;
+  format: "stamped-supervisor";
+  directory: boolean;
   scope: string;
   incarnation: string;
   pid: number;
@@ -22,8 +21,6 @@ export class Ownership {
   readonly incarnation = randomUUID();
   private closed = false;
   private directory = false;
-  private sessions = false;
-  private factories = false;
   private constructor(
     private db: DatabaseSync,
     readonly previous: OwnerRecord | undefined,
@@ -33,7 +30,7 @@ export class Ownership {
     this.fresh = fresh;
   }
 
-  static async claim(path: string, requireFactory = false): Promise<Ownership> {
+  static async claim(path: string): Promise<Ownership> {
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     const parent = await realpath(dirname(path));
     const scope = join(parent, basename(path));
@@ -68,15 +65,11 @@ export class Ownership {
       let previous: OwnerRecord | undefined;
       if (row) {
         const value = Ownership.parse(row.record, scope);
-        if (requireFactory && !value.factories)
-          throw new Error("ownership uses legacy namespace format; explicit migration required");
         if (value.phase === "active") throw new Error("ownership was interrupted; recovery required");
         previous = value;
       }
       const owner = new Ownership(db, previous, scope, fresh);
       owner.directory = previous?.directory === true;
-      owner.sessions = previous?.sessions === true;
-      owner.factories = requireFactory || previous?.factories === true;
       owner.save("active");
       db.exec("COMMIT");
       return owner;
@@ -114,14 +107,13 @@ export class Ownership {
   get info(): OwnerRecord {
     if (this.closed) throw new Error("ownership is closed");
     return {
-      schema: 1,
+      schema: 2,
+      format: "stamped-supervisor",
       scope: this.scope,
       incarnation: this.incarnation,
       pid: process.pid,
       phase: "active",
-      ...(this.directory ? { directory: true } : {}),
-      ...(this.sessions ? { sessions: true } : {}),
-      ...(this.factories ? { factories: true } : {}),
+      directory: this.directory,
     };
   }
   readDirectory(): unknown {
@@ -132,19 +124,16 @@ export class Ownership {
     this.info;
     this.db.exec("BEGIN EXCLUSIVE");
     const before = this.directory;
-    const priorSessions = this.sessions;
     try {
       this.db.exec(
         "CREATE TABLE IF NOT EXISTS directory (id INTEGER PRIMARY KEY CHECK(id=1), record TEXT NOT NULL) STRICT",
       );
       this.db.prepare("INSERT OR REPLACE INTO directory(id,record) VALUES(1,?)").run(JSON.stringify(value));
       this.directory = true;
-      this.sessions = true;
       this.save("active");
       this.db.exec("COMMIT");
     } catch (fault) {
       this.directory = before;
-      this.sessions = priorSessions;
       this.db.exec("ROLLBACK");
       throw fault;
     }
@@ -181,16 +170,15 @@ export class Ownership {
   private static parse(raw: unknown, scope: string): OwnerRecord {
     const value = JSON.parse(String(raw)) as OwnerRecord;
     if (
-      value?.schema !== 1 ||
+      value?.schema !== 2 ||
+      value.format !== "stamped-supervisor" ||
       value.scope !== scope ||
       typeof value.incarnation !== "string" ||
       !/^[0-9a-f-]{36}$/.test(value.incarnation) ||
       !Number.isSafeInteger(value.pid) ||
       value.pid < 1 ||
       !["active", "closed"].includes(value.phase) ||
-      (value.directory !== undefined && typeof value.directory !== "boolean") ||
-      (value.sessions !== undefined && typeof value.sessions !== "boolean") ||
-      (value.factories !== undefined && typeof value.factories !== "boolean")
+      typeof value.directory !== "boolean"
     )
       throw new Error("ownership is invalid or unpublished; recovery required");
     return value;
@@ -198,10 +186,9 @@ export class Ownership {
 
   private save(phase: OwnerRecord["phase"]): void {
     const record: OwnerRecord = {
-      schema: 1,
-      ...(this.directory ? { directory: true } : {}),
-      ...(this.sessions ? { sessions: true } : {}),
-      ...(this.factories ? { factories: true } : {}),
+      schema: 2,
+      format: "stamped-supervisor",
+      directory: this.directory,
       scope: this.scope,
       incarnation: this.incarnation,
       pid: process.pid,
