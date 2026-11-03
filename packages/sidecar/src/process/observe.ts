@@ -24,7 +24,7 @@ export interface ProcessInstance {
 export async function capture(): Promise<Process[]> {
   if (process.platform !== "darwin" && process.platform !== "linux") throw new Error("process observation unsupported");
   const pending = promisify(execFile)("ps", ["-ww", "-axo", "pid=,ppid=,pgid=,lstart=,args="], {
-    env: { ...process.env, LC_ALL: "C" },
+    env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
     maxBuffer: 32 * 1024 * 1024,
     timeout: 5000,
   });
@@ -62,7 +62,9 @@ export function owned(all: Process[], root: Witness, identity: Stamp): Process[]
   if (!found || !found.stamp || !sameStamp(found.stamp, identity)) return [];
   const excluded = new Set(all.filter((p) => p.stamp && !sameStamp(p.stamp, identity)).map((p) => p.pid));
   for (;;) {
-    const next = all.filter((p) => excluded.has(p.ppid) && !excluded.has(p.pid));
+    const next = all.filter(
+      (p) => excluded.has(p.ppid) && !excluded.has(p.pid) && !(p.stamp && sameStamp(p.stamp, identity)),
+    );
     if (!next.length) break;
     for (const p of next) excluded.add(p.pid);
   }
@@ -91,7 +93,9 @@ export async function signalOwned(values: Witness[], signal: NodeJS.Signals, ide
     now.filter((p) => p.invalidStamp || (p.stamp && !sameStamp(p.stamp, identity))).map((p) => p.pid),
   );
   for (;;) {
-    const children = now.filter((p) => foreign.has(p.ppid) && !foreign.has(p.pid));
+    const children = now.filter(
+      (p) => foreign.has(p.ppid) && !foreign.has(p.pid) && !(p.stamp && sameStamp(p.stamp, identity)),
+    );
     if (!children.length) break;
     for (const p of children) foreign.add(p.pid);
   }
