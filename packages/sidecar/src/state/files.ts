@@ -72,7 +72,9 @@ export async function atomic(path: string, value: string, id: string) {
   const pending = `${path}.recovery-${id.slice(7)}.tmp`;
   const prior = await bytes(pending);
   if (prior !== undefined) {
-    if (!value.startsWith(prior)) throw new Error("recovery pending file conflict");
+    const partial = await readFile(pending),
+      target = Buffer.from(value);
+    if (!target.subarray(0, partial.length).equals(partial)) throw new Error("recovery pending file conflict");
     await rm(pending);
   }
   const file = await open(pending, "wx", 0o600);
