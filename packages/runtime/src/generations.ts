@@ -102,7 +102,7 @@ async function restore(store: Store, artifact: Artifact, root: string): Promise<
   return destination;
 }
 
-export class Capsule {
+export class Generations {
   readonly factory: Factory;
   async content(target: Digest): Promise<{ envelope: Envelope; assets: Content[] }> {
     return this.factory.session(async () => {

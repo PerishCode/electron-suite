@@ -1,5 +1,7 @@
+import { rm } from "node:fs/promises";
 import { build } from "esbuild";
 
+await rm("dist", { recursive: true, force: true });
 await build({
   bundle: true,
   entryPoints: { index: "src/index.ts", settings: "src/settings.ts" },

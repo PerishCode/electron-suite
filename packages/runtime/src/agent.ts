@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { Digest } from "@perishcode/protocol";
 import type { Factory, Lease } from "@perishcode/sidecar";
-import type { Mount } from "./capsule.js";
+import type { Mount } from "./generations.js";
 import { unitFile } from "./units.js";
 
 export class Agent {

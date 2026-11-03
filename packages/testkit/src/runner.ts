@@ -11,7 +11,7 @@ import { guard } from "@perishcode/guard";
 import { type Channel, channel, type Digest, gates, namespace, startup } from "@perishcode/protocol";
 import { Authority, Feed, type Service as Publisher, serve as publish } from "@perishcode/publish";
 import { compose, type Product, resolve as release } from "@perishcode/release";
-import { Capsule } from "@perishcode/runtime";
+import { Generations } from "@perishcode/runtime";
 import { Client, type Service as Sidecar, serve as sidecar } from "@perishcode/sidecar";
 
 import { type Definition, type Id, matrix, type Status } from "./matrix.js";
@@ -110,8 +110,8 @@ async function installation(client: Client, temporary: string, selections: Selec
 async function delivery(
   client: Client,
   temporary: string,
-  primary: Capsule,
-  secondary: Capsule,
+  primary: Generations,
+  secondary: Generations,
   update: Product,
 ): Promise<Evidence[]> {
   let attempt = await primary.stage(update.envelope, update.assets);
@@ -196,8 +196,8 @@ async function delivery(
 async function qualification(
   client: Client,
   temporary: string,
-  primary: Capsule,
-  secondary: Capsule,
+  primary: Generations,
+  secondary: Generations,
   update: Product,
 ): Promise<Evidence[]> {
   try {
@@ -225,7 +225,7 @@ async function product(lane: Channel, version: string, model: string): Promise<P
   });
 }
 
-async function commit(capsule: Capsule, feed: Feed): Promise<Digest> {
+async function commit(capsule: Generations, feed: Feed): Promise<Digest> {
   let attempt = await capsule.update(feed);
   if (!attempt) throw new Error("candidate missing");
   for (const gate of gates) attempt = await capsule.ready(attempt, gate);
@@ -314,8 +314,8 @@ export async function run(options: Options): Promise<Report> {
     const published = await timed(async () => {
       await authority.publish(stable, 0, built.value.first.envelope, built.value.first.assets);
       await authority.publish(beta, 0, built.value.preview.envelope, built.value.preview.assets);
-      const primary = new Capsule(client, namespace("primary"), stable);
-      const secondary = new Capsule(client, namespace("secondary"), beta);
+      const primary = new Generations(client, namespace("primary"), stable);
+      const secondary = new Generations(client, namespace("secondary"), beta);
       const current = await commit(primary, feed);
       const preview = await commit(secondary, feed);
       return { current, preview, primary, secondary };
@@ -368,7 +368,7 @@ export async function run(options: Options): Promise<Report> {
       ),
     );
     const recovered = await timed(async () => {
-      const capsule = new Capsule(client, namespace("primary"), stable);
+      const capsule = new Generations(client, namespace("primary"), stable);
       let recovery = await capsule.recover(published.value.current);
       for (const gate of gates) recovery = await capsule.ready(recovery, gate);
       return capsule.commit(recovery);
@@ -382,8 +382,8 @@ export async function run(options: Options): Promise<Report> {
       }),
     );
     if (options.packaged) {
-      const primary = new Capsule(client, namespace("primary"), stable);
-      const secondary = new Capsule(client, namespace("secondary"), beta);
+      const primary = new Generations(client, namespace("primary"), stable);
+      const secondary = new Generations(client, namespace("secondary"), beta);
       scenarios.push(...(await qualification(client, temporary, primary, secondary, update)));
     }
   } catch (fault) {

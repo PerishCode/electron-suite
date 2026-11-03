@@ -18,7 +18,7 @@ session=await Session.open({...options,onActivation:async checkpoint=>{
  process.send({checkpoint,snapshot:await session.snapshot()});
  await new Promise(()=>{});
 }});
-await session.start();session.documentStart();await session.confirm(await session.activate(),'baseline');
+const composition=await session.activate();await session.start();session.documentStart();await session.confirm(composition,'baseline');
 await session.request('write',{retained:'factory-data'});
 await session.applyLeaf(await readProduct(options.candidatePath),{
  reload:async()=>{session.documentStart();return 'candidate';},probe:async()=> 'baseline'
@@ -33,7 +33,7 @@ it.each(["prepared", "daemon-stopped", "ready", "committed"] as const)(
     await mkdir(capsule);
     await writeFile(
       join(capsule, "index.mjs"),
-      'export async function activate(){return {title:"probe",witness:"capsule"}}',
+      'export function create(){return {handlers:{},initialize:async()=>({window:{title:"probe"},witness:"capsule"}),stop:async()=>{}}}',
     );
     const manifest = resolve({}, { channel: channel("stable"), version: "0.1.0" });
     async function unit(kind: "web" | "daemon", version: string) {

@@ -1,6 +1,10 @@
 import { expect, it } from "vitest";
-import { activate } from "@";
+import { create } from "@";
 
-it("exposes a runnable capsule entry", async () => {
-  expect(await activate()).toEqual({ title: "electron-suite fixture" });
+it("constructs separate product bodies with explicit initialize and stop", () => {
+  const first = create(),
+    second = create();
+  expect(first).not.toBe(second);
+  expect(typeof first.initialize).toBe("function");
+  expect(typeof first.stop).toBe("function");
 });

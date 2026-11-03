@@ -10,7 +10,7 @@ import { compose, resolve } from "@perishcode/release";
 import { Client, type Service as Sidecar, serve as sidecar } from "@perishcode/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { Capsule } from "@";
+import { Generations } from "@";
 
 const roots: string[] = [];
 const services: Service[] = [];
@@ -26,7 +26,7 @@ async function product(lane: Channel, version: string, model: string) {
   });
 }
 
-async function commit(capsule: Capsule, feed: Feed): Promise<void> {
+async function commit(capsule: Generations, feed: Feed): Promise<void> {
   let attempt = await capsule.update(feed);
   if (!attempt) throw new Error("update missing");
   for (const gate of gates) attempt = await capsule.ready(attempt, gate);
@@ -86,8 +86,8 @@ describe("update", () => {
     const preview = await product(beta, "1.0.0-beta.1", model);
     await authority.publish(stable, 0, first.envelope, first.assets);
     await authority.publish(beta, 0, preview.envelope, preview.assets);
-    const primary = new Capsule(client, namespace("primary"), stable);
-    const secondary = new Capsule(client, namespace("primary"), beta);
+    const primary = new Generations(client, namespace("primary"), stable);
+    const secondary = new Generations(client, namespace("primary"), beta);
 
     await commit(primary, feed);
     await commit(secondary, feed);

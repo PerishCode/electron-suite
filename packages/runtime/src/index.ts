@@ -1,7 +1,8 @@
-export type { Attempt, Content, Mount } from "./capsule.js";
-export { Capsule } from "./capsule.js";
+export { readProduct, writeProduct } from "@perishcode/release";
 export { serveDaemon } from "./daemon.js";
-export { readProduct, writeProduct } from "./product.js";
-export type { ActivationCheckpoint, Context, Payload, Receipt, Renderer, SessionOptions } from "./session.js";
+export type { Attempt, Content, Mount } from "./generations.js";
+export { Generations } from "./generations.js";
+export type { Capsule, CapsuleContext, Composition, ProductReceipt } from "./lifecycle.js";
+export type { ActivationCheckpoint, Receipt, Renderer, SessionOptions } from "./session.js";
 export { Session } from "./session.js";
 export type { Settings } from "./settings.js";

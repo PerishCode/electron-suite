@@ -1,3 +1,9 @@
-export async function activate(): Promise<{ title: string }> {
-  return { title: "electron-suite fixture" };
+import type { Capsule } from "@perishcode/runtime";
+
+export function create(): Capsule {
+  return {
+    handlers: {},
+    initialize: async () => ({ window: { title: "electron-suite fixture" }, witness: "capsule:fixture" }),
+    stop: async () => {},
+  };
 }

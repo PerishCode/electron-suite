@@ -41,6 +41,9 @@ importers:
       '@perishcode/daemon':
         specifier: workspace:*
         version: link:../daemon
+      '@perishcode/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@perishcode/web':
         specifier: workspace:*
         version: link:../web

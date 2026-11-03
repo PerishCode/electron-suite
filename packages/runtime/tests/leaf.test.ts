@@ -15,7 +15,7 @@ it("activates only changed units, fences compatibility and leaves failed binding
   await mkdir(capsule);
   await writeFile(
     join(capsule, "index.mjs"),
-    'export async function activate(){return {title:"fixture",witness:"capsule1"}}',
+    'export function create(){return {handlers:{},initialize:async()=>({window:{title:"fixture"},witness:"capsule1"}),stop:async()=>{}}}',
   );
   const entry = pathToFileURL(join(process.cwd(), "dist/index.mjs")).href;
   const web = async (version: string, api = "probe/1") => {
@@ -110,9 +110,10 @@ it("activates only changed units, fences compatibility and leaves failed binding
     await session.close();
     await assert.rejects(Session.open(options), /blocked/);
     session = await Session.open({ ...options, recover: true });
+    const restoredComposition = await session.activate();
     await session.start();
     session.documentStart();
-    const restored = await session.confirm(await session.activate(), "web:0.3.0");
+    const restored = await session.confirm(restoredComposition, "web:0.3.0");
     assert.equal(restored.generation, coordinated.envelope.digest);
     assert.equal(restored.units.daemon.version, "0.3.0");
     assert.deepEqual(await session.request("read"), { retained: "yes" });
@@ -124,9 +125,10 @@ it("activates only changed units, fences compatibility and leaves failed binding
     assert.equal((await session.snapshot()).units.web.version, "0.6.0");
     await session.close();
     session = await Session.open(options);
+    const committedComposition = await session.activate();
     await session.start();
     session.documentStart();
-    const coldCommitted = await session.confirm(await session.activate(), "web:0.6.0");
+    const coldCommitted = await session.confirm(committedComposition, "web:0.6.0");
     assert.equal(coldCommitted.generation, committedDespiteFault.envelope.digest);
     assert.deepEqual(await session.request("read"), { retained: "yes" });
   } finally {

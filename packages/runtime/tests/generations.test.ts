@@ -16,7 +16,7 @@ import {
 import { Client, type Service, serve } from "@perishcode/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { Capsule, type Content } from "@";
+import { type Content, Generations } from "@";
 
 const roots: string[] = [];
 const services: Service[] = [];
@@ -67,7 +67,7 @@ describe("capsule", () => {
     const client = new Client(service.endpoint, service.authority);
     const scope = namespace("main");
     const lane = channel("stable");
-    const capsule = new Capsule(client, scope, lane);
+    const capsule = new Generations(client, scope, lane);
     const first = fixture("first");
     let attempt = await capsule.stage(first.envelope, first.contents);
 
@@ -113,7 +113,7 @@ describe("capsule", () => {
     const client = new Client(service.endpoint, service.authority);
     const scope = namespace("preview");
     const lane = channel("beta");
-    const capsule = new Capsule(client, scope, lane);
+    const capsule = new Generations(client, scope, lane);
     const value = fixture("broken");
     const first = value.contents[0];
     if (!first) throw new Error("fixture missing");

@@ -22,7 +22,7 @@ async function fixture() {
   for (const name of ["capsule", "daemon", "web"]) await mkdir(join(root, name));
   await writeFile(
     join(root, "capsule/index.mjs"),
-    'export async function activate(c) {return {title:"fixture", witness:c.generation}}',
+    'export function create(){return {handlers:{},initialize:async c=>({window:{title:"fixture"},witness:c.generation}),stop:async()=>{}}}',
   );
   const sdk = fileURLToPath(new URL("../dist/index.mjs", import.meta.url));
   await writeFile(
@@ -95,8 +95,9 @@ it("blocks after a failed attempt and requires explicit recovery", async () => {
   await expect(Session.open(options)).rejects.toThrow("blocked");
   const recovered = await Session.open({ ...options, recover: true });
   sessions.push(recovered);
+  const composition = await recovered.activate();
   await recovered.start();
-  await recovered.confirm(await recovered.activate(), "renderer");
+  await recovered.confirm(composition, "renderer");
 });
 
 it("rejects incompatible carrier requirements before an activation attempt", async () => {
