@@ -113,6 +113,7 @@ it("gates readiness, preserves authority on failed drain, and creates a fresh co
       data = f.control.resources.roots.data;
     f.control.failStop = true;
     await assert.rejects(f.session.close(), /stop failure/);
+    assert.equal((await f.session.snapshot()).phase, "failed");
     assert.equal((await f.factory.directory()).instances.find((x) => x.service === "capsule")?.phase, "failed");
     assert.equal((await stat(join(temporary, "active"))).isFile(), true);
     assert.equal((await f.session.request("health")).pid, before.daemon.pid);

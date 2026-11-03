@@ -186,7 +186,11 @@ export class Session {
   activate(): Promise<Composition> {
     if (this.closed || this.closing || this.activation)
       return Promise.reject(new Error("capsule is closed or already initialized"));
-    this.activation = this.initializeProduct();
+    this.activation = this.initializeProduct().catch((fault) => {
+      this.phase = "failed";
+      this.error = String(fault);
+      throw fault;
+    });
     return this.activation;
   }
   private async initializeProduct(): Promise<Composition> {
@@ -391,9 +395,15 @@ export class Session {
   }
   async close(error = "runtime stopped before readiness"): Promise<{ status: string; survivors: number[] }> {
     if (this.closed) return { status: "stopped", survivors: [] };
-    this.closing ??= this.closeWithin(error).finally(() => {
-      this.closing = undefined;
-    });
+    this.closing ??= this.closeWithin(error)
+      .catch((fault) => {
+        this.phase = "failed";
+        this.error = String(fault);
+        throw fault;
+      })
+      .finally(() => {
+        this.closing = undefined;
+      });
     return this.closing;
   }
   private async closeWithin(error: string) {
