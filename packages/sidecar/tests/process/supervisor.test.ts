@@ -13,6 +13,39 @@ import { capture, exact, owned } from "../../src/process/observe.js";
 const scope = { channel: channel("stable"), namespace: namespace("probe") };
 const entry = new URL("../../dist/index.mjs", import.meta.url).href;
 const pause = () => new Promise((done) => setTimeout(done, 25));
+
+it("recognizes an independently managed supervisor beneath a foreign stamped ancestor", async () => {
+  const root = await mkdtemp(join(tmpdir(), "stamped-composition-"));
+  const nestedRoot = join(root, "nested");
+  const host = await serve(join(root, "manager.sock"));
+  const factory = host.factory(scope);
+  try {
+    const body = `import{serve}from ${JSON.stringify(entry)};
+      const host=await serve(${JSON.stringify(join(nestedRoot, "manager.sock"))});
+      await host.factory(${JSON.stringify(scope)}).start({service:'inner',generation:${JSON.stringify(digest("inner"))},command:process.execPath,args:['-e',"console.log('inner-ready');setInterval(()=>{},1000)"],ready:'inner-ready'});
+      console.log('outer-ready');`;
+    const lease = await factory.start({
+      service: "outer",
+      generation: digest("outer"),
+      command: process.execPath,
+      args: ["--input-type=module", "-e", body],
+      ready: "outer-ready",
+    });
+    const outer = await observeProcesses(root, scope);
+    const inner = await observeProcesses(nestedRoot, scope);
+    assert.equal(outer.length, 1);
+    assert.equal(inner.length, 1);
+    assert.ok((inner[0]?.processes.length ?? 0) >= 2);
+    assert.ok(!outer[0]?.processes.some((p) => p.pid === inner[0]?.supervisor.pid));
+    assert.equal((await factory.release(lease)).status, "stopped");
+    for (const item of [...outer, ...inner]) for (const p of item.processes) await gone(p.pid);
+    assert.deepEqual(await observeProcesses(nestedRoot, scope), []);
+    assert.equal((await readDirectory(nestedRoot)).manager.phase, "interrupted");
+  } finally {
+    await host.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 async function gone(pid: number) {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
@@ -27,6 +60,7 @@ it("keeps stable stamped ownership when the target rewrites argv and launches a 
   const host = await serve(join(root, "manager.sock"));
   const factory = host.factory(scope);
   try {
+    const helperReceipt = join(root, "helper.pid");
     const lease = await factory.start({
       service: "worker",
       generation: digest("one"),
@@ -37,7 +71,7 @@ it("keeps stable stamped ownership when the target rewrites argv and launches a 
       const {spawn}=require('node:child_process');
       process.title='rewritten-workload';
       const helper=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});
-      helper.once('spawn',()=>console.log('ready'));setInterval(()=>{},1000);
+      helper.once('spawn',()=>{require('node:fs').writeFileSync(${JSON.stringify(helperReceipt)},String(helper.pid));console.log('ready')});setInterval(()=>{},1000);
     `,
       ],
       ready: "ready",
@@ -45,7 +79,8 @@ it("keeps stable stamped ownership when the target rewrites argv and launches a 
     const facts = await observeProcesses(root, scope);
     assert.equal(facts.length, 1);
     assert.equal(facts[0]?.incarnation, lease.incarnation);
-    assert.equal(facts[0]?.processes.length, 3);
+    const helperPid = Number(await readFile(helperReceipt, "utf8"));
+    assert.ok(facts[0]?.processes.some((p) => p.pid === helperPid));
     assert.ok(facts[0]?.processes.some((p) => p.pid === lease.pid));
     const directory = host.directory(scope);
     assert.equal(directory.schema, 3);
@@ -64,7 +99,7 @@ it("converges the workload and helper after the real controller is SIGKILLed", a
   const root = await mkdtemp(join(tmpdir(), "stamped-orphan-"));
   const body = `import{serve}from ${JSON.stringify(entry)};
     const root=process.argv[1];const host=await serve(root+'/manager.sock');
-    const lease=await host.factory(${JSON.stringify(scope)}).start({service:'worker',generation:${JSON.stringify(digest("one"))},command:process.execPath,args:['-e',"const{spawn}=require('node:child_process');spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});console.log('ready');setInterval(()=>{},1000)"],ready:'ready'});
+    const lease=await host.factory(${JSON.stringify(scope)}).start({service:'worker',generation:${JSON.stringify(digest("one"))},command:process.execPath,args:['-e',"const{spawn}=require('node:child_process');const helper=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});require('node:fs').writeFileSync(process.env.PROBE_HELPER,String(helper.pid));console.log('ready');setInterval(()=>{},1000)"],ready:'ready',env:{PROBE_HELPER:root+'/helper.pid'}});
     console.log(JSON.stringify({lease}));process.stdin.resume();`;
   const child = spawn(process.execPath, ["--input-type=module", "-e", body, root], { stdio: ["pipe", "pipe", "pipe"] });
   let errors = "";
@@ -86,7 +121,8 @@ it("converges the workload and helper after the real controller is SIGKILLed", a
       });
     });
     const before = await observeProcesses(root, scope);
-    assert.equal(before[0]?.processes.length, 3);
+    const helperPid = Number(await readFile(join(root, "helper.pid"), "utf8"));
+    assert.ok(before[0]?.processes.some((p) => p.pid === helperPid));
     const exit = new Promise<void>((done) => child.once("exit", () => done()));
     child.kill("SIGKILL");
     await exit;
