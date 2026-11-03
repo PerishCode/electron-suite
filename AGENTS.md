@@ -26,29 +26,31 @@
 
 ## Core file index
 
-| File or location                                               | Responsibility                                                             |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| package.json / pnpm-workspace.yaml / pnpm-lock.yaml            | standard dispatch, workspace membership and fixed dependency closure       |
-| pesuite.yaml / biome.json                                      | guard/runtime declarations and formatter/linter configuration              |
-| packages/guard/src/rules/tree.ts / scan/files.ts               | directory allowlists and inspected/pruned boundaries                       |
-| packages/guard/src/config/defaults.ts                          | policy defaults and rule index                                             |
-| packages/cli/src/index.ts / lifecycle.ts / pipeline.ts         | sole public bin and legacy/short distribution entry routing                |
-| packages/pipeline/src                                          | channel identity, immutable build/package receipts, checks and publication |
-| packages/pack/src/platform.ts                                  | matching native platform/architecture layout and safe output separation    |
-| packages/sidecar/src/runtime/catalog.ts / control/directory.ts | factory inventory, instance phases and read-only interrupted views         |
-| packages/sidecar/src/runtime/sessions.ts / sessionwire.ts      | lifecycle lanes, private nesting context and controller-owner connection   |
-| packages/sidecar/src/runtime/ownership.ts                      | persistent exclusive owner records; interrupted/invalid ownership blocks   |
-| packages/sidecar/src/control/factory.ts / legacy.ts            | bound factory API and explicit read-only schema-1 inspection               |
-| packages/sidecar/src/control / runtime                         | hosted methods, resource ownership and management transport                |
-| packages/runtime/src/session.ts / capsule.ts                   | generation mounting, execution, activation and recovery                    |
-| packages/electron/src/automation.ts                            | background validation policy and window visibility/focus evidence          |
-| packages/electron/src/host.ts / bridge.ts                      | installed host and narrow browser contract                                 |
-| packages/release/src/channel.ts / version.ts                   | product-owned channel identity, counted versions and manifest consistency  |
-| packages/release / blob / publish / pack                       | content identity, CAS, distribution primitives and unsigned packaging      |
-| packages/automation/src                                        | shared background launcher, native desktop observation and verdicts        |
-| packages/testkit/src/runner.ts / schema.ts                     | reference qualification API and evidence schema                            |
-| apps/carrier / capsule / web / daemon                          | reference runtime units, not product business code                         |
-| .github/workflows / .githooks/pre-commit                       | CI verification and optional local direct guard hook                       |
+| File or location                                               | Responsibility                                                                   |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| package.json / pnpm-workspace.yaml / pnpm-lock.yaml            | standard dispatch, workspace membership and fixed dependency closure             |
+| pesuite.yaml / biome.json                                      | guard/runtime declarations and formatter/linter configuration                    |
+| packages/guard/src/rules/tree.ts / scan/files.ts               | directory allowlists and inspected/pruned boundaries                             |
+| packages/guard/src/config/defaults.ts                          | policy defaults and rule index                                                   |
+| packages/cli/src/index.ts / lifecycle.ts / pipeline.ts         | sole public bin and legacy/short distribution entry routing                      |
+| packages/pipeline/src                                          | channel identity, immutable build/package receipts, checks and publication       |
+| packages/pack/src/platform.ts                                  | matching native platform/architecture layout and safe output separation          |
+| packages/sidecar/src/runtime/catalog.ts / control/directory.ts | factory inventory, instance phases and read-only interrupted views               |
+| packages/sidecar/src/runtime/sessions.ts / sessionwire.ts      | lifecycle lanes, private nesting context and controller-owner connection         |
+| packages/sidecar/src/runtime/ownership.ts                      | persistent exclusive owner records; interrupted/invalid ownership blocks         |
+| packages/sidecar/src/control/factory.ts / legacy.ts            | bound factory API and explicit read-only schema-1 inspection                     |
+| packages/sidecar/src/control / runtime                         | hosted methods, resource ownership and management transport                      |
+| packages/runtime/src/session.ts / capsule.ts                   | generation mounting, execution, activation and recovery                          |
+| packages/electron/src/automation.ts                            | background validation policy and window visibility/focus evidence                |
+| packages/electron/src/host.ts / bridge.ts                      | installed host and narrow browser contract                                       |
+| packages/release/src/channel.ts / version.ts                   | product-owned channel identity, counted versions and manifest consistency        |
+| packages/release / blob / publish / pack                       | content identity, CAS, distribution primitives and unsigned packaging            |
+| packages/automation/src                                        | shared background launcher, native desktop observation and verdicts              |
+| packages/sidecar/src/control/connection.ts                     | private manager rendezvous; online identity verification, no inventory authority |
+| packages/inspect/src / packages/serve/src                      | scoped inspection and managed local static sources                               |
+| packages/testkit/src/runner.ts / schema.ts                     | reference qualification API and evidence schema                                  |
+| apps/carrier / capsule / web / daemon                          | reference runtime units, not product business code                               |
+| .github/workflows / .githooks/pre-commit                       | CI verification and optional local direct guard hook                             |
 
 ## Iteration workflows
 
@@ -69,7 +71,7 @@ Group lifecycle writes with Service.session(scope, callback) or Client.session(s
 An unclean controller connection loss blocks its lane as interrupted after accepted operations drain. No timeout steals ownership; shutdown reports recovery required and retains authority. Do not clear records to resume.
 Hosted control tests are `pnpm --filter @perishcode/sidecar test`; the real Chromium probe is `PERISH_GUI=1 pnpm --filter @perishcode/carrier test` after building.
 Automated Electron runs use HostOptions.automation (probe implies it); retain automation for long-running crash injection. macOS uses accessory policy before ready and non-focusable hidden windows. HostReceipt includes actual show/focus evidence.
-The unified inspect/serve lifecycle entries are still tracked by #11/#12; do not invent root shortcuts as substitutes.
+inspect/serve increments are tracked by #44 under #11/#12. Use the published CLI/APIs, never root shortcuts.
 
 ### Local build and checks
 
@@ -107,3 +109,10 @@ For npm delivery, build/check explicitly, run `pnpm --dir packages/<name> pack -
 Record package versions, archive integrity, CI and independent slim registry-consumer results in the owning issue. Keep actual runtime generation separate from npm package versions.
 
 Desktop acceptance is explicit: `pesuite check --channel <name> --gate desktop` on a matching macOS package, while already in a native fullscreen Space. It runs normal exit, incompatible-startup and real SIGKILL cases. Native query/heartbeat/fullscreen precondition failure is unqualified and the gate fails; do not auto-switch the user desktop or mark it passed. The observer uses read-only diagnostic SkyLight SPI and requires Swift command-line tools; it is not a normal product runtime dependency. `--require desktop` binds publication to that artifact's successful evidence.
+
+### Local inspect and static sources
+
+Build first. `pesuite serve --channel stable --namespace primary` reads serve.data/sources from pesuite.yaml and stays in the foreground. Each source uses hosted Context for socket/port and base roots; SIGINT/SIGTERM retires them. Content roots must be separate from manager data. GET/HEAD, single byte Range, ETag and real files are supported; mutable metadata/file selection belongs to callers, not an update state machine. Source generation identifies the service configuration, not the mutable product bytes.
+`pesuite inspect list --data <manager-root> --channel <channel> --namespace <namespace>` queries the active manager. probe/call/stop also select service and exact generation; call/stop require the listed incarnation. Arbitrary method/input contracts belong to callers. All CLI output is JSON; operational failure exits 2.
+Sidecar owns private control.json publication/removal. It contains local management credentials: never log, copy into receipts or expose it as static content or renderer bootstrap. Online directory identity must match its manager incarnation. It is a rendezvous, not a second resource authority. SIGKILL retains interrupted ownership; stale discovery does not permit reopening or cleanup. No manager adoption is implied.
+Session.expose binds caller-owned handlers to the mounted product generation/factory. HostOptions.inspect may register these once all four units are ready; normal startup is unchanged unless the caller opts in. The callback must not await full host shutdown inside its hosted stop handler; schedule quit after the method drains.

@@ -318,3 +318,11 @@ pnpm exec pesuite check --channel preview --gate desktop
 此关卡显式执行正常退出、失败启动和真实 SIGKILL；发布方可以明确选择 `--require desktop`。工具不根据 stable 暗加该门槛，现有无桌面上下文的 CI 不声称完成全屏验收。installed 关卡同时检查 SDK 的实际 automation 窗口收据，但不能替代 desktop。
 
 固定分发版本：automation 0.1.0、pipeline 0.2.0、cli 0.7.0。原生观察源码由受管测试目录编译，使用只读 SkyLight 查询；无符号/无 Swift 工具链明确拒绝。正常应用 SDK、正式安装包身份和系统设置不改变。
+
+## 本地 inspect / serve
+
+`pesuite serve --channel stable --namespace primary` 按 pesuite.yaml/serve 声明启动前台静态源；每个源的端口、socket、路径与生命周期归 sidecar 管理。修改目录中的元数据和真实文件即可提供下一组候选，server 不承担更新决策。
+
+`pesuite inspect list --data <manager-root> --channel <channel> --namespace <namespace>` 从 sidecar 私有发现文件连接并验证 manager，再取得实例目录。probe/call/stop 选择精确 service/generation；call/stop 还要求 incarnation，避免操作重启后的另一个实例。方法由调用方定义，SDK 的 Session.expose / HostOptions.inspect 可接入实际四单元宿主；管理凭据不进入 renderer 或 CLI 输出。
+
+本轮版本：sidecar 0.6.1、inspect/serve 0.1.0、runtime 0.2.1、electron 0.2.2、guard 0.5.1、pipeline 0.2.1、cli 0.8.0。交付及证据以 #44 为准；#11/#12 的完整主线门保持逐项验证。

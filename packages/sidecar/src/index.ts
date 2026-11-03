@@ -5,6 +5,7 @@ export type {
 } from "./binding.js";
 export { Bindings } from "./binding.js";
 export { Client } from "./client.js";
+export { connectRoot } from "./control/connection.js";
 export type { Directory, FactoryEntry, Instance, Phase } from "./control/directory.js";
 export { Factory } from "./control/factory.js";
 export type { LegacyDirectory } from "./control/legacy.js";

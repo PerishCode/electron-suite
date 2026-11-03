@@ -8,6 +8,7 @@ import { decode, type Manifest } from "@perishcode/release";
 import {
   Client,
   type Directory,
+  type Expose,
   type Factory,
   type FactoryScope,
   type Lease,
@@ -56,6 +57,10 @@ export class Session {
   private closed = false;
   private closing?: Promise<{ status: string; survivors: number[] }>;
   private ready = false;
+  async expose<M>(service: string, options: Omit<Expose<M>, "identity">) {
+    if (this.closed || this.closing) throw new Error("session is closed");
+    return this.factory.expose({ ...options, identity: { service, generation: this.mount.target } });
+  }
   private constructor(
     readonly options: SessionOptions,
     private host: Service,

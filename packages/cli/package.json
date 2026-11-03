@@ -1,6 +1,6 @@
 {
   "name": "@perishcode/cli",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "type": "module",
   "exports": {
     ".": {
@@ -21,7 +21,8 @@
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
     "typescript": "7.0.2",
-    "vitest": "4.1.6"
+    "vitest": "4.1.6",
+    "@perishcode/sidecar": "workspace:*"
   },
   "description": "Unified pesuite command line",
   "license": "UNLICENSED",
@@ -42,7 +43,10 @@
     "@perishcode/runtime": "workspace:*",
     "@perishcode/release": "workspace:*",
     "@perishcode/pack": "workspace:*",
-    "@perishcode/pipeline": "workspace:*"
+    "@perishcode/pipeline": "workspace:*",
+    "@perishcode/inspect": "workspace:*",
+    "@perishcode/serve": "workspace:*",
+    "@perishcode/protocol": "workspace:*"
   },
   "bin": {
     "pesuite": "./src/pesuite.mjs"
