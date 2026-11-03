@@ -38,7 +38,7 @@ function target(value: unknown, name: string): Digest {
   return value;
 }
 
-function parse(value: unknown, scope: Namespace, lane: Channel): Journal {
+export function parse(value: unknown, scope: Namespace, lane: Channel): Journal {
   const data = record(value, "journal");
   const state = record(data.state, "journal.state");
   if (!Number.isSafeInteger(data.revision) || Number(data.revision) < 0) {

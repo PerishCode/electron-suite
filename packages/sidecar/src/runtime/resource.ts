@@ -49,7 +49,7 @@ function same(left: Request, right: Request): boolean {
   );
 }
 
-function path(base: string, request: Request, lease: string): string {
+export function path(base: string, request: Request, lease: string): string {
   const token = digest(canonical({ lease, owner: request.owner ?? "namespace" })).slice(7, 23);
   if (request.kind === "socket") {
     const root = digest(base).slice(7, 23);
@@ -86,7 +86,7 @@ async function close(handle: Handle): Promise<void> {
   });
 }
 
-function registry(value: unknown, base: string, scope: FactoryScope): Registry {
+export function registry(value: unknown, base: string, scope: FactoryScope): Registry {
   if (!value || typeof value !== "object") throw new TypeError("invalid registry");
   const state = value as Registry;
   if (

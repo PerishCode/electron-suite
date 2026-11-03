@@ -146,3 +146,19 @@ export async function observeProcesses(root: string, scope?: FactoryScope): Prom
       };
     });
 }
+
+export function processWitness(input: unknown): Witness {
+  const value = input as Witness;
+  if (!Number.isSafeInteger(value?.pid) || value.pid < 1 || typeof value.birth !== "string" || !value.birth)
+    throw new Error("invalid process witness");
+  return { pid: value.pid, birth: value.birth };
+}
+let localWitness: Promise<Witness> | undefined;
+export function selfWitness(): Promise<Witness> {
+  localWitness ??= capture().then((all) => {
+    const self = all.find((p) => p.pid === process.pid);
+    if (!self) throw new Error("controller birth unavailable");
+    return { pid: self.pid, birth: self.birth };
+  });
+  return localWitness;
+}

@@ -17,6 +17,7 @@ import {
 import { type SessionHint, type SessionScope, sessionHint, sessionScope } from "../control/session.js";
 import { type Descriptor, descriptor, type Identity, identity } from "../control/types.js";
 import type { Lease, Spec } from "../host.js";
+import { processWitness, type Witness } from "../process/observe.js";
 
 type Message =
   | ({ authority: string; type: "session" } & SessionScope)
@@ -43,7 +44,7 @@ type Message =
   | ({ authority: string; lease: string; survivors: number[]; type: "revoke" } & FactoryScope)
   | ({ authority: string; type: "resources" } & FactoryScope);
 
-export type Request = Message & { session?: SessionHint };
+export type Request = Message & { session?: SessionHint; actor?: Witness };
 
 export type Response = { ok: true; value: unknown } | { error: string; ok: false };
 
@@ -292,7 +293,7 @@ function message(data: Record<string, unknown>): Message {
 
 export function decode(value: string): Request {
   const data = record(JSON.parse(value), "request");
-  const request = message(data);
+  const request = { ...message(data), actor: processWitness(data.actor) };
   if (data.session !== undefined) {
     if (request.type === "session") throw new Error("nested session acquisition is invalid");
     return { ...request, session: sessionHint(data.session) };

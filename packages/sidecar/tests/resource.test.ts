@@ -2,11 +2,10 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import { channel, digest, namespace } from "@perishcode/protocol";
 import { afterEach, describe, expect, it } from "vitest";
-
-import { Resources, serve } from "@";
+import { serve } from "@";
+import { Resources } from "../src/runtime/resource.js";
 
 const hosts: Resources[] = [];
 

@@ -83,7 +83,7 @@ it("keeps stable stamped ownership when the target rewrites argv and launches a 
     assert.ok(facts[0]?.processes.some((p) => p.pid === helperPid));
     assert.ok(facts[0]?.processes.some((p) => p.pid === lease.pid));
     const directory = host.directory(scope);
-    assert.equal(directory.schema, 3);
+    assert.equal(directory.schema, 4);
     assert.notEqual(directory.instances[0]?.process?.root.pid, lease.pid);
     const tracked = facts[0]!.processes.map((p) => p.pid);
     assert.equal((await factory.release(lease)).status, "stopped");

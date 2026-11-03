@@ -7,18 +7,15 @@ import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
 import { channel, namespace } from "@perishcode/protocol";
 import { expect, it } from "vitest";
-import { Resources, serve } from "@";
+import { serve } from "@";
+import { Resources } from "../../src/runtime/resource.js";
 
-const module = new URL("../dist/index.mjs", import.meta.url).href;
-const body = `import {serve,Resources,Client} from ${JSON.stringify(module)};
+const module = new URL("../../dist/index.mjs", import.meta.url).href;
+const body = `import {serve} from ${JSON.stringify(module)};
 const [root,mode,endpoint]=process.argv.slice(1);
-let service;
 try {
-  if(mode==='manager') service=await serve(endpoint, { root: root });
-  else service=await Resources.open({ channel:'stable',root,namespace:'main'});
-  const grant = service.authority
-    ? (request)=>new Client(service.endpoint,service.authority).grant({channel:'stable',namespace:'main'},request)
-    : (request)=>service.grant(request);
+  const service=await serve(endpoint,{root});
+  const grant=request=>service.factory({channel:'stable',namespace:'main'}).grant(request);
   const staging=await grant({kind:'staging',name:'probe',owner:'attempt',scope:'attempt'});
   const port=await grant({kind:'port',name:'probe',owner:'attempt',scope:'attempt'});
   console.log(JSON.stringify({result:'owned',staging:staging.value,port:port.value}));

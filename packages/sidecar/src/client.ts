@@ -10,7 +10,6 @@ import type {
   Request as ResourceRequest,
 } from "@perishcode/protocol";
 import { factoryScope } from "@perishcode/protocol";
-import type { Change, Journal } from "./binding.js";
 import type { Directory } from "./control/directory.js";
 import { Factory } from "./control/factory.js";
 import { Peer } from "./control/peer.js";
@@ -20,6 +19,7 @@ import type { Lease, Release, Snapshot, Spec } from "./host.js";
 import { type Ambient, ambient, remoteSession } from "./runtime/sessionwire.js";
 import { call } from "./runtime/transport.js";
 import type { Request } from "./runtime/wire.js";
+import type { Change, Journal } from "./state/binding.js";
 
 export class Client {
   private context?: Ambient;

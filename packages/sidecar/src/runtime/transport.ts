@@ -1,4 +1,5 @@
 import { createConnection } from "node:net";
+import { selfWitness } from "../process/observe.js";
 import { decorate } from "./sessionwire.js";
 import { encode, type Request, type Response } from "./wire.js";
 
@@ -14,8 +15,8 @@ function decode(input: string, end: number): Response {
   return value as Response;
 }
 
-export function call(endpoint: string, request: Request, timeout: number): Promise<unknown> {
-  const payload = encode(decorate(endpoint, request));
+export async function call(endpoint: string, request: Request, timeout: number): Promise<unknown> {
+  const payload = encode({ ...decorate(endpoint, request), actor: await selfWitness() });
   return new Promise((resolve, reject) => {
     const socket = createConnection(endpoint);
     let input = "";

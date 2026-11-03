@@ -1,9 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createConnection } from "node:net";
 import { type SessionHint, type SessionScope, sessionHint, sessionKey, sessionScope } from "../control/session.js";
+import { selfWitness, type Witness } from "../process/observe.js";
 import type { Request } from "./wire.js";
 
 export interface Ambient {
+  actor?: Witness;
   endpoint: string;
   scope?: SessionScope;
   hint?: SessionHint;
@@ -55,6 +57,7 @@ export async function remoteSession<T>(
     return operation();
   }
   if (current?.business) throw new Error("business lifecycle writes require a controller session");
+  const actor = await selfWitness();
   const socket = createConnection(endpoint);
   let active = true,
     contextLive = true,
@@ -87,7 +90,7 @@ export async function remoteSession<T>(
     socket.destroy();
   };
   const timer = setTimeout(() => fail(new Error("lifecycle acquisition timeout")), timeout);
-  socket.once("connect", () => socket.write(`${JSON.stringify({ type: "session", authority, ...scope })}\n`));
+  socket.once("connect", () => socket.write(`${JSON.stringify({ type: "session", authority, ...scope, actor })}\n`));
   socket.once("error", fail);
   socket.once("close", () => {
     clearTimeout(timer);

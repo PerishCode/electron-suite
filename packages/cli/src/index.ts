@@ -6,6 +6,7 @@ import { format, guard } from "@perishcode/guard";
 import { inspect, inspectHelp } from "./inspect.js";
 import { lifecycle, lifecycleHelp } from "./lifecycle.js";
 import { pipeline, pipelineHelp } from "./pipeline.js";
+import { recoverHelp, recovery } from "./recover.js";
 import { serve, serveHelp } from "./serve.js";
 
 const version = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string })
@@ -22,13 +23,16 @@ export async function run(args: string[], cwd: string, output: Output): Promise<
   const json = args.includes("--json");
   try {
     if (args.length === 1 && ["--help", "-h"].includes(args[0] ?? "")) {
-      output.stdout(`${help}\n\n${lifecycleHelp}\n\n${pipelineHelp}\n\n${inspectHelp}\n\n${serveHelp}\n`);
+      output.stdout(
+        `${help}\n\n${lifecycleHelp}\n\n${pipelineHelp}\n\n${inspectHelp}\n\n${serveHelp}\n\n${recoverHelp}\n`,
+      );
       return 0;
     }
     if (args.length === 1 && args[0] === "--version") {
       output.stdout(`${version}\n`);
       return 0;
     }
+    if (args[0] === "recover") return await recovery(args, cwd, output);
     if (args[0] === "inspect") return await inspect(args, cwd, output);
     if (args[0] === "serve") return await serve(args, cwd, output);
     if (
@@ -38,7 +42,9 @@ export async function run(args: string[], cwd: string, output: Output): Promise<
       return await pipeline(args, cwd, output);
     if (args[0] === "release" || args[0] === "pack") return await lifecycle(args, cwd, output);
     if (args[0] !== "guard")
-      throw new Error("expected subcommand: pesuite guard|inspect|serve|version|build|check|release|pack|publish");
+      throw new Error(
+        "expected subcommand: pesuite guard|inspect|recover|serve|version|build|check|release|pack|publish",
+      );
     if (args.length === 2 && ["--help", "-h"].includes(args[1] ?? "")) {
       output.stdout(`${help}\n`);
       return 0;
@@ -67,7 +73,7 @@ export async function run(args: string[], cwd: string, output: Output): Promise<
     return report.ok ? 0 : 1;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (json || args[0] === "inspect" || args[0] === "serve")
+    if (json || args[0] === "inspect" || args[0] === "recover" || args[0] === "serve")
       output.stdout(`${JSON.stringify({ schemaVersion: 1, ok: false, error: { kind: "operational", message } })}\n`);
     else output.stderr(`pesuite ${args[0] ?? ""}: ${message}\n`);
     return 2;
