@@ -7,10 +7,12 @@ import {
   sessionKey,
   sessionScope,
 } from "../control/session.js";
+import { capture, exact, selfWitness, type Witness } from "../process/observe.js";
 import type { Catalog } from "./catalog.js";
 import { ambient } from "./sessionwire.js";
 
 type Holder = {
+  actor: Witness;
   scope: SessionScope;
   hint: SessionHint;
   kind: SessionRecord["kind"];
@@ -22,6 +24,7 @@ type Holder = {
   resolve: () => void;
 };
 type Waiter = {
+  actor: Witness;
   scope: SessionScope;
   kind: SessionRecord["kind"];
   resolve: (holder: Holder) => void;
@@ -46,7 +49,12 @@ export class Sessions {
       !!current.valid?.()
     );
   }
-  private acquire(scope: SessionScope, kind: SessionRecord["kind"], signal?: AbortSignal): Promise<Holder> {
+  private acquire(
+    scope: SessionScope,
+    kind: SessionRecord["kind"],
+    signal?: AbortSignal,
+    actor?: Witness,
+  ): Promise<Holder> {
     scope = sessionScope(scope);
     if (this.closing && !ambient.getStore()?.internal) return Promise.reject(new Error("lifecycle manager is closing"));
     if (signal?.aborted) return Promise.reject(new Error("lifecycle acquisition cancelled"));
@@ -59,7 +67,7 @@ export class Sessions {
     if (lane.interrupted) return Promise.reject(new Error("lifecycle session interrupted; recovery required"));
     const target = lane;
     return new Promise((resolve, reject) => {
-      const waiter: Waiter = { scope, kind, resolve, reject, signal };
+      const waiter: Waiter = { scope, kind, resolve, reject, signal, actor: actor! };
       const cancel = () => {
         const index = target.queue.indexOf(waiter);
         if (index >= 0) {
@@ -89,6 +97,7 @@ export class Sessions {
     let done = () => {};
     const holder: Holder = {
       scope: waiter.scope,
+      actor: waiter.actor,
       hint: { ...waiter.scope, incarnation, token: randomBytes(32).toString("base64url") },
       kind: waiter.kind,
       phase: "active",
@@ -111,6 +120,7 @@ export class Sessions {
   private record(holder: Holder, phase: SessionRecord["phase"], reason?: SessionRecord["reason"]): void {
     this.catalog.session({
       ...holder.scope,
+      controller: holder.actor,
       incarnation: holder.hint.incarnation,
       kind: holder.kind,
       phase,
@@ -136,6 +146,7 @@ export class Sessions {
       ambient.run(
         {
           endpoint: this.endpoint,
+          actor: holder.actor,
           scope: holder.scope,
           hint: { ...holder.hint, parent: id },
           valid: () => holder.operations.has(id) && holder.phase !== "interrupted",
@@ -170,7 +181,7 @@ export class Sessions {
     }
     if (current?.hint) throw new Error("cross-scope lifecycle nesting is not supported");
     if (current?.business) throw new Error("business lifecycle writes require a controller session");
-    const holder = await this.acquire(scope, "automatic", signal);
+    const holder = await this.acquire(scope, "automatic", signal, current?.actor ?? (await selfWitness()));
     let succeeded = false;
     try {
       const result = await this.command(holder, operation);
@@ -198,11 +209,17 @@ export class Sessions {
       return operation();
     }
     if (current?.business) throw new Error("business lifecycle writes require a controller session");
-    const holder = await this.acquire(scope, "local");
+    const holder = await this.acquire(scope, "local", undefined, await selfWitness());
     let succeeded = false;
     try {
       const result = await ambient.run(
-        { endpoint: this.endpoint, scope, hint: holder.hint, valid: () => holder.phase === "active" },
+        {
+          endpoint: this.endpoint,
+          actor: holder.actor,
+          scope,
+          hint: holder.hint,
+          valid: () => holder.phase === "active",
+        },
         operation,
       );
       succeeded = true;
@@ -254,10 +271,11 @@ export class Sessions {
     })().catch(poison);
     return holder.finished;
   }
-  async accept(socket: Socket, scope: SessionScope): Promise<void> {
+  async accept(socket: Socket, scope: SessionScope, actor: Witness): Promise<void> {
+    if (!(await capture()).some((p) => exact(p, actor))) throw new Error("controller process witness mismatch");
     const controller = new AbortController();
     socket.once("close", () => controller.abort());
-    const holder = await this.acquire(scope, "remote", controller.signal);
+    const holder = await this.acquire(scope, "remote", controller.signal, actor);
     let completion = false,
       input = "";
     const abort = () => {

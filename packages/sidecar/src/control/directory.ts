@@ -1,5 +1,5 @@
 import { type FactoryScope, factoryKey, factoryScope } from "@perishcode/protocol";
-import { type ProcessInstance, processInstance } from "../process/observe.js";
+import { type ProcessInstance, processInstance, processWitness } from "../process/observe.js";
 import { type SessionRecord, sessionKey, sessionScope } from "./session.js";
 import { type Identity, identity } from "./types.js";
 
@@ -13,6 +13,7 @@ export interface Instance extends Identity {
   process?: ProcessInstance;
 }
 export interface FactoryEntry {
+  binding: boolean;
   channel: FactoryScope["channel"];
   namespace: FactoryScope["namespace"];
   manager: string;
@@ -20,9 +21,9 @@ export interface FactoryEntry {
   phase: "unopened" | "opening" | "ready" | "failed" | "closed";
 }
 export interface Directory {
-  schema: 3;
+  schema: 4;
   revision: number;
-  manager: { incarnation: string; pid: number; phase: "active" | "closed" | "interrupted" };
+  manager: { incarnation: string; pid: number; birth: string; phase: "active" | "closed" | "interrupted" };
   factories: FactoryEntry[];
   instances: Instance[];
   sessions: SessionRecord[];
@@ -41,11 +42,12 @@ export function parse(input: unknown, owner: Directory["manager"]): Directory {
   if (!input || typeof input !== "object") throw new Error("directory is missing; recovery required");
   const data = input as Directory;
   if (
-    data.schema !== 3 ||
+    data.schema !== 4 ||
     !Number.isSafeInteger(data.revision) ||
     data.revision < 0 ||
     data.manager?.incarnation !== owner.incarnation ||
     data.manager?.pid !== owner.pid ||
+    data.manager?.birth !== owner.birth ||
     !Array.isArray(data.factories) ||
     !Array.isArray(data.instances)
   )
@@ -64,6 +66,7 @@ export function parse(input: unknown, owner: Directory["manager"]): Directory {
     return {
       ...scope,
       incarnation: uuid(entry.incarnation),
+      controller: processWitness(entry.controller),
       manager: uuid(entry.manager),
       kind: entry.kind,
       phase: entry.phase,
@@ -76,9 +79,11 @@ export function parse(input: unknown, owner: Directory["manager"]): Directory {
   const factories = data.factories.map((entry): FactoryEntry => {
     if (!["unopened", "opening", "ready", "failed", "closed"].includes(entry.phase))
       throw new Error("invalid factory phase");
+    if (typeof entry.binding !== "boolean") throw new Error("binding authority marker missing");
     const scope = factoryScope(entry);
     const value = {
       ...scope,
+      binding: entry.binding,
       manager: uuid(entry.manager),
       phase: entry.phase,
       ...(entry.incarnation === undefined ? {} : { incarnation: uuid(entry.incarnation) }),
@@ -141,9 +146,9 @@ export function parse(input: unknown, owner: Directory["manager"]): Directory {
   if ([...instances, ...sessions].some((entry) => !indexed.has(factoryKey(entry))))
     throw new Error("directory entry has no factory authority");
   return {
-    schema: 3,
+    schema: 4,
     revision: data.revision,
-    manager: { incarnation: owner.incarnation, pid: owner.pid, phase: owner.phase },
+    manager: { incarnation: owner.incarnation, pid: owner.pid, birth: owner.birth, phase: owner.phase },
     factories,
     instances,
     sessions,

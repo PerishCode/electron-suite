@@ -15,8 +15,11 @@ guard:
       - packages/guard/src/config
       - packages/guard/src/rules
       - packages/guard/src/scan
+      - packages/sidecar/tests/control
+      - packages/sidecar/tests/recovery
       - packages/sidecar/tests/process
       - packages/sidecar/tests/binding
+      - packages/sidecar/src/state
       - packages/sidecar/src/process
       - packages/sidecar/src/control
       - packages/sidecar/src/runtime

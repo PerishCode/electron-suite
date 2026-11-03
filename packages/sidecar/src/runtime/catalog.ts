@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { type FactoryScope, factoryKey, factoryScope } from "@perishcode/protocol";
-import { Bindings, type Journal } from "../binding.js";
 import {
   type Directory,
   type FactoryEntry,
@@ -13,6 +12,7 @@ import {
 import { type SessionRecord, sessionKey } from "../control/session.js";
 import type { Identity } from "../control/types.js";
 import type { ProcessInstance } from "../process/observe.js";
+import { Bindings, type Journal } from "../state/binding.js";
 import { Ownership } from "./ownership.js";
 
 export class Catalog {
@@ -25,9 +25,9 @@ export class Catalog {
     if (prior === undefined && owner.previous?.directory) throw new Error("directory missing; recovery required");
     const old = prior === undefined ? undefined : parse(prior, owner.previous ?? owner.info);
     const state: Directory = {
-      schema: 3,
+      schema: 4,
       revision: (old?.revision ?? -1) + 1,
-      manager: { incarnation: owner.incarnation, pid: owner.info.pid, phase: "active" },
+      manager: { incarnation: owner.incarnation, pid: owner.info.pid, birth: owner.info.birth, phase: "active" },
       factories: old?.factories ?? [],
       instances: old?.instances ?? [],
       sessions: old?.sessions ?? [],
@@ -61,6 +61,7 @@ export class Catalog {
       const index = next.factories.findIndex((entry) => factoryKey(entry) === factoryKey(scope));
       const entry: FactoryEntry = {
         ...factoryScope(scope),
+        binding: index < 0 ? false : next.factories[index]!.binding,
         manager: next.manager.incarnation,
         phase,
         ...(incarnation ? { incarnation } : {}),
@@ -69,11 +70,24 @@ export class Catalog {
       else next.factories[index] = entry;
     });
   }
+  binding(scope: FactoryScope) {
+    const current = this.state.factories.find((entry) => factoryKey(entry) === factoryKey(scope));
+    if (!current) throw new Error("binding factory unavailable");
+    if (current.binding) return;
+    this.update((next) => {
+      next.factories.find((entry) => factoryKey(entry) === factoryKey(scope))!.binding = true;
+    });
+  }
   claim(scope: Identity, incarnation: string, kind: Instance["kind"]): void {
     this.update((next) => {
       const index = next.instances.findIndex((entry) => slot(entry) === slot(scope));
       if (!next.factories.some((entry) => factoryKey(entry) === factoryKey(scope)))
-        next.factories.push({ ...factoryScope(scope), manager: next.manager.incarnation, phase: "unopened" });
+        next.factories.push({
+          ...factoryScope(scope),
+          manager: next.manager.incarnation,
+          phase: "unopened",
+          binding: false,
+        });
       if (index >= 0 && next.instances[index]?.phase !== "retired") throw new Error("service already owned");
       const entry: Instance = {
         ...scope,
@@ -116,7 +130,12 @@ export class Catalog {
   session(record: Omit<SessionRecord, "manager">): void {
     this.update((next) => {
       if (!next.factories.some((entry) => factoryKey(entry) === factoryKey(record)))
-        next.factories.push({ ...factoryScope(record), manager: next.manager.incarnation, phase: "unopened" });
+        next.factories.push({
+          ...factoryScope(record),
+          manager: next.manager.incarnation,
+          phase: "unopened",
+          binding: false,
+        });
       const index = next.sessions.findIndex((entry) => sessionKey(entry) === sessionKey(record));
       const prior = next.sessions[index];
       if (prior && record.phase !== "active" && prior.incarnation !== record.incarnation)

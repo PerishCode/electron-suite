@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { channel, digest, gates, namespace } from "@perishcode/protocol";
 import { expect, it, vi } from "vitest";
-import { Bindings } from "@";
+import { Bindings } from "../../src/state/binding.js";
 
 const fault = vi.hoisted(() => ({ point: "" }));
 vi.mock("node:fs/promises", async (original) => {

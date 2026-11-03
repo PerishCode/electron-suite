@@ -2,14 +2,23 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdir, open, realpath } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { capture } from "../process/observe.js";
 
+export interface EndpointWitness {
+  path: string;
+  dev: number;
+  ino: number;
+  ctime: number;
+}
 export interface OwnerRecord {
-  schema: 2;
+  schema: 3;
   format: "stamped-supervisor";
   directory: boolean;
   scope: string;
   incarnation: string;
   pid: number;
+  birth: string;
+  endpoint?: EndpointWitness;
   phase: "active" | "closed";
 }
 
@@ -21,6 +30,8 @@ export class Ownership {
   readonly incarnation = randomUUID();
   private closed = false;
   private directory = false;
+  private birth = "";
+  private endpoint?: EndpointWitness;
   private constructor(
     private db: DatabaseSync,
     readonly previous: OwnerRecord | undefined,
@@ -64,12 +75,20 @@ export class Ownership {
       if (!row && !fresh) throw new Error("ownership is unpublished; recovery required");
       let previous: OwnerRecord | undefined;
       if (row) {
-        const value = Ownership.parse(row.record, scope);
+        const value = Ownership.decode(row.record, scope);
+        if (db.prepare("SELECT name FROM sqlite_schema WHERE name='recovery'").get()) {
+          const journal = db.prepare("SELECT record FROM recovery WHERE id=1").get();
+          if (!journal || JSON.parse(String(journal.record)).phase !== "complete")
+            throw new Error("ownership recovery incomplete; recovery required");
+        }
         if (value.phase === "active") throw new Error("ownership was interrupted; recovery required");
         previous = value;
       }
       const owner = new Ownership(db, previous, scope, fresh);
       owner.directory = previous?.directory === true;
+      const self = (await capture()).find((p) => p.pid === process.pid);
+      if (!self) throw new Error("owner birth witness unavailable");
+      owner.birth = self.birth;
       owner.save("active");
       db.exec("COMMIT");
       return owner;
@@ -107,11 +126,13 @@ export class Ownership {
   get info(): OwnerRecord {
     if (this.closed) throw new Error("ownership is closed");
     return {
-      schema: 2,
+      schema: 3,
       format: "stamped-supervisor",
       scope: this.scope,
       incarnation: this.incarnation,
       pid: process.pid,
+      birth: this.birth,
+      ...(this.endpoint ? { endpoint: this.endpoint } : {}),
       phase: "active",
       directory: this.directory,
     };
@@ -148,7 +169,7 @@ export class Ownership {
     try {
       db.exec("BEGIN");
       const row = db.prepare("SELECT record FROM authority WHERE id=1").get();
-      const owner = Ownership.parse(row?.record, scope);
+      const owner = Ownership.decode(row?.record, scope);
       const directory = Ownership.data(db);
       const value = await read?.();
       db.exec("COMMIT");
@@ -161,37 +182,62 @@ export class Ownership {
       db.close();
     }
   }
-  private static data(db: DatabaseSync): unknown {
+  static data(db: DatabaseSync): unknown {
     if (!db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name='directory'").get()) return undefined;
     const row = db.prepare("SELECT record FROM directory WHERE id=1").get();
     if (!row) throw new Error("directory is unpublished; recovery required");
     return JSON.parse(String(row.record));
   }
-  private static parse(raw: unknown, scope: string): OwnerRecord {
+  static decode(raw: unknown, scope: string): OwnerRecord {
     const value = JSON.parse(String(raw)) as OwnerRecord;
     if (
-      value?.schema !== 2 ||
+      value?.schema !== 3 ||
       value.format !== "stamped-supervisor" ||
       value.scope !== scope ||
       typeof value.incarnation !== "string" ||
       !/^[0-9a-f-]{36}$/.test(value.incarnation) ||
       !Number.isSafeInteger(value.pid) ||
       value.pid < 1 ||
+      typeof value.birth !== "string" ||
+      !value.birth ||
       !["active", "closed"].includes(value.phase) ||
       typeof value.directory !== "boolean"
     )
       throw new Error("ownership is invalid or unpublished; recovery required");
+    if (
+      value.endpoint &&
+      (typeof value.endpoint.path !== "string" ||
+        !value.endpoint.path ||
+        !Number.isSafeInteger(value.endpoint.dev) ||
+        !Number.isSafeInteger(value.endpoint.ino) ||
+        !Number.isFinite(value.endpoint.ctime))
+    )
+      throw new Error("invalid endpoint witness");
     return value;
+  }
+  publishEndpoint(endpoint: EndpointWitness): void {
+    this.info;
+    this.db.exec("BEGIN EXCLUSIVE");
+    try {
+      this.endpoint = endpoint;
+      this.save("active");
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   private save(phase: OwnerRecord["phase"]): void {
     const record: OwnerRecord = {
-      schema: 2,
+      schema: 3,
       format: "stamped-supervisor",
       directory: this.directory,
       scope: this.scope,
       incarnation: this.incarnation,
       pid: process.pid,
+      birth: this.birth,
+      ...(this.endpoint ? { endpoint: this.endpoint } : {}),
       phase,
     };
     this.db.prepare("INSERT OR REPLACE INTO authority(id,record) VALUES(1,?)").run(JSON.stringify(record));

@@ -1,7 +1,9 @@
 import { type FactoryScope, factoryKey, factoryScope } from "@perishcode/protocol";
+import type { Witness } from "../process/observe.js";
 
 export type SessionScope = FactoryScope;
 export interface SessionRecord extends SessionScope {
+  controller: Witness;
   incarnation: string;
   manager: string;
   kind: "automatic" | "local" | "remote";

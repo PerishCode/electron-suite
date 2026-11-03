@@ -196,10 +196,10 @@ importers:
       '@perishcode/serve':
         specifier: workspace:*
         version: link:../serve
-    devDependencies:
       '@perishcode/sidecar':
         specifier: workspace:*
         version: link:../sidecar
+    devDependencies:
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2

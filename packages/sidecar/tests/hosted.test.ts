@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { channel, digest, namespace } from "@perishcode/protocol";
 import { afterEach, expect, it, vi } from "vitest";
-import { Client, type Expose, Resources, type Service, serve } from "@";
+import { Client, type Expose, type Service, serve } from "@";
+import { Resources } from "../src/runtime/resource.js";
 
 type Methods = { echo: { input: string; output: string }; count: { input: number; output: number } };
 const identity = {

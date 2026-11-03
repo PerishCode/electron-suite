@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { channel, digest, namespace } from "@perishcode/protocol";
 import { afterEach, describe, expect, it } from "vitest";
-
-import { Bindings, readBinding, serve } from "@";
+import { readBinding, serve } from "@";
+import { Bindings } from "../../src/state/binding.js";
 
 const roots: string[] = [];
 

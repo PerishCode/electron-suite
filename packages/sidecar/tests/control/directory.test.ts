@@ -6,9 +6,9 @@ import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
 import { channel, digest, namespace } from "@perishcode/protocol";
 import { expect, it, vi } from "vitest";
-import { Client, type Directory, Resources, readDirectory, type Service, type Spec, serve } from "@";
-
+import { Client, type Directory, readDirectory, type Service, type Spec, serve } from "@";
 import { Catalog } from "@/runtime/catalog.js";
+import { Resources } from "../../src/runtime/resource.js";
 
 const scope = { namespace: namespace("main"), channel: channel("stable"), service: "probe", generation: digest("one") };
 const spec = (generation = scope.generation): Spec => ({
@@ -209,7 +209,7 @@ it("does not turn missing or malformed committed metadata into an empty director
 });
 it("reads last committed hosted and process identities after SIGKILL without rewriting authority or registry", async () => {
   const root = await mkdtemp(join(tmpdir(), "directory-crash-"));
-  const module = new URL("../dist/index.mjs", import.meta.url).href;
+  const module = new URL("../../dist/index.mjs", import.meta.url).href;
   const body = `import {serve,Client} from ${JSON.stringify(module)};
     const root=process.argv[1];const service=await serve(root+'/m.sock');
     await service.expose({identity:JSON.parse(process.argv[2]),handlers:{},lifecycle:{initialize:async(context)=>{

@@ -1,9 +1,8 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { chmod, lstat, realpath } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { type Capability, type FactoryScope, factoryKey, factoryScope, type Permit } from "@perishcode/protocol";
-import { Bindings } from "../binding.js";
 import { Client } from "../client.js";
 import { advertise } from "../control/connection.js";
 import type { Directory } from "../control/directory.js";
@@ -13,6 +12,7 @@ import type { SessionScope } from "../control/session.js";
 import type { Attachment, Expose } from "../control/types.js";
 import { Sidecar } from "../host.js";
 import { observeProcesses } from "../process/observe.js";
+import { Bindings } from "../state/binding.js";
 import { Catalog } from "./catalog.js";
 import { Ownership } from "./ownership.js";
 import { Resources } from "./resource.js";
@@ -100,6 +100,7 @@ async function dispatch(runtime: Runtime, authority: string, request: Request) {
   if (request.type === "inspect") return runtime.host.inspect();
   if (request.type === "binding") return runtime.bindings.read(request.namespace, request.channel);
   if (request.type === "transit") {
+    runtime.catalog.binding(request);
     return runtime.bindings.transit(request.namespace, request.channel, request.revision, request.event);
   }
   if (request.type === "issue") return issue(runtime, request.permit);
@@ -119,7 +120,7 @@ function reply(socket: Socket, response: Response): void {
   if (!socket.destroyed) socket.end(encode(response));
 }
 
-function accept(server: Server, runtime: Runtime, authority: string): void {
+function accept(server: Server, runtime: Runtime, authority: string, endpoint: string): void {
   server.on("connection", (socket) => {
     let input = "";
 
@@ -142,7 +143,7 @@ function accept(server: Server, runtime: Runtime, authority: string): void {
           if (request.type === "session") {
             if (runtime.closing || !equal(request.authority, authority))
               throw new Error("invalid authority or closing manager");
-            await runtime.sessions.accept(socket, request);
+            await runtime.sessions.accept(socket, request, request.actor!);
             return undefined;
           }
           if ("authority" in request && !equal(request.authority, authority)) throw new Error("invalid authority");
@@ -158,11 +159,13 @@ function accept(server: Server, runtime: Runtime, authority: string): void {
           const controller = new AbortController();
           socket.once("close", () => controller.abort());
           return {
-            value: await (scope
-              ? (cleanup
-                  ? runtime.sessions.cleanup.bind(runtime.sessions)
-                  : runtime.sessions.run.bind(runtime.sessions))(scope, operation, request.session, controller.signal)
-              : dispatch(runtime, authority, request)),
+            value: await ambient.run({ ...ambient.getStore(), endpoint, actor: request.actor }, () =>
+              scope
+                ? (cleanup
+                    ? runtime.sessions.cleanup.bind(runtime.sessions)
+                    : runtime.sessions.run.bind(runtime.sessions))(scope, operation, request.session, controller.signal)
+                : dispatch(runtime, authority, request),
+            ),
           };
         })
         .then((result) => {
@@ -255,11 +258,21 @@ export async function serve(endpoint: string, options: { authority?: string; roo
     },
   };
   const server = createServer();
-  accept(server, runtime, authority);
+  accept(server, runtime, authority, endpoint);
   let unpublish: (() => Promise<void>) | undefined;
   try {
     await listen(server, endpoint);
     if (process.platform !== "win32") await chmod(endpoint, 0o600);
+    if (process.platform !== "win32") {
+      const file = await lstat(endpoint);
+      if (!file.isSocket()) throw new Error("manager endpoint is not a socket");
+      ownership.publishEndpoint({
+        path: join(await realpath(dirname(endpoint)), basename(endpoint)),
+        dev: file.dev,
+        ino: file.ino,
+        ctime: file.ctimeMs,
+      });
+    }
     unpublish = await advertise(root, ownership.incarnation, endpoint, authority);
   } catch (fault) {
     if (server.listening) await close(server);
