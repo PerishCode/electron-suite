@@ -57,6 +57,10 @@ export class Session {
   private closed = false;
   private closing?: Promise<{ status: string; survivors: number[] }>;
   private ready = false;
+  content() {
+    if (this.closed || this.closing) throw new Error("session is closed");
+    return this.capsule.content(this.mount.target);
+  }
   async expose<M>(service: string, options: Omit<Expose<M>, "identity">) {
     if (this.closed || this.closing) throw new Error("session is closed");
     return this.host

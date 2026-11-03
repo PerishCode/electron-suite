@@ -326,3 +326,9 @@ pnpm exec pesuite check --channel preview --gate desktop
 `pesuite inspect list --data <manager-root> --channel <channel> --namespace <namespace>` 从 sidecar 私有发现文件连接并验证 manager，再取得实例目录。probe/call/stop 选择精确 service/generation；call/stop 还要求 incarnation，避免操作重启后的另一个实例。方法由调用方定义，SDK 的 Session.expose / HostOptions.inspect 可接入实际四单元宿主；管理凭据不进入 renderer 或 CLI 输出。
 
 本轮版本：sidecar 0.6.1、inspect/serve 0.1.0、runtime 0.2.1、electron 0.2.2、guard 0.5.1、pipeline 0.2.1、cli 0.8.0。交付及证据以 #44 为准；#11/#12 的完整主线门保持逐项验证。
+
+## 运行中候选准备
+
+publish.writeFeed 将公开签名/内容协议投影为普通静态文件，最后原子替换 channel 指针；不导出私钥。update.watch 托管在调用方 sidecar service 中，自动发现、限量下载、校验并缓存 Web/Daemon 候选，通过 inspect 的 updates/status 解释结果，停止时取消在途请求。
+
+prepared 不表示 activated：本轮不修改 binding、不替换运行中的单元。Capsule、carrier 与 blob 改变会拒绝进入这一层；#13 的最小影响激活仍需独立验收。serve 的私有 fault 方法提供精确路径的 404/坏字节/截断/停滞 fixture。版本与证据见 #46。

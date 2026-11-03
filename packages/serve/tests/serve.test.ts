@@ -43,6 +43,11 @@ it("serves changing real bytes, ranges and metadata on owned endpoints and retir
     assert.equal((await request("missing")).status, 404);
     assert.equal((await request("escape")).status, 403);
     assert.equal((await request("%2e%2e%2fsecret")).status, 403);
+    await active.fault("web", { path: "/artifact.bin", mode: "truncate" });
+    const truncated = await request("artifact.bin");
+    assert.equal(truncated.status, 200);
+    await assert.rejects(truncated.text());
+    await active.fault("web", null);
     await writeFile(join(content, "latest.json"), JSON.stringify({ version: "1.0.0-beta.2" }));
     assert.deepEqual(await (await request("latest.json")).json(), { version: "1.0.0-beta.2" });
     await assert.rejects(Sources.open({ data, scope, sources: { web: { directory: content } } }), /another manager/);

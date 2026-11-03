@@ -13,3 +13,4 @@ export {
 } from "./proof.js";
 export type { Service } from "./server.js";
 export { serve } from "./server.js";
+export { writeFeed } from "./static.js";
