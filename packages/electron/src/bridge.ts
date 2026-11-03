@@ -3,6 +3,8 @@ export interface Bootstrap {
   generation: string;
   nonce: string;
   version: string;
+  daemon?: { generation?: string; nonce?: string; unit?: string; version?: string };
+  web?: { unit?: string; version?: string };
 }
 export interface Bridge {
   bootstrap: Bootstrap;

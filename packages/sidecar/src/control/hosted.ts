@@ -3,6 +3,7 @@ import { digest, type FactoryScope, type Grant } from "@perishcode/protocol";
 import type { Catalog } from "../runtime/catalog.js";
 import type { Resources } from "../runtime/resource.js";
 import type { Sessions } from "../runtime/sessions.js";
+import { ambient } from "../runtime/sessionwire.js";
 import {
   type Attachment,
   type Context,
@@ -132,6 +133,12 @@ export class Hosted {
       const runtime = await resources.grant({ kind: "staging", name, owner: incarnation, scope: "attempt" });
       temporary = runtime.lease;
       const context: Context = Object.freeze({
+        background: <T>(operation: () => T): T => {
+          const current = ambient.getStore();
+          if (entry.phase !== "initializing" || current?.business || (current?.hint && !current.valid?.()))
+            throw new Error("background controllers must be scheduled during initialization");
+          return ambient.exit(operation);
+        },
         identity: scope,
         incarnation,
         roots: Object.freeze({ data: data.value, logs: logs.value, resource: resource.value, runtime: runtime.value }),

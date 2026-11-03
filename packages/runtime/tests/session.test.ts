@@ -128,7 +128,7 @@ it("keeps same-namespace channels isolated and preserves factory data across pro
         service: "daemon",
         namespace: "fixture",
         channel: manifest.channel,
-        generation: receipt.generation,
+        generation: receipt.units.daemon.digest,
         pid: receipt.daemon.pid,
         phase: "ready",
       }),

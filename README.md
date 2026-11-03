@@ -332,3 +332,9 @@ pnpm exec pesuite check --channel preview --gate desktop
 publish.writeFeed 将公开签名/内容协议投影为普通静态文件，最后原子替换 channel 指针；不导出私钥。update.watch 托管在调用方 sidecar service 中，自动发现、限量下载、校验并缓存 Web/Daemon 候选，通过 inspect 的 updates/status 解释结果，停止时取消在途请求。
 
 prepared 不表示 activated：本轮不修改 binding、不替换运行中的单元。Capsule、carrier 与 blob 改变会拒绝进入这一层；#13 的最小影响激活仍需独立验收。serve 的私有 fault 方法提供精确路径的 404/坏字节/截断/停滞 fixture。版本与证据见 #46。
+
+## Web / Daemon 最小影响激活
+
+#48 在已准备候选上增加 runtime/Electron 唯一激活入口。unit.json 随实际资源字节校验，声明独立版本和接口：Web-only 保留 daemon PID，Daemon-only 保留当前文档，协同更新在旧文档被围栏后切换。兼容集合 binding、进程 artifact 身份和文档 nonce 分别记录。
+
+HostOptions.updates.activate 为显式开关，默认仍只准备。失败会报告实际基线恢复结果并保留失败 binding，正常退出后可显式恢复已提交代际。数据保留不表示回滚业务写入；manager adoption、提交中断安全及完整原生全屏仍未验收。版本、实际消费与 CI 证据见 #48。

@@ -102,3 +102,8 @@ export async function materialize(input: string | Uint8Array, root: string): Pro
     await writeFile(destination, Buffer.from(file.bytes, "base64"), { flag: "wx", mode: file.mode });
   }
 }
+export function bundleFile(input: string | Uint8Array, name: string): Uint8Array {
+  const entry = parse(input).files.find((file) => file.path === name);
+  if (!entry) throw new Error(`bundle file missing: ${name}`);
+  return Buffer.from(entry.bytes, "base64");
+}

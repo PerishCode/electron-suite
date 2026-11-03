@@ -1,10 +1,12 @@
 export {
   bundle,
+  bundleFile,
   materialize,
 } from "./bundle.js";
 export type { ChannelDescriptor, ProductIdentity } from "./channel.js";
 export { channelDescriptor, releaseChannel } from "./channel.js";
-export { emit } from "./emit.js";
+export type { Unit } from "./emit.js";
+export { emit, emitBuildUnit, emitUnit, unit } from "./emit.js";
 export type {
   Asset,
   Blob,

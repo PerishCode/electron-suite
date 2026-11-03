@@ -6,7 +6,20 @@ import { define } from "@perishcode/config";
 import { channel } from "@perishcode/protocol";
 import { describe, expect, it } from "vitest";
 
-import { decode, distinct, emit, encode, parse, resolve } from "@";
+import { decode, distinct, emit, emitBuildUnit, encode, parse, resolve } from "@";
+
+it("emits channel versions centrally while distinguishing build markers from release identities", async () => {
+  const root = await mkdtemp(join(tmpdir(), "unit-build-"));
+  const defaults = { kind: "web" as const, baseVersion: "0.1.0", api: "probe/1" };
+  await emitBuildUnit(root, defaults, { PESUITE_BUILD: "1.2.3-preview.4" });
+  expect(JSON.parse(await readFile(join(root, "unit.json"), "utf8"))).toMatchObject({
+    version: "1.2.3-preview.4",
+    api: "probe/1",
+  });
+  await emitBuildUnit(root, defaults, { PESUITE_BUILD: "fixture" });
+  expect(JSON.parse(await readFile(join(root, "unit.json"), "utf8"))).toMatchObject({ version: "0.1.0" });
+  await expect(emitBuildUnit(root, defaults, { PESUITE_UNIT_VERSION: "1.x" })).rejects.toThrow();
+});
 
 describe("release", () => {
   it("derives independent installation identity per channel", () => {
