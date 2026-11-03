@@ -15,6 +15,7 @@ guard:
       - packages/guard/src/config
       - packages/guard/src/rules
       - packages/guard/src/scan
+      - packages/sidecar/tests/binding
       - packages/sidecar/src/control
       - packages/sidecar/src/runtime
   components:

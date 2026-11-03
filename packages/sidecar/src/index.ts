@@ -25,7 +25,7 @@ export type {
   Stop,
 } from "./runner.js";
 export { launch } from "./runner.js";
-export { readDirectory, readLegacyDirectory } from "./runtime/catalog.js";
+export { readBinding, readDirectory, readLegacyDirectory } from "./runtime/catalog.js";
 export type { ResourceOptions } from "./runtime/resource.js";
 export { Resources } from "./runtime/resource.js";
 export type { Service } from "./runtime/server.js";

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { type FactoryScope, factoryKey, factoryScope } from "@perishcode/protocol";
+import { Bindings, type Journal } from "../binding.js";
 import {
   type Directory,
   type FactoryEntry,
@@ -165,4 +166,28 @@ export async function readLegacyDirectory(root: string): Promise<LegacyDirectory
     },
     snapshot.owner.sessions === true,
   );
+}
+
+/** Offline, read-only binding and directory facts under the same manager exclusion lock. */
+export async function readBinding(
+  root: string,
+  scope: FactoryScope,
+): Promise<{ directory: Directory; journal: Journal }> {
+  const identity = factoryScope(scope);
+  const snapshot = await Ownership.inspect(join(root, "manager.sqlite"), () =>
+    Bindings.inspect(root, identity.namespace, identity.channel),
+  );
+  if (!snapshot.owner.factories || !snapshot.owner.directory)
+    throw new Error("factory directory unavailable; recovery required");
+  const directory = parse(snapshot.directory, {
+    ...snapshot.owner,
+    phase: snapshot.owner.phase === "active" ? "interrupted" : "closed",
+  });
+  if (!directory.factories.some((entry) => factoryKey(entry) === factoryKey(identity)))
+    throw new Error("factory unavailable");
+  if (!snapshot.value) throw new Error("binding unavailable; recovery required");
+  directory.factories = directory.factories.filter((entry) => factoryKey(entry) === factoryKey(identity));
+  directory.instances = directory.instances.filter((entry) => factoryKey(entry) === factoryKey(identity));
+  directory.sessions = directory.sessions.filter((entry) => factoryKey(entry) === factoryKey(identity));
+  return { directory, journal: snapshot.value };
 }

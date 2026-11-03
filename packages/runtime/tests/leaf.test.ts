@@ -41,7 +41,11 @@ it("activates only changed units, fences compatibility and leaves failed binding
   const initial = await product(),
     seed = join(root, "seed");
   await writeProduct(seed, initial);
+  let commitFault = false;
   const options = {
+    onActivation: async (checkpoint: { stage: string }) => {
+      if (commitFault && checkpoint.stage === "committed") throw new Error("injected postcommit observer failure");
+    },
     root: join(root, "state"),
     seed,
     manifest,
@@ -111,6 +115,19 @@ it("activates only changed units, fences compatibility and leaves failed binding
     const restored = await session.confirm(await session.activate(), "web:0.3.0");
     assert.equal(restored.generation, coordinated.envelope.digest);
     assert.equal(restored.units.daemon.version, "0.3.0");
+    assert.deepEqual(await session.request("read"), { retained: "yes" });
+    w = await web("0.6.0", "probe/2");
+    const committedDespiteFault = await product();
+    commitFault = true;
+    await assert.rejects(session.applyLeaf(committedDespiteFault, renderer), /commit persisted; cleanup failed/);
+    assert.equal((await session.snapshot()).generation, committedDespiteFault.envelope.digest);
+    assert.equal((await session.snapshot()).units.web.version, "0.6.0");
+    await session.close();
+    session = await Session.open(options);
+    await session.start();
+    session.documentStart();
+    const coldCommitted = await session.confirm(await session.activate(), "web:0.6.0");
+    assert.equal(coldCommitted.generation, committedDespiteFault.envelope.digest);
     assert.deepEqual(await session.request("read"), { retained: "yes" });
   } finally {
     await session.close();
