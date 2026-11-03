@@ -76,6 +76,10 @@ it("automatically prepares signed leaf candidates, rejects faults/regressions an
     await writeFeed(authority, lane, content);
     assert.deepEqual((await until(observer.status, (s) => s.phase === "prepared")).prepared?.changed, ["web"]);
     assert.equal((await observer.candidate())?.envelope.digest, next.envelope.digest);
+    const copy = await observer.candidate();
+    assert.ok(copy);
+    copy.envelope.generation.carrier = 999;
+    assert.equal((await observer.candidate())?.envelope.generation.carrier, 1);
     let revision = 2;
     for (const mode of ["missing", "corrupt", "truncate"] as const) {
       const incoming = release(`web-${mode}`),

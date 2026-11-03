@@ -132,7 +132,7 @@ export async function watch(
     close: () => attachment.close(),
     candidate: async (): Promise<Release | undefined> => {
       if (stopped) throw new Error("discovery is stopped");
-      const value = prepared;
+      const value = prepared ? structuredClone(prepared) : undefined;
       if (!value || state.phase !== "prepared") return undefined;
       const g = value.generation;
       return {

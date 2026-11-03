@@ -78,10 +78,10 @@ async function handle(root: string, request: IncomingMessage, response: ServerRe
       return;
     }
     if (mode === "truncate") {
+      response.flushHeaders();
       const chunk = Buffer.alloc(Math.min(65536, Math.max(1, Math.floor((end - start + 1) / 2))));
       const read = await file.read(chunk, 0, chunk.length, start);
-      response.write(chunk.subarray(0, read.bytesRead));
-      response.destroy();
+      response.write(chunk.subarray(0, read.bytesRead), () => response.destroy());
       return;
     }
     if (mode === "corrupt") {
