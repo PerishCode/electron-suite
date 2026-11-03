@@ -59,7 +59,9 @@ export class Session {
   private ready = false;
   async expose<M>(service: string, options: Omit<Expose<M>, "identity">) {
     if (this.closed || this.closing) throw new Error("session is closed");
-    return this.factory.expose({ ...options, identity: { service, generation: this.mount.target } });
+    return this.host
+      .factory(this.factory.scope)
+      .expose({ ...options, identity: { service, generation: this.mount.target } });
   }
   private constructor(
     readonly options: SessionOptions,
