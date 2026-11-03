@@ -67,7 +67,7 @@ it("reads offline binding without changing it and rejects online inspection", as
   const root = await mkdtemp(join(tmpdir(), "offline-binding-"));
   roots.push(root);
   const scope = { channel: channel("stable"), namespace: namespace("probe") };
-  const host = await serve(join(root, "manager.sock"), undefined, undefined, root);
+  const host = await serve(join(root, "manager.sock"), { root: root });
   const factory = host.factory(scope);
   // Initialize the factory's persistent ownership and bind an armed candidate.
   await factory.grant({ kind: "data", name: "probe", scope: "factory" });

@@ -9,7 +9,7 @@ if (!endpoint || !authority) {
   throw new Error("sidecar endpoint and authority are required");
 }
 
-const service = await serve(endpoint, undefined, authority);
+const service = await serve(endpoint, { authority: authority });
 const stop = async () => {
   await service.close();
   process.exitCode = 0;

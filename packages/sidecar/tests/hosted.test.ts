@@ -221,7 +221,7 @@ it("holds a managed port, forwards only owned sockets and releases resources aft
   expect((await client.resources(identity)).grants.every((g) => g.scope === "factory")).toBe(true);
 });
 
-it("keeps one service slot across generations until successful retirement", async () => {
+it("keeps one service service across generations until successful retirement", async () => {
   const { server, client, options } = await fixture();
   let fail = true;
   const first = await server.expose<Methods>({

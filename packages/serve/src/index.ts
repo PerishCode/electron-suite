@@ -49,7 +49,7 @@ export class Sources {
     );
     if (!sources.length) throw new Error("at least one static source is required");
     const key = createHash("sha256").update(data).digest("hex").slice(0, 20);
-    const manager = await serve(join(tmpdir(), `pesuite-serve-${key}-${process.pid}.sock`), undefined, undefined, data);
+    const manager = await serve(join(tmpdir(), `pesuite-serve-${key}-${process.pid}.sock`), { root: data });
     const endpoints: Endpoint[] = [];
     try {
       const factory = manager.factory(options.scope);

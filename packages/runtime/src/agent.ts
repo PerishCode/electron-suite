@@ -49,7 +49,7 @@ export class Agent {
         command: executable,
         args: [join(mount.daemon, "main.mjs")],
         generation: digest,
-        slot: "daemon",
+        service: "daemon",
         ready: `ready:${mount.target}:${agent.nonce}`,
         env: {
           ELECTRON_RUN_AS_NODE: "1",

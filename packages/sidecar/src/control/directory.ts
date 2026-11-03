@@ -1,4 +1,5 @@
 import { type FactoryScope, factoryKey, factoryScope } from "@perishcode/protocol";
+import { type ProcessInstance, processInstance } from "../process/observe.js";
 import { type SessionRecord, sessionKey, sessionScope } from "./session.js";
 import { type Identity, identity } from "./types.js";
 
@@ -9,6 +10,7 @@ export interface Instance extends Identity {
   kind: "hosted" | "process";
   phase: Phase;
   pid?: number;
+  process?: ProcessInstance;
 }
 export interface FactoryEntry {
   channel: FactoryScope["channel"];
@@ -18,7 +20,7 @@ export interface FactoryEntry {
   phase: "unopened" | "opening" | "ready" | "failed" | "closed";
 }
 export interface Directory {
-  schema: 2;
+  schema: 3;
   revision: number;
   manager: { incarnation: string; pid: number; phase: "active" | "closed" | "interrupted" };
   factories: FactoryEntry[];
@@ -28,7 +30,7 @@ export interface Directory {
 export interface Observer {
   run?<T>(scope: Identity, operation: () => Promise<T>): Promise<T>;
   claim(scope: Identity, incarnation: string): void;
-  change(scope: Identity, incarnation: string, phase: Phase, pid?: number): void;
+  change(scope: Identity, incarnation: string, phase: Phase, pid?: number, process?: ProcessInstance): void;
 }
 export const slot = (scope: Identity) => JSON.stringify([scope.namespace, scope.channel, scope.service]);
 const uuid = (value: unknown): string => {
@@ -39,7 +41,7 @@ export function parse(input: unknown, owner: Directory["manager"]): Directory {
   if (!input || typeof input !== "object") throw new Error("directory is missing; recovery required");
   const data = input as Directory;
   if (
-    data.schema !== 2 ||
+    data.schema !== 3 ||
     !Number.isSafeInteger(data.revision) ||
     data.revision < 0 ||
     data.manager?.incarnation !== owner.incarnation ||
@@ -101,6 +103,19 @@ export function parse(input: unknown, owner: Directory["manager"]): Directory {
       (entry.manager !== owner.incarnation || (entry.kind === "hosted" && entry.pid !== owner.pid))
     )
       throw new Error("instance owner mismatch");
+    const process = entry.process === undefined ? undefined : processInstance(entry.process);
+    if (entry.kind === "process" && ["ready", "stopping"].includes(entry.phase) && !process)
+      throw new Error("process ownership witness missing");
+    if (
+      process &&
+      (process.target.pid !== entry.pid ||
+        process.stamp.incarnation !== entry.incarnation ||
+        process.stamp.channel !== scope.channel ||
+        process.stamp.namespace !== scope.namespace ||
+        process.stamp.generation !== scope.generation ||
+        process.stamp.service !== scope.service)
+    )
+      throw new Error("process witness identity mismatch");
     return {
       ...scope,
       manager: uuid(entry.manager),
@@ -108,6 +123,7 @@ export function parse(input: unknown, owner: Directory["manager"]): Directory {
       kind: entry.kind,
       phase: entry.phase,
       ...(entry.pid === undefined ? {} : { pid: entry.pid }),
+      ...(process ? { process } : {}),
     };
   });
   if (
@@ -125,7 +141,7 @@ export function parse(input: unknown, owner: Directory["manager"]): Directory {
   if ([...instances, ...sessions].some((entry) => !indexed.has(factoryKey(entry))))
     throw new Error("directory entry has no factory authority");
   return {
-    schema: 2,
+    schema: 3,
     revision: data.revision,
     manager: { incarnation: owner.incarnation, pid: owner.pid, phase: owner.phase },
     factories,

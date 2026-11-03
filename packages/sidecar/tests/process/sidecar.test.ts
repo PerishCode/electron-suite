@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { channel, digest, namespace } from "@perishcode/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { Sidecar, type Spec } from "@";
+import type { Spec } from "@";
+import { Sidecar } from "../../src/host.js";
 
 const hosts: Sidecar[] = [];
 const roots: string[] = [];
@@ -18,13 +19,13 @@ function spec(name: string, ready = "ready"): Spec {
     grace: 200,
     namespace: namespace("main"),
     ready,
-    slot: "daemon",
-    timeout: 200,
+    service: "daemon",
+    timeout: 2000,
   };
 }
 
 function host(): Sidecar {
-  const value = new Sidecar();
+  const value = new Sidecar(join(tmpdir(), `host-${process.pid}`));
   hosts.push(value);
   return value;
 }

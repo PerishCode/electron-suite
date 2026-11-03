@@ -120,7 +120,7 @@ describe("daemon", () => {
         generation: digest("daemonone"),
         namespace: scope,
         ready: "ready",
-        slot: "daemon",
+        service: "daemon",
       });
       await client.forward({ namespace: scope, channel: channel("stable") }, port.lease, socket.lease);
 
@@ -141,7 +141,7 @@ describe("daemon", () => {
         generation: digest("daemontwo"),
         namespace: scope,
         ready: "ready",
-        slot: "daemon",
+        service: "daemon",
       });
       expect(await call(port.value, "/state", token)).toEqual({ body: { value: 42 }, status: 200 });
     } finally {

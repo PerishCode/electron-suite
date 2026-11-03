@@ -12,7 +12,7 @@ it("discovers privately, scopes arbitrary methods and fences restarted services 
   const socket = join(root, "control.sock"),
     scope = { channel: channel("beta"), namespace: namespace("local") };
   const generation = digest("generation");
-  let manager = await serve(socket, undefined, undefined, root);
+  let manager = await serve(socket, { root: root });
   try {
     const expose = () =>
       manager
@@ -52,7 +52,7 @@ it("discovers privately, scopes arbitrary methods and fences restarted services 
     await assert.rejects(inspector.target("custom", generation, first.incarnation), /stale/);
     await manager.close();
     await assert.rejects(readFile(join(root, "control.json")), { code: "ENOENT" });
-    manager = await serve(socket, undefined, undefined, root);
+    manager = await serve(socket, { root: root });
     await expose();
     await assert.rejects(inspector.list(), /authority/);
     assert.notEqual((await Inspector.open(root, scope)).manager, inspector.manager);

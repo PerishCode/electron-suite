@@ -78,13 +78,14 @@ function lease(value: unknown): Lease {
   if (!valid(generation)) throw new TypeError("lease.generation is invalid");
 
   return {
+    incarnation: text(data.incarnation, "lease.incarnation"),
     attachment: text(data.attachment, "lease.attachment"),
     capability: text(data.capability, "lease.capability"),
     channel: channel(text(data.channel, "lease.channel")),
     generation,
     namespace: namespace(text(data.namespace, "lease.namespace")),
     pid: number(data.pid, "lease.pid"),
-    slot: text(data.slot, "lease.slot"),
+    service: text(data.service, "lease.service"),
   };
 }
 
@@ -104,7 +105,7 @@ function spec(value: unknown): Spec {
     generation,
     namespace: namespace(text(data.namespace, "spec.namespace")),
     ready: text(data.ready, "spec.ready"),
-    slot: text(data.slot, "spec.slot"),
+    service: text(data.service, "spec.service"),
   };
 
   if (args) result.args = args;

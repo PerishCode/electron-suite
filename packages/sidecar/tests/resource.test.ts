@@ -141,12 +141,12 @@ it("binds complete factory APIs and isolates equal resource names across distrib
     await one.close();
     const next = await left.expose({ ...options, identity: { ...identity, generation: digest("two") } });
     expect(await readFile(join(next.context.roots.data, "retained"), "utf8")).toBe("same-factory");
-    await expect(left.start({ ...scope, channel: channel("beta"), slot: "foreign" } as never)).rejects.toThrow(
+    await expect(left.start({ ...scope, channel: channel("beta"), service: "foreign" } as never)).rejects.toThrow(
       "factory identity mismatch",
     );
     const lease = await left.start({
       generation: identity.generation,
-      slot: "child",
+      service: "child",
       command: process.execPath,
       args: ["-e", "console.log('ready');setInterval(()=>{},1000)"],
       ready: "ready",
@@ -184,7 +184,7 @@ it("rejects missing scope, legacy layout and factory-mismatched registry bytes",
   try {
     await expect(Resources.open({ root, namespace: namespace("main") } as never)).rejects.toThrow("channel");
     await mkdir(join(root, "namespaces"));
-    await expect(serve(join(root, "old.sock"))).rejects.toThrow("explicit migration");
+    await expect(serve(join(root, "old.sock"))).rejects.toThrow("unsupported");
     await expect(stat(join(root, "manager.sqlite"))).rejects.toMatchObject({ code: "ENOENT" });
     await rm(join(root, "namespaces"), { recursive: true });
     const a = await Resources.open({ root, channel: channel("stable"), namespace: namespace("main") });
