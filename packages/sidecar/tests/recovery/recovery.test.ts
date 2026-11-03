@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -345,5 +345,22 @@ it("refuses recovery while an external lifecycle controller remains alive", asyn
   } finally {
     await kill(child);
     await f.crash();
+  }
+}, 15000);
+
+it("refuses a linked factory storage root without touching the target", async () => {
+  const f = await fixture("linked-storage");
+  await f.crash();
+  const before = await authority(f.root),
+    path = join(f.root, "factories"),
+    target = join(f.root, "moved-factories");
+  await rename(path, target);
+  await symlink(target, path);
+  try {
+    await assert.rejects(inspectRecovery(f.root), /factory storage/);
+    assert.deepEqual(await authority(f.root), before);
+  } finally {
+    await rm(path);
+    await rename(target, path);
   }
 }, 15000);

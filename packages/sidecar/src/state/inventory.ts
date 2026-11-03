@@ -42,7 +42,10 @@ export class Inventory {
       const entries = [...view.current.directory.factories].sort((a, b) => factoryKey(a).localeCompare(factoryKey(b)));
       const actual: string[] = [];
       const storage = join(root, "factories");
-      const channels = await readdir(storage).catch((error) => {
+      const channels = await (async () => {
+        if (!(await lstat(storage)).isDirectory()) throw new Error("linked/invalid factory storage");
+        return readdir(storage);
+      })().catch((error) => {
         if (error.code === "ENOENT") return [];
         throw error;
       });
