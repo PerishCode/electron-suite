@@ -153,6 +153,7 @@ it.runIf(!!process.env.PESUITE_SILO_ENDPOINT)(
             result: "passed",
             endpoint,
             bucket,
+            publickey,
             root,
             metadata: next,
             first,
