@@ -207,3 +207,22 @@ it("drains accepted Capsule methods before invoking product stop", async () => {
     await f.close();
   }
 }, 15000);
+
+it("waits for adapter initialization before host cleanup when quit arrives during loading", async () => {
+  const f = await fixture();
+  try {
+    f.control.hold = true;
+    const activation = f.session.activate();
+    while (!f.control.waiting) await new Promise((done) => setTimeout(done, 10));
+    const closing = f.session.close();
+    await new Promise((done) => setTimeout(done, 25));
+    assert.deepEqual(f.control.events, ["initialize"]);
+    f.control.release();
+    await activation;
+    await closing;
+    assert.deepEqual(f.control.events, ["initialize", "stop"]);
+    await assert.rejects(stat(f.control.resources.roots.runtime), /ENOENT/);
+  } finally {
+    await f.close();
+  }
+}, 15000);

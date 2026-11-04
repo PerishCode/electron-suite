@@ -446,6 +446,7 @@ export class Session {
     return this.closing;
   }
   private async closeWithin(error: string) {
+    await this.activation?.catch(() => {});
     await this.factory.session(async () => {
       if (this.attempt && !this.ready) {
         await this.generations.fail(this.attempt, error);
