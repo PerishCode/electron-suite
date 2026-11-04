@@ -10,7 +10,7 @@ import { type Architecture, layout, nativePlatform, type Platform, separate, tar
 export type { Architecture, Platform } from "./platform.js";
 export { layout, nativePlatform, separate, target } from "./platform.js";
 
-import { encode, type Manifest, parse } from "@perishcode/release";
+import { encode, type Manifest, parse, protocolIdentity } from "@perishcode/release";
 
 export interface Input {
   platform?: Platform;
@@ -113,7 +113,7 @@ export async function pack(input: Input): Promise<Package> {
     nodeGypRebuild: false,
     npmRebuild: false,
     productName: identity.productName,
-    protocols: [{ name: identity.productName, schemes: [manifest.identity.scheme] }],
+    protocols: [{ name: identity.productName, schemes: [protocolIdentity(manifest).external] }],
   };
 
   try {

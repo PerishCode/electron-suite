@@ -3,7 +3,12 @@ import type { Capsule } from "@perishcode/runtime";
 export function create(): Capsule {
   return {
     handlers: {},
-    initialize: async () => ({ window: { title: "electron-suite fixture" }, witness: "capsule:fixture" }),
+    ready: async () => {},
+    initialize: async () => ({
+      loading: "Loading",
+      window: { title: "electron-suite fixture" },
+      witness: "capsule:fixture",
+    }),
     stop: async () => {},
   };
 }

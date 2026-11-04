@@ -44,3 +44,13 @@ export function channelDescriptor(value: string, product: ProductIdentity): Read
     storagePrefix: lane,
   });
 }
+
+/** Runtime-local communication and OS entry identity have different scopes. */
+export function protocolIdentity(manifest: { channel: string; identity: { scheme: string } }) {
+  const lane = releaseChannel(manifest.channel),
+    scheme = manifest.identity.scheme;
+  const internal = lane === "stable" ? scheme : scheme.slice(0, -lane.length - 1);
+  if (!internal || (lane !== "stable" && !scheme.endsWith(`-${lane}`)))
+    throw new Error("inconsistent protocol channel");
+  return Object.freeze({ internal, external: `${internal}-${lane}`, origin: `${internal}://carrier` });
+}
