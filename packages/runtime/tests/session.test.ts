@@ -22,7 +22,7 @@ async function fixture() {
   for (const name of ["capsule", "daemon", "web"]) await mkdir(join(root, name));
   await writeFile(
     join(root, "capsule/index.mjs"),
-    'export function create(){return {handlers:{},initialize:async c=>({window:{title:"fixture"},witness:c.generation}),stop:async()=>{}}}',
+    'export function create(){return {handlers:{},ready:async()=>{},initialize:async c=>({loading:"Loading",window:{title:"fixture"},witness:c.generation}),stop:async()=>{}}}',
   );
   const sdk = fileURLToPath(new URL("../dist/index.mjs", import.meta.url));
   await writeFile(

@@ -2,10 +2,21 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { Bridge } from "./bridge.js";
 
 const bootstrap = Object.freeze(ipcRenderer.sendSync("pesuite:bootstrap"));
+const request = async (method: string, value?: unknown): Promise<Record<string, unknown>> => {
+  const response = await fetch(`${bootstrap.origin}/_daemon/${method}`, {
+    signal: AbortSignal.timeout(5000),
+    method: method === "write" ? "POST" : "GET",
+    headers: { "x-pesuite-nonce": bootstrap.nonce, "content-type": "application/json" },
+    body: method === "write" ? JSON.stringify(value) : undefined,
+  });
+  if (!response.ok) throw new Error(`local protocol ${response.status}`);
+  return response.json();
+};
 const bridge: Bridge = {
   bootstrap,
-  health: () => ipcRenderer.invoke("pesuite:daemon", bootstrap.nonce, "health"),
-  read: () => ipcRenderer.invoke("pesuite:daemon", bootstrap.nonce, "read"),
-  write: (value) => ipcRenderer.invoke("pesuite:daemon", bootstrap.nonce, "write", value),
+  call: (method, input) => ipcRenderer.invoke("pesuite:call", bootstrap.nonce, method, input),
+  health: () => request("health"),
+  read: () => request("read"),
+  write: (value) => request("write", value),
 };
 contextBridge.exposeInMainWorld("pesuite", Object.freeze(bridge));

@@ -15,7 +15,7 @@ it("activates only changed units, fences compatibility and leaves failed binding
   await mkdir(capsule);
   await writeFile(
     join(capsule, "index.mjs"),
-    'export function create(){return {handlers:{},initialize:async()=>({window:{title:"fixture"},witness:"capsule1"}),stop:async()=>{}}}',
+    'export function create(){return {handlers:{},ready:async()=>{},initialize:async()=>({loading:"Loading",window:{title:"fixture"},witness:"capsule1"}),stop:async()=>{}}}',
   );
   const entry = pathToFileURL(join(process.cwd(), "dist/index.mjs")).href;
   const web = async (version: string, api = "probe/1") => {

@@ -15,6 +15,7 @@ async function fixture(legacy = false) {
   const code = `import{readFile,writeFile}from'node:fs/promises';import{join}from'node:path';
     export const control={hold:false,waiting:false,release:()=>{},failInit:false,failStop:false,invalid:false,creates:0,events:[],resources:undefined,entered:false,drain:()=>{}};
     export function create(){control.creates++;let resources;return{handlers:{status:()=>({ready:true}),wait:async()=>{control.entered=true;return new Promise(r=>control.drain=()=>r('drained'));}},
+      async ready(){},
       async initialize(c){resources=c.resources;control.resources=resources;control.events.push('initialize');
         await resources.allocate({kind:'lock',name:'probe'});
         await writeFile(join(resources.roots.runtime,'active'),'capsule-owned');
@@ -22,7 +23,7 @@ async function fixture(legacy = false) {
         await writeFile(join(resources.roots.data,'count'),String(count+1));
         if(control.hold)await new Promise(r=>{control.release=r;control.waiting=true;});
         if(control.failInit)throw Error('injected capsule initialize failure');
-        return control.invalid?{}:{window:{title:'product'},witness:c.generation};
+        return control.invalid?{}:{loading:"Loading",window:{title:'product'},witness:c.generation};
       },
       async stop(){control.events.push('stop');if(control.failStop)throw Error('injected capsule stop failure');
         await writeFile(join(resources.roots.data,'stopped'),'drained');}
@@ -82,6 +83,7 @@ async function fixture(legacy = false) {
     },
     close: async () => {
       if (control) {
+        control.drain();
         control.failStop = false;
         control.release();
       }
@@ -99,25 +101,25 @@ it("gates readiness, preserves authority on failed drain, and creates a fresh co
     const activation = f.session.activate();
     await assert.rejects(f.session.activate(), /already initialized/);
     while (!f.control.waiting) await new Promise((r) => setTimeout(r, 10));
-    const identity = { service: "capsule", generation: f.release.envelope.generation.capsule.digest };
-    assert.equal((await f.factory.directory()).instances.find((x) => x.service === "capsule")?.phase, "initializing");
-    await assert.rejects(f.factory.connect(identity), /not ready/);
+    const identity = { service: "electron", generation: f.release.envelope.digest };
+    assert.ok((await f.factory.directory()).instances.every((x) => x.service !== "capsule"));
+    await assert.rejects(f.session.call("status", null), /not ready/);
     f.control.release();
     const composition = await activation;
-    const peer = await f.factory.connect<{ status: { input: unknown; output: unknown } }>(identity);
+    const peer = f.session;
     await f.session.start();
     const before = await f.session.confirm(composition, "renderer");
-    assert.equal(before.product?.identity.generation, identity.generation);
-    assert.equal(before.product?.incarnation, f.control.resources.incarnation);
+    assert.equal(before.product?.artifact, f.release.envelope.generation.capsule.digest);
+    assert.equal(f.control.resources.identity.service, "electron");
     const temporary = f.control.resources.roots.runtime,
       data = f.control.resources.roots.data;
     f.control.failStop = true;
     await assert.rejects(f.session.close(), /stop failure/);
     assert.equal((await f.session.snapshot()).phase, "failed");
-    assert.equal((await f.factory.directory()).instances.find((x) => x.service === "capsule")?.phase, "failed");
+    assert.equal((await f.factory.directory()).instances.find((x) => x.service === "electron")?.phase, "ready");
     assert.equal((await stat(join(temporary, "active"))).isFile(), true);
     assert.equal((await f.session.request("health")).pid, before.daemon.pid);
-    await assert.rejects(f.control.resources.allocate({ kind: "lock", name: "late" }), /not allocating/);
+
     f.control.failStop = false;
     await f.session.close();
     await assert.rejects(stat(temporary), /ENOENT/);
@@ -129,9 +131,10 @@ it("gates readiness, preserves authority on failed drain, and creates a fresh co
     await cold.start();
     const receipt = await cold.confirm(next, "renderer2");
     assert.equal(f.control.creates, 2);
-    assert.notEqual(receipt.product?.incarnation, before.product?.incarnation);
+    assert.equal(receipt.product?.artifact, before.product?.artifact);
+    assert.ok(receipt.directory.instances.every((x) => x.service !== "capsule"));
     assert.equal(await readFile(join(data, "count"), "utf8"), "2");
-    await assert.rejects(peer.call("status", null), /fenced/);
+    await assert.rejects(peer.call("status", null), /closed/);
   } finally {
     await f.close();
   }
@@ -144,9 +147,12 @@ it.each([false, true])(
     try {
       f.control.failInit = true;
       f.control.failStop = failedStop;
-      await assert.rejects(f.session.activate(), failedStop ? /initialization and drain failed/ : /initialize failure/);
-      const instance = (await f.factory.directory()).instances.find((x) => x.service === "capsule");
-      assert.equal(instance?.phase, failedStop ? "failed" : "retired");
+      await assert.rejects(
+        f.session.activate(),
+        failedStop ? /adapter initialization and cleanup failed/ : /initialize failure/,
+      );
+      const instance = (await f.factory.directory()).instances.find((x) => x.service === "electron");
+      assert.equal(instance?.phase, "ready");
       await assert.rejects(f.session.start(), /not ready/);
       if (failedStop) assert.equal((await stat(f.control.resources.roots.runtime)).isDirectory(), true);
       f.control.failStop = false;
@@ -165,7 +171,7 @@ it("rejects an invalid composition and drains its initialized body", async () =>
     f.control.invalid = true;
     await assert.rejects(f.session.activate(), /invalid capsule composition/);
     assert.deepEqual(f.control.events, ["initialize", "stop"]);
-    await assert.rejects(stat(f.control.resources.roots.runtime), /ENOENT/);
+    assert.ok((await f.factory.directory()).instances.every((x) => x.service !== "capsule"));
   } finally {
     await f.close();
   }
@@ -186,10 +192,7 @@ it("drains accepted Capsule methods before invoking product stop", async () => {
     const composition = await f.session.activate();
     await f.session.start();
     await f.session.confirm(composition, "renderer");
-    const peer = await f.factory.connect<{ wait: { input: null; output: string } }>({
-      service: "capsule",
-      generation: f.release.envelope.generation.capsule.digest,
-    });
+    const peer = f.session;
     const call = peer.call("wait", null);
     while (!f.control.entered) await new Promise((r) => setTimeout(r, 10));
     const close = f.session.close();
@@ -201,6 +204,25 @@ it("drains accepted Capsule methods before invoking product stop", async () => {
     assert.deepEqual(f.control.events, ["initialize", "stop"]);
   } finally {
     f.control.drain();
+    await f.close();
+  }
+}, 15000);
+
+it("waits for adapter initialization before host cleanup when quit arrives during loading", async () => {
+  const f = await fixture();
+  try {
+    f.control.hold = true;
+    const activation = f.session.activate();
+    while (!f.control.waiting) await new Promise((done) => setTimeout(done, 10));
+    const closing = f.session.close();
+    await new Promise((done) => setTimeout(done, 25));
+    assert.deepEqual(f.control.events, ["initialize"]);
+    f.control.release();
+    await activation;
+    await closing;
+    assert.deepEqual(f.control.events, ["initialize", "stop"]);
+    await assert.rejects(stat(f.control.resources.roots.runtime), /ENOENT/);
+  } finally {
     await f.close();
   }
 }, 15000);

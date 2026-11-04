@@ -33,7 +33,7 @@ it.each(["prepared", "daemon-stopped", "ready", "committed"] as const)(
     await mkdir(capsule);
     await writeFile(
       join(capsule, "index.mjs"),
-      'export function create(){return {handlers:{},initialize:async()=>({window:{title:"probe"},witness:"capsule"}),stop:async()=>{}}}',
+      'export function create(){return {handlers:{},ready:async()=>{},initialize:async()=>({loading:"Loading",window:{title:"probe"},witness:"capsule"}),stop:async()=>{}}}',
     );
     const manifest = resolve({}, { channel: channel("stable"), version: "0.1.0" });
     async function unit(kind: "web" | "daemon", version: string) {

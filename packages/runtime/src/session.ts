@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { channel, type Digest, type Generation, gates, namespace } from "@perishcode/protocol";
 import type { Release } from "@perishcode/publish";
-import { decode, type Manifest, readProduct } from "@perishcode/release";
+import { decode, type Manifest, protocolIdentity, readProduct } from "@perishcode/release";
 import {
+  type Attachment,
   Client,
+  type Context,
   type Directory,
   type Expose,
   type Factory,
@@ -16,7 +18,7 @@ import {
 } from "@perishcode/sidecar";
 import { Agent } from "./agent.js";
 import { type Attempt, Generations, type Mount } from "./generations.js";
-import { type Composition, Product, type ProductReceipt } from "./lifecycle.js";
+import { type CapsuleEnvironment, type Composition, Product, type ProductReceipt } from "./lifecycle.js";
 import { leaf, unitFile } from "./units.js";
 export interface ActivationCheckpoint {
   stage: "prepared" | "daemon-stopped" | "ready" | "committed";
@@ -70,6 +72,7 @@ export class Session {
   private payload?: Composition;
   private product?: Product;
   private activation?: Promise<Composition>;
+  private electron?: Attachment;
   private witness = "";
   private current: Mount;
   private view: Mount;
@@ -117,6 +120,8 @@ export class Session {
   }
   browser() {
     return {
+      origin: protocolIdentity(this.manifest).origin,
+      external: protocolIdentity(this.manifest).external,
       generation: this.docGeneration,
       nonce: this.docNonce,
       version: this.manifest.identity.version,
@@ -134,7 +139,7 @@ export class Session {
   }
   webURL() {
     if (!this.viewGeneration) throw new Error("web content is not mounted");
-    return `${this.manifest.identity.origin}/_web/${this.viewGeneration.web.digest.slice(7)}/`;
+    return `${protocolIdentity(this.manifest).origin}/_web/${this.viewGeneration.web.digest.slice(7)}/`;
   }
   static async open(options: SessionOptions): Promise<Session> {
     await mkdir(options.root, { recursive: true, mode: 0o700 });
@@ -183,21 +188,49 @@ export class Session {
     }
   }
 
-  activate(): Promise<Composition> {
+  activate(environment: CapsuleEnvironment = {}): Promise<Composition> {
     if (this.closed || this.closing || this.activation)
       return Promise.reject(new Error("capsule is closed or already initialized"));
-    this.activation = this.initializeProduct().catch((fault) => {
+    this.activation = this.initializeProduct(environment).catch((fault) => {
       this.phase = "failed";
       this.error = String(fault);
       throw fault;
     });
     return this.activation;
   }
-  private async initializeProduct(): Promise<Composition> {
+  private async initializeProduct(environment: CapsuleEnvironment): Promise<Composition> {
     const generation = (await this.content()).envelope.generation.capsule.digest;
     if (this.closed || this.closing) throw new Error("session is closed");
-    this.product = new Product(this.host.factory(this.factory.scope), this.mount, this.nonce, generation);
-    this.payload = await this.product.initialize();
+    let resources: Context | undefined;
+    this.electron = await this.host.factory(this.factory.scope).expose({
+      identity: { service: "electron", generation: this.anchor },
+      handlers: {},
+      lifecycle: {
+        initialize: async (context) => {
+          resources = context;
+        },
+        stop: async () => {},
+      },
+    });
+    this.product = new Product(
+      resources!,
+      this.mount,
+      this.nonce,
+      generation,
+      { request: (operation, value) => this.request(operation, value) },
+      environment,
+      protocolIdentity(this.manifest),
+    );
+    try {
+      this.payload = await this.product.initialize();
+    } catch (error) {
+      try {
+        await this.product.close();
+      } catch (cleanup) {
+        throw new AggregateError([error, cleanup], "adapter initialization and cleanup failed");
+      }
+      throw error;
+    }
     return this.payload;
   }
 
@@ -221,10 +254,15 @@ export class Session {
       mount,
       generation.daemon.digest,
       this.options.executable,
-      this.manifest.identity.origin,
+      protocolIdentity(this.manifest).origin,
       nonce,
     );
     this.starts++;
+  }
+  async call(method: string, input: unknown): Promise<unknown> {
+    if (this.closed || this.closing || !this.product)
+      return Promise.reject(new Error("session is closed or not initialized"));
+    return this.product.call(method, input);
   }
   async request(operation: "health" | "read" | "write", value?: unknown) {
     if (this.closed || !this.agent) throw new Error("session is closed or not started");
@@ -245,6 +283,7 @@ export class Session {
       }
       this.ready = true;
       this.phase = "ready";
+      await this.product.ready();
       return this.snapshot();
     });
   }
@@ -407,6 +446,7 @@ export class Session {
     return this.closing;
   }
   private async closeWithin(error: string) {
+    await this.activation?.catch(() => {});
     await this.factory.session(async () => {
       if (this.attempt && !this.ready) {
         await this.generations.fail(this.attempt, error);
@@ -414,6 +454,7 @@ export class Session {
       }
       await this.product?.close();
       await this.agent?.close();
+      await this.electron?.close();
     });
     await this.host.close();
     this.closed = true;

@@ -1,11 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { protocolIdentity } from "@perishcode/release";
 import { type Receipt, Session, type SessionOptions } from "@perishcode/runtime";
 import { type Options as UpdateOptions, watch } from "@perishcode/update";
-import { app, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, ipcMain, protocol } from "electron";
-import { asset } from "./assets.js";
+import { app, BrowserWindow, ipcMain, protocol } from "electron";
 import { type AutomationReceipt, observeAutomation, prepareAutomation } from "./automation.js";
 import { renderer as rendererAdapter } from "./renderer.js";
+import { Links, loading, routes } from "./routing.js";
 
 export interface HostOptions extends Omit<SessionOptions, "executable"> {
   preload: string;
@@ -24,12 +25,22 @@ export interface HostOptions extends Omit<SessionOptions, "executable"> {
 
 export interface HostReceipt extends Receipt {
   automation: AutomationReceipt;
+  adapter: {
+    loading: string;
+    internal: string;
+    external: string;
+    ipcCalls: number;
+    protocolCalls: number;
+    links: ReturnType<Links["snapshot"]>;
+  };
 }
 
 export async function startElectron(options: HostOptions): Promise<void> {
   const automated = !!(options.probe || options.automation);
   prepareAutomation(automated);
   const root = resolve(options.root);
+  const identity = protocolIdentity(options.manifest);
+  const links = new Links(app, identity.external);
   app.setName(options.manifest.identity.name);
   app.setPath("userData", root);
   if (!app.requestSingleInstanceLock()) {
@@ -38,7 +49,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
   }
   protocol.registerSchemesAsPrivileged([
     {
-      scheme: options.manifest.identity.scheme,
+      scheme: identity.internal,
       privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true },
     },
   ]);
@@ -46,12 +57,24 @@ export async function startElectron(options: HostOptions): Promise<void> {
   let closing = false;
   let window: BrowserWindow | undefined;
   let completed = false;
+  let registered: ReturnType<typeof routes> | undefined;
+  let screen: ReturnType<typeof rendererAdapter> | undefined;
+  const adapter = () => ({
+    loading: payloadLoading,
+    internal: identity.internal,
+    external: identity.external,
+    ...(registered?.snapshot() ?? { ipcCalls: 0, protocolCalls: 0 }),
+    links: links.snapshot(),
+  });
+  let payloadLoading = "";
   app.on("before-quit", (event) => {
     if (closing) return;
     event.preventDefault();
     closing = true;
     void (session?.close() ?? Promise.resolve({ status: "stopped", survivors: [] }))
       .then(async (stop) => {
+        registered?.close();
+        await links.close();
         if (options.receipt) {
           await mkdir(dirname(options.receipt), { recursive: true });
           await writeFile(`${options.receipt}.stop.json`, JSON.stringify(stop));
@@ -63,38 +86,22 @@ export async function startElectron(options: HostOptions): Promise<void> {
         app.exit(1);
       });
   });
-  const allowed = (event: IpcMainEvent | IpcMainInvokeEvent): boolean => {
-    const frame = event.senderFrame;
-    return (
-      !!window &&
-      event.sender === window.webContents &&
-      frame === window.webContents.mainFrame &&
-      frame.url === session?.webURL()
-    );
-  };
   try {
     await app.whenReady();
     session = await Session.open({ ...options, root, executable: process.execPath });
     const active = session;
-    const payload = await active.activate();
-    await active.start();
-    protocol.handle(options.manifest.identity.scheme, (request) => {
-      const url = new URL(request.url),
-        prefix = new URL(active.webURL()).pathname;
-      if (!url.pathname.startsWith(prefix)) return new Response("not found", { status: 404 });
-      url.pathname = `/${url.pathname.slice(prefix.length)}`;
-      return asset(active.mount.web, new Request(url, request));
+    const payload = await active.activate({
+      updates: options.updates
+        ? async () => {
+            if (!screen) throw new Error("renderer not ready for updates");
+            return watch(active, {
+              ...options.updates!,
+              activate: options.updates!.activate ? (release) => active.applyLeaf(release, screen!) : undefined,
+            });
+          }
+        : undefined,
     });
-    ipcMain.on("pesuite:bootstrap", (event) => {
-      event.returnValue = allowed(event) ? active.browser() : null;
-    });
-    ipcMain.handle("pesuite:daemon", (event, nonce: unknown, operation: unknown, value: unknown) => {
-      if (!allowed(event) || nonce !== active.documentNonce()) throw new Error("untrusted or expired renderer");
-      if (operation !== "health" && operation !== "read" && operation !== "write") throw new Error("unknown operation");
-      if (operation === "write" && Buffer.byteLength(JSON.stringify(value) ?? "") > 65536)
-        throw new Error("payload too large");
-      return active.request(operation, value);
-    });
+    payloadLoading = payload.loading;
     window = new BrowserWindow({
       title: payload.window.title,
       show: !automated,
@@ -109,19 +116,24 @@ export async function startElectron(options: HostOptions): Promise<void> {
     const automation = observeAutomation(window, automated);
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => event.preventDefault());
-    const screen = rendererAdapter(window, active);
+    registered = routes(ipcMain, protocol, window, active);
+    await window.loadURL(loading(payload.loading));
+    payloadLoading = await window.webContents.executeJavaScript("document.querySelector('output')?.textContent");
+    if (payloadLoading !== payload.loading) throw new Error("loading page evidence mismatch");
+    await active.start();
+    screen = rendererAdapter(window, active);
     const renderer = await screen.reload();
-    const receipt: HostReceipt = { ...(await active.confirm(payload, renderer)), automation: automation() };
-    if (options.updates)
-      await watch(active, {
-        ...options.updates,
-        activate: options.updates.activate ? (release) => active.applyLeaf(release, screen) : undefined,
-      });
+    const receipt: HostReceipt = {
+      ...(await active.confirm(payload, renderer)),
+      automation: automation(),
+      adapter: adapter(),
+    };
+    links.bind((url) => active.call("open", url));
     await options.inspect?.(
       active,
       receipt,
       () => app.quit(),
-      async () => ({ ...(await active.snapshot()), automation: automation() }),
+      async () => ({ ...(await active.snapshot()), automation: automation(), adapter: adapter() }),
     );
     if (options.receipt) {
       await mkdir(dirname(options.receipt), { recursive: true });

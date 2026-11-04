@@ -4,7 +4,7 @@ export {
   materialize,
 } from "./bundle.js";
 export type { ChannelDescriptor, ProductIdentity } from "./channel.js";
-export { channelDescriptor, releaseChannel } from "./channel.js";
+export { channelDescriptor, protocolIdentity, releaseChannel } from "./channel.js";
 export type { Unit } from "./emit.js";
 export { emit, emitBuildUnit, emitUnit, unit } from "./emit.js";
 export type {
