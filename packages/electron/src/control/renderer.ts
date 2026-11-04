@@ -1,6 +1,6 @@
 import type { Composition, Session } from "@perishcode/runtime";
 import type { BrowserWindow } from "electron";
-import { loading } from "./routing.js";
+import { loading } from "../routing.js";
 
 export function renderer(window: BrowserWindow, session: Session) {
   let lastLoading: string | undefined;

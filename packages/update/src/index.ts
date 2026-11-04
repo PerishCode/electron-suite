@@ -3,6 +3,11 @@ import { canonical, type Digest, type Envelope, type Pointer, verify } from "@pe
 import { Feed, type Release } from "@perishcode/publish";
 import type { Attachment, Expose } from "@perishcode/sidecar";
 
+export interface Source {
+  head: Feed["head"];
+  release: Feed["release"];
+}
+
 export interface Host {
   readonly anchor: Digest;
   content(): Promise<Release>;
@@ -20,6 +25,9 @@ export interface Methods {
   status: { input: unknown; output: Status };
 }
 export interface Options {
+  source?: Source;
+  /** Observation only; must not await shutdown from the accepted check. */
+  onError?: (error: unknown) => void;
   layer?: "leaf" | "capsule";
   endpoint: string;
   publickey: string;
@@ -37,7 +45,7 @@ export async function watch(host: Host, options: Options) {
   const layer = options.layer ?? "leaf";
   let current = initial;
   const refused = new Map<Digest, string>();
-  const feed = new Feed(options.endpoint, options.publickey, options);
+  const feed = options.source ?? new Feed(options.endpoint, options.publickey, options);
   let state: Status = { current: initial.envelope.digest, phase: "idle", checks: 0 };
   let pending: Promise<void> | undefined;
   let stopped = false;
@@ -132,6 +140,7 @@ export async function watch(host: Host, options: Options) {
         }
       } catch (error) {
         if (!stopped) state = { ...state, phase: "failed", error: String(error).slice(0, 1000) };
+        if (!stopped) options.onError?.(error);
       }
     };
     pending = execute().finally(() => {

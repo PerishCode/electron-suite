@@ -6,17 +6,39 @@ import { channel, namespace } from "@perishcode/protocol";
 import { decode, readProduct } from "@perishcode/release";
 import { Client, serve } from "@perishcode/sidecar";
 import { Activation } from "./control/activation.js";
+import { type Bootstrap, claim } from "./control/bootstrap.js";
 import type { SessionOptions } from "./control/core.js";
 import { type Attempt, Generations } from "./generations.js";
 
 export type { ActivationCheckpoint, CapsuleRenderer, Receipt, Renderer, SessionOptions } from "./control/core.js";
 export class Session extends Activation {
-  static async open(options: SessionOptions): Promise<Session> {
+  private blocking?: Promise<void>;
+  block(reason: string): Promise<void> {
+    this.blocked = true;
+    this.phase = "blocked";
+    this.documentFenced = true;
+    this.error = reason;
+    this.blocking ??= (async () => {
+      await this.handoff?.catch(() => {});
+      await this.activation?.catch(() => {});
+      await this.product?.drainCalls();
+      await this.product?.pauseUpdates();
+      await this.factory.session(async () => {
+        await this.product?.close();
+        await this.agent?.close();
+        this.phase = "blocked";
+        this.documentFenced = true;
+      });
+    })();
+    return this.blocking;
+  }
+  static async open(options: SessionOptions, bootstrap?: Bootstrap): Promise<Session> {
     await mkdir(options.root, { recursive: true, mode: 0o700 });
     // The Electron adapter holds an OS single-instance lock for this root.
     const key = createHash("sha256").update(options.root).digest("hex").slice(0, 20);
     const endpoint = join(tmpdir(), `pesuite-${key}-${process.pid}.sock`);
-    const host = await serve(endpoint, { root: options.root });
+    const prior = bootstrap ? claim(bootstrap, options) : undefined;
+    const host = prior?.host ?? (await serve(endpoint, { root: options.root }));
     const client = new Client(host.endpoint, host.authority);
     const scope = namespace(options.namespace);
     const lane = channel(options.manifest.channel);
@@ -49,6 +71,11 @@ export class Session extends Activation {
       )
         throw new Error("mounted identity mismatch");
       const session = new Session(options, host, factory, generations, mount, manifest, attempt?.nonce ?? randomUUID());
+      if (prior) {
+        if (prior.electron.context.identity.generation !== mount.target)
+          throw new Error("bootstrap selected content changed");
+        session.electron = prior.electron;
+      }
       session.attempt = attempt;
       return session;
     } catch (fault) {
@@ -72,6 +99,7 @@ export class Session extends Activation {
     return this.closing;
   }
   private async closeWithin(error: string) {
+    await this.blocking;
     await this.activation?.catch(() => {});
     await this.handoff?.catch(() => {});
     await this.product?.drainCalls();

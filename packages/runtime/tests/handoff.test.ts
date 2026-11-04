@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { channel } from "@perishcode/protocol";
 import { compose, emitUnit, resolve } from "@perishcode/release";
 import { it } from "vitest";
-import { Session, writeProduct } from "@";
+import { Bootstrap, Session, writeProduct } from "@";
 
 async function fixture(baselineMode = "normal") {
   const root = await mkdtemp(join(tmpdir(), "capsule-handoff-"));
@@ -269,6 +269,53 @@ it("drains an accepted resource call before acquiring the normal shutdown lane",
     module.control.release();
     assert.equal(await work, "allocated");
     assert.equal((await closing).status, "stopped");
+  } finally {
+    module.control.release();
+    await f.close();
+  }
+}, 15000);
+
+it("holds real Electron bootstrap authority before staging and transfers that exact owner to runtime", async () => {
+  const f = await fixture();
+  let boot: Bootstrap | undefined;
+  let runtime: Session | undefined;
+  try {
+    const options = { ...f.options, root: join(f.root, "fresh") };
+    boot = await Bootstrap.open(options);
+    assert.equal(boot.context.identity.service, "electron");
+    await boot.close();
+    // Closing a blocked first-launch bootstrap leaves no failed binding attempt.
+    boot = await Bootstrap.open(options);
+    const owner = boot.context.incarnation;
+    runtime = await Session.open(options, boot);
+    boot = undefined;
+    const composition = await runtime.activate();
+    assert.equal((await runtime.bootstrap()).incarnation, owner);
+    await runtime.start();
+    await runtime.confirm(composition, "web");
+    assert.ok((await runtime.snapshot()).directory.instances.every((i) => i.service !== "capsule"));
+  } finally {
+    await runtime?.close();
+    await boot?.close();
+    await f.close();
+  }
+}, 15000);
+
+it("fences a running product immediately and drains accepted resource work before native blocking", async () => {
+  const f = await fixture();
+  const module = await import(pathToFileURL(join(f.session.mount.capsule, "index.mjs")).href);
+  try {
+    const nonce = f.session.documentNonce(),
+      work = f.session.call("work", null);
+    while (!module.control.entered) await new Promise((done) => setTimeout(done, 10));
+    const blocked = f.session.block("minimum shell changed");
+    assert.equal(f.session.acceptDocument(nonce), false);
+    await assert.rejects(f.session.call("version", null), /closed/);
+    module.control.release();
+    assert.equal(await work, "allocated");
+    await blocked;
+    assert.equal((await f.session.snapshot()).phase, "blocked");
+    await assert.rejects(f.session.applyCapsule(await f.product("0.2.0"), f.renderer), /not accepting/);
   } finally {
     module.control.release();
     await f.close();
