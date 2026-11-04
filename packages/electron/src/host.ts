@@ -1,11 +1,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { Catalog, type CatalogOptions, ShellRequired } from "@perishcode/distribution";
 import { protocolIdentity } from "@perishcode/release";
-import { type Receipt, Session, type SessionOptions } from "@perishcode/runtime";
+import { Bootstrap, type Receipt, Session, type SessionOptions } from "@perishcode/runtime";
 import { type Options as UpdateOptions, watch } from "@perishcode/update";
 import { app, BrowserWindow, ipcMain, protocol } from "electron";
 import { type AutomationReceipt, observeAutomation, prepareAutomation } from "./automation.js";
-import { renderer as rendererAdapter } from "./renderer.js";
+import { NativeGate } from "./control/gate.js";
+import { renderer as rendererAdapter } from "./control/renderer.js";
 import { Links, loading, routes } from "./routing.js";
 
 export interface HostOptions extends Omit<SessionOptions, "executable"> {
@@ -13,7 +15,11 @@ export interface HostOptions extends Omit<SessionOptions, "executable"> {
   probe?: boolean;
   automation?: boolean;
   receipt?: string;
-  updates?: Omit<UpdateOptions, "activate" | "layer"> & { activate?: boolean; capsule?: boolean };
+  updates?: Omit<UpdateOptions, "activate" | "layer" | "source" | "onError"> & {
+    activate?: boolean;
+    capsule?: boolean;
+  };
+  distribution?: Pick<CatalogOptions, "endpoint" | "publickey" | "product">;
   /** Caller-owned debugging contract; manager credentials are never sent to the renderer. */
   inspect?: (
     session: Session,
@@ -55,6 +61,30 @@ export async function startElectron(options: HostOptions): Promise<void> {
     },
   ]);
   let session: Session | undefined;
+  let bootstrap: Bootstrap | undefined;
+  let catalog: Catalog | undefined;
+  let gate: NativeGate | undefined;
+  let blocking: Promise<void> | undefined;
+  const updateOptions = () => ({
+    ...options.updates,
+    endpoint: options.distribution?.endpoint ?? options.updates!.endpoint,
+    publickey: options.distribution?.publickey ?? options.updates!.publickey,
+    source: catalog,
+    onError: (error: unknown) => {
+      if (!(error instanceof ShellRequired) || blocking) return;
+      // Fence synchronously; never await a watcher's close from its own check.
+      const drained = session?.block(String(error));
+      blocking = (async () => {
+        await capsuleObserver?.close();
+        await drained;
+        await gate!.show(error, { runtime: await session?.snapshot() });
+        window?.destroy();
+      })().catch((error) => {
+        process.stderr.write(`${String(error)}\n`);
+        app.quit();
+      });
+    },
+  });
   let closing = false;
   let window: BrowserWindow | undefined;
   let completed = false;
@@ -75,7 +105,9 @@ export async function startElectron(options: HostOptions): Promise<void> {
     event.preventDefault();
     closing = true;
     void (async () => {
+      await blocking;
       await capsuleObserver?.close();
+      await bootstrap?.close();
       return session?.close() ?? { status: "stopped", survivors: [] };
     })()
       .then(async (stop) => {
@@ -94,19 +126,50 @@ export async function startElectron(options: HostOptions): Promise<void> {
   });
   try {
     await app.whenReady();
-    session = await Session.open({ ...options, root, executable: process.execPath });
+    const runtime = { ...options, root, executable: process.execPath };
+    if (options.distribution) {
+      const expectedAppid =
+        options.manifest.channel === "stable"
+          ? options.distribution.product
+          : `${options.distribution.product}.${options.manifest.channel}`;
+      if (options.manifest.identity.appid !== expectedAppid) throw new Error("distribution product identity mismatch");
+      bootstrap = await Bootstrap.open(runtime);
+      catalog = new Catalog({
+        ...options.distribution,
+        channel: options.manifest.channel,
+        shellVersion: app.isPackaged ? app.getVersion() : options.manifest.identity.version,
+        platform: process.platform === "darwin" ? "mac" : process.platform === "win32" ? "win" : "linux",
+        arch: process.arch,
+        root: bootstrap.context.roots.data,
+      });
+      gate = new NativeGate(catalog, automated, options.receipt);
+      try {
+        await catalog.head(options.manifest.channel);
+      } catch (error) {
+        await gate.show(error, {
+          owner: { service: bootstrap.context.identity.service, incarnation: bootstrap.context.incarnation },
+          productInitialized: false,
+        });
+        app.on("window-all-closed", () => app.quit());
+        if (options.probe) app.quit();
+        return;
+      }
+    }
+    session = await Session.open(runtime, bootstrap);
+    bootstrap = undefined;
     const active = session;
     const payload = await active.activate({
-      updates: options.updates
-        ? async () => {
-            if (!screen) throw new Error("renderer not ready for updates");
-            return watch(active, {
-              ...options.updates!,
-              layer: "leaf",
-              activate: options.updates!.activate ? (release) => active.applyLeaf(release, screen!) : undefined,
-            });
-          }
-        : undefined,
+      updates:
+        options.updates || catalog
+          ? async () => {
+              if (!screen) throw new Error("renderer not ready for updates");
+              return watch(active, {
+                ...updateOptions(),
+                layer: "leaf",
+                activate: options.updates?.activate ? (release) => active.applyLeaf(release, screen!) : undefined,
+              });
+            }
+          : undefined,
     });
     payloadLoading = payload.loading;
     window = new BrowserWindow({
@@ -136,11 +199,11 @@ export async function startElectron(options: HostOptions): Promise<void> {
       automation: automation(),
       adapter: adapter(),
     };
-    if (options.updates?.capsule)
+    if (options.updates?.capsule || catalog)
       capsuleObserver = await watch(active, {
-        ...options.updates,
+        ...updateOptions(),
         layer: "capsule",
-        activate: (release) => active.applyCapsule(release, screen!),
+        activate: options.updates?.capsule ? (release) => active.applyCapsule(release, screen!) : undefined,
       });
     links.bind((url) => active.call("open", url));
     await options.inspect?.(

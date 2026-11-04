@@ -27,10 +27,20 @@ jobs:
       - run: pnpm lint
       - run: pnpm exec biome check .
       - run: pnpm exec pesuite guard
+      - run: docker compose up -d
+        env:
+          PESUITE_SILO_PORT: "9000"
+      - run: pnpm --filter @perishcode/distribution test
+        env:
+          PESUITE_SILO_ENDPOINT: http://127.0.0.1:9000
       - run: |
           node --input-type=module -e 'import { run } from "@perishcode/testkit"; const r = await run({root:process.cwd(), output:process.env.PERISH_REPORT ?? ".artifacts/qualification.json", packaged:process.env.PERISH_PACKAGE === "1"}); if(r.result === "failed") process.exitCode=1;'
       - uses: actions/upload-artifact@v4.6.2
         if: always()
         with:
           name: qualification-linux
-          path: .artifacts/qualification.json
+          path: |
+            .artifacts/qualification.json
+            .artifacts/distribution-gate/silo.json
+      - if: always()
+        run: docker compose down

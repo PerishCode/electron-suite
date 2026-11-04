@@ -12,6 +12,7 @@ export const defaults: Policy = {
   names: [
     "AGENTS.md",
     "README.md",
+    "docker-compose.yml",
     "LICENSE",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",

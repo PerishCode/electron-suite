@@ -1,4 +1,5 @@
 export { readProduct, writeProduct } from "@perishcode/release";
+export { Bootstrap } from "./control/bootstrap.js";
 export { serveDaemon } from "./daemon.js";
 export type { Attempt, Content, Mount } from "./generations.js";
 export { Generations } from "./generations.js";

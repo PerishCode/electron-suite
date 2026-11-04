@@ -350,3 +350,6 @@ Capsule is Electron adaptation code and has no independent sidecar identity. Its
 
 
 Capsule automatic handoff (#62): the stable Electron bootstrap watches Capsule candidates; the Capsule owns only its leaf-update observer. Preflight and adapter/update-call draining precede the exclusive handoff lane; actual new code, loading composition, Web epoch and Daemon evidence precede commit. Capsule-only changes retain the Daemon, and postcommit errors preserve the selected collection. Explicit Capsule-only/coordinated and five-point interruption probes are consumed by slim. No Capsule sidecar identity or ESM-unload claim is introduced.
+
+
+Product distribution uses signed metadata with a minimum compatible shell version and immutable S3 objects. The local Docker Compose Silo is the actual object-store acceptance target; see AGENTS.md for explicit startup/test/stop commands. The stable Electron bootstrap checks compatibility before Capsule execution and displays a native-owned blocking page when the installed shell is too old. This is the prerequisite for #15 installation replacement, not proof that physical replacement is implemented.

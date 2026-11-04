@@ -5,7 +5,7 @@ import { capsulePlan, leaf, unitFile } from "./units.js";
 
 export class Activation extends Core {
   async applyLeaf(release: Release, renderer: Renderer): Promise<Receipt> {
-    if (this.closed || this.closing || !this.ready || this.switching || this.phase !== "ready")
+    if (this.closed || this.closing || this.blocked || !this.ready || this.switching || this.phase !== "ready")
       throw new Error("runtime is not accepting leaf activation");
     this.product?.assertReady();
     return this.factory.session(async () => {
@@ -91,7 +91,7 @@ export class Activation extends Core {
     });
   }
   applyCapsule(release: Release, renderer: CapsuleRenderer): Promise<Receipt> {
-    if (this.closed || this.closing || this.switching || !this.ready || this.phase !== "ready")
+    if (this.closed || this.closing || this.blocked || this.switching || !this.ready || this.phase !== "ready")
       return Promise.reject(new Error("runtime is not accepting capsule activation"));
     this.switching = true;
     this.handoff = this.replaceCapsule(release, renderer).finally(() => {

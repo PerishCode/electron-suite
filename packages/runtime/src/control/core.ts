@@ -56,6 +56,7 @@ export class Core {
   protected attempt?: Attempt;
   protected agent?: Agent;
   protected closed = false;
+  protected blocked = false;
   protected closing?: Promise<{ status: string; survivors: number[] }>;
   protected ready = false;
   protected payload?: Composition;
@@ -79,6 +80,19 @@ export class Core {
   protected switching = false;
   protected handoff?: Promise<Receipt>;
   protected environment: CapsuleEnvironment = {};
+  private booting?: Promise<import("@perishcode/sidecar").Context>;
+  bootstrap() {
+    if (this.electron) return Promise.resolve(this.electron.context);
+    this.booting ??= (async () => {
+      this.electron = await this.host.factory(this.factory.scope).expose({
+        identity: { service: "electron", generation: this.anchor },
+        handlers: {},
+        lifecycle: { initialize: async () => {}, stop: async () => {} },
+      });
+      return this.electron.context;
+    })();
+    return this.booting;
+  }
   get mount() {
     return this.view;
   }
@@ -106,7 +120,7 @@ export class Core {
     return this.host.factory(this.factory.scope).expose({ ...options, identity: { service, generation: this.anchor } });
   }
   acceptDocument(nonce: unknown) {
-    return !this.closed && !this.closing && !this.documentFenced && nonce === this.docNonce;
+    return !this.closed && !this.closing && !this.blocked && !this.documentFenced && nonce === this.docNonce;
   }
   documentStart() {
     this.documentFenced = false;
@@ -152,14 +166,7 @@ export class Core {
   protected async initializeProduct(environment: CapsuleEnvironment): Promise<Composition> {
     const generation = (await this.content()).envelope.generation.capsule.digest;
     if (this.closed || this.closing) throw new Error("session is closed");
-    this.electron = await this.host.factory(this.factory.scope).expose({
-      identity: { service: "electron", generation: this.anchor },
-      handlers: {},
-      lifecycle: {
-        initialize: async () => {},
-        stop: async () => {},
-      },
-    });
+    await this.bootstrap();
     this.product = this.makeProduct(this.mount, generation, this.manifest.identity.version);
     try {
       this.payload = await this.product.initialize();
@@ -212,7 +219,7 @@ export class Core {
     this.starts++;
   }
   async call(method: string, input: unknown): Promise<unknown> {
-    if (this.closed || this.closing || !this.product)
+    if (this.closed || this.closing || this.blocked || !this.product)
       return Promise.reject(new Error("session is closed or not initialized"));
     return this.product.call(method, input);
   }
