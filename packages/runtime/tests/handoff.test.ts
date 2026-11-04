@@ -257,3 +257,20 @@ it("drains accepted adapter work that still needs a resource lane before taking 
     await f.close();
   }
 }, 15000);
+
+it("drains an accepted resource call before acquiring the normal shutdown lane", async () => {
+  const f = await fixture();
+  const module = await import(pathToFileURL(join(f.session.mount.capsule, "index.mjs")).href);
+  try {
+    const work = f.session.call("work", null);
+    while (!module.control.entered) await new Promise((done) => setTimeout(done, 10));
+    const closing = f.session.close();
+    await new Promise((done) => setTimeout(done, 25));
+    module.control.release();
+    assert.equal(await work, "allocated");
+    assert.equal((await closing).status, "stopped");
+  } finally {
+    module.control.release();
+    await f.close();
+  }
+}, 15000);

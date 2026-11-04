@@ -105,8 +105,8 @@ export class Activation extends Core {
     // Drain the product-owned leaf controller before acquiring its lifecycle lane.
     // The stable Capsule observer is a separate owner and remains alive throughout.
     try {
-      await this.product!.pauseUpdates();
       await this.product!.drainCalls();
+      await this.product!.pauseUpdates();
     } catch (error) {
       this.phase = "failed";
       this.error = String(error);

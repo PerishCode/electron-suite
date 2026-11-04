@@ -74,6 +74,7 @@ export class Session extends Activation {
   private async closeWithin(error: string) {
     await this.activation?.catch(() => {});
     await this.handoff?.catch(() => {});
+    await this.product?.drainCalls();
     await this.product?.pauseUpdates();
     await this.factory.session(async () => {
       if (this.attempt && !this.ready) {
