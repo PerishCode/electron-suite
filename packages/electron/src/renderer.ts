@@ -1,9 +1,12 @@
-import type { Session } from "@perishcode/runtime";
+import type { Composition, Session } from "@perishcode/runtime";
 import type { BrowserWindow } from "electron";
+import { loading } from "./routing.js";
 
 export function renderer(window: BrowserWindow, session: Session) {
+  let lastLoading: string | undefined;
   window.webContents.on("did-start-navigation", (event) => {
-    if (event.isMainFrame && !event.isSameDocument) session.documentStart();
+    if (event.isMainFrame && !event.isSameDocument && event.url.startsWith(`${session.browser().origin}/_web/`))
+      session.documentStart();
   });
   const probe = async () => {
     const until = Date.now() + 10000;
@@ -36,6 +39,13 @@ export function renderer(window: BrowserWindow, session: Session) {
     throw new Error("renderer readiness timeout");
   };
   return {
+    snapshot: () => ({ loading: lastLoading }),
+    compose: async (composition: Composition) => {
+      window.setTitle(composition.window.title);
+      await window.loadURL(loading(composition.loading));
+      lastLoading = await window.webContents.executeJavaScript("document.querySelector('output')?.textContent");
+      if (lastLoading !== composition.loading) throw new Error("capsule loading evidence mismatch");
+    },
     probe,
     reload: async () => {
       await window.loadURL(session.webURL());

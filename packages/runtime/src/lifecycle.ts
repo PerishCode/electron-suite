@@ -16,6 +16,7 @@ export interface CapsuleContext {
   readonly blobs: Readonly<Record<string, string>>;
   readonly generation: Digest;
   readonly nonce: string;
+  readonly version: string;
   readonly protocols: Readonly<{ internal: string; external: string; origin: string }>;
   /** Context of the real Electron owner; Capsule has no sidecar identity. */
   readonly resources: Context;
@@ -32,6 +33,7 @@ export interface Capsule {
 }
 export interface ProductReceipt {
   artifact: Digest;
+  version: string;
 }
 
 /** Loaded adapter code. The stable Electron owner retains all system resources. */
@@ -39,8 +41,10 @@ export class Product {
   private body?: Capsule;
   private phase: "initializing" | "ready" | "stopping" | "failed" | "stopped" = "initializing";
   private calls = new Set<Promise<unknown>>();
+  private accepting = true;
   private updater?: { close(): Promise<void> };
   private updaterStart?: Promise<void>;
+  private pausedUpdates = false;
   private context: CapsuleContext;
   constructor(
     resources: Context,
@@ -48,13 +52,15 @@ export class Product {
     nonce: string,
     private artifact: Digest,
     daemon: CapsuleContext["daemon"],
-    environment: CapsuleEnvironment,
+    private environment: CapsuleEnvironment,
     protocols: CapsuleContext["protocols"],
+    private version: string,
   ) {
     this.context = Object.freeze({
       blobs: Object.freeze({ ...mount.blobs }),
       generation: mount.target,
       nonce,
+      version,
       resources,
       protocols,
       daemon,
@@ -68,10 +74,21 @@ export class Product {
     })();
     return this.updaterStart;
   }
+  async pauseUpdates() {
+    this.pausedUpdates = !!this.updaterStart;
+    await this.stopUpdates();
+  }
+  async resumeUpdates() {
+    if (this.pausedUpdates) {
+      this.pausedUpdates = false;
+      await this.startUpdates(this.environment);
+    }
+  }
   private async stopUpdates() {
-    await this.updaterStart;
+    await this.updaterStart?.catch(() => {});
     await this.updater?.close();
     this.updater = undefined;
+    this.updaterStart = undefined;
   }
   async initialize(): Promise<Composition> {
     try {
@@ -120,19 +137,28 @@ export class Product {
   }
   call(method: string, input: unknown): Promise<unknown> {
     this.assertReady();
+    if (!this.accepting) return Promise.reject(new Error("capsule is draining"));
     if (!Object.hasOwn(this.body!.handlers, method)) return Promise.reject(new Error("unknown capsule method"));
     const pending = Promise.resolve().then(() => this.body!.handlers[method]!(input, this.context));
     this.calls.add(pending);
     return pending.finally(() => this.calls.delete(pending));
   }
   snapshot(): ProductReceipt {
-    return { artifact: this.artifact };
+    return { artifact: this.artifact, version: this.version };
+  }
+  async drainCalls() {
+    this.accepting = false;
+    while (this.calls.size) await Promise.allSettled([...this.calls]);
+  }
+  resumeCalls() {
+    this.assertReady();
+    this.accepting = true;
   }
   async close(): Promise<void> {
     if (this.phase === "stopped") return;
     this.phase = "stopping";
     try {
-      await Promise.allSettled([...this.calls]);
+      await this.drainCalls();
       await this.body?.stop();
       await this.stopUpdates();
       this.phase = "stopped";

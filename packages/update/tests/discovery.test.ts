@@ -59,6 +59,7 @@ it("automatically prepares signed leaf candidates, rejects faults/regressions an
     before = await factory.binding();
   const observer = await watch(
     {
+      anchor: initial.envelope.digest,
       content: async () => initial,
       expose: (name, options) =>
         factory.expose({ ...options, identity: { service: name, generation: initial.envelope.digest } }),
@@ -158,6 +159,7 @@ it("starts a fresh controller for background activation without retaining the in
   let actual = initial;
   const observer = await watch(
     {
+      anchor: initial.envelope.digest,
       content: async () => actual,
       expose: (name, options) =>
         factory.expose({
@@ -209,3 +211,82 @@ it("starts a fresh controller for background activation without retaining the in
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("keeps the stable Capsule observer separate and drains an accepted activation before taking its stop lane", async () => {
+  const root = await mkdtemp(join(tmpdir(), "capsule-observer-")),
+    content = join(root, "public");
+  await mkdir(content);
+  const keys = generateKeyPairSync("ed25519"),
+    lane = channel("stable"),
+    scope = { channel: lane, namespace: namespace("probe") };
+  const authority = await Authority.open({
+    root: join(root, "authority"),
+    privatekey: keys.privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
+  });
+  const initial = release("web1");
+  let actual = initial,
+    entered = false,
+    proceed = () => {};
+  const gate = new Promise<void>((done) => {
+    proceed = done;
+  });
+  await authority.publish(lane, 0, initial.envelope, initial.assets);
+  await writeFeed(authority, lane, content);
+  const sources = await Sources.open({ data: join(root, "sources"), scope, sources: { feed: { directory: content } } });
+  const manager = await serve(join(root, "manager.sock"), { root: join(root, "state") }),
+    factory = manager.factory(scope);
+  const observer = await watch(
+    {
+      anchor: initial.envelope.digest,
+      content: async () => actual,
+      expose: (name, options) =>
+        factory.expose({ ...options, identity: { service: name, generation: initial.envelope.digest } }),
+    },
+    {
+      layer: "capsule",
+      endpoint: sources.endpoints[0]!.url,
+      publickey: keys.publicKey.export({ format: "pem", type: "spki" }).toString(),
+      intervalMs: 50,
+      activate: async (candidate) => {
+        entered = true;
+        await gate;
+        await factory.session(async (f) => {
+          await f.grant({ kind: "data", name: "activation", scope: "factory" });
+        });
+        actual = candidate;
+        return { generation: candidate.envelope.digest };
+      },
+    },
+  );
+  try {
+    await until(observer.status, (s) => s.phase === "idle" && s.revision === 1);
+    const leafOnly = release("web2");
+    await authority.publish(lane, 1, leafOnly.envelope, leafOnly.assets);
+    await writeFeed(authority, lane, content);
+    await until(observer.status, (s) => s.phase === "idle" && s.revision === 2);
+    assert.equal(entered, false);
+    const candidate = release("web2", "daemon", "capsule2");
+    await authority.publish(lane, 2, candidate.envelope, candidate.assets);
+    await writeFeed(authority, lane, content);
+    await until(observer.status, (s) => s.phase === "activating");
+    assert.equal(entered, true);
+    const closed = observer.close();
+    await new Promise((done) => setTimeout(done, 25));
+    proceed();
+    await Promise.race([
+      closed,
+      new Promise((_, reject) => setTimeout(() => reject(Error("stop lane deadlocked")), 2000)),
+    ]);
+    assert.equal(actual.envelope.digest, candidate.envelope.digest);
+    assert.equal(observer.status().phase, "stopped");
+    const directory = await factory.directory();
+    assert.equal(directory.instances.find((i) => i.service === "bootstrapupdates")?.phase, "retired");
+    assert.ok(directory.instances.every((i) => i.service !== "capsule"));
+  } finally {
+    proceed();
+    await observer.close();
+    await manager.close();
+    await sources.close();
+    await rm(root, { recursive: true, force: true });
+  }
+}, 15000);

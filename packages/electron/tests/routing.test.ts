@@ -41,6 +41,7 @@ it("fences old documents and forwards bounded internal requests through the Caps
   const session = {
     browser: () => ({ origin: "od://carrier" }),
     documentNonce: () => "epoch2",
+    acceptDocument: (nonce: unknown) => nonce === "epoch2",
     webURL: () => "od://carrier/_web/digest/",
     call: async (method: string, input: unknown) => {
       calls.push({ method, input });

@@ -101,7 +101,7 @@ export async function local(request: Request, session: Session): Promise<Respons
     return new Response("not found", { status: 404 });
   if (url.pathname.startsWith("/_daemon/")) {
     if (
-      request.headers.get("x-pesuite-nonce") !== session.documentNonce() ||
+      !session.acceptDocument(request.headers.get("x-pesuite-nonce")) ||
       (request.headers.has("origin") && request.headers.get("origin") !== browser.origin)
     )
       return new Response("forbidden", { status: 403 });
@@ -133,7 +133,7 @@ export function routes(ipc: IpcMain, protocol: Protocol, window: BrowserWindow, 
   };
   ipc.on("pesuite:bootstrap", bootstrap);
   ipc.handle("pesuite:call", async (event, nonce: unknown, method: unknown, value: unknown) => {
-    if (!allowed(event) || nonce !== session.documentNonce()) throw new Error("untrusted or expired renderer");
+    if (!allowed(event) || !session.acceptDocument(nonce)) throw new Error("untrusted or expired renderer");
     if (typeof method !== "string" || Buffer.byteLength(JSON.stringify(value) ?? "") > 65536)
       throw new Error("invalid IPC request");
     ipcCalls++;
