@@ -27,7 +27,7 @@ export interface OwnerRecord {
 // crash. Never unlink this file, steal by PID/mtime, or treat a partial claim as absent.
 export class Ownership {
   readonly fresh: boolean;
-  readonly incarnation = randomUUID();
+  readonly incarnation: string;
   private closed = false;
   private directory = false;
   private birth = "";
@@ -37,11 +37,13 @@ export class Ownership {
     readonly previous: OwnerRecord | undefined,
     private scope: string,
     fresh: boolean,
+    incarnation?: string,
   ) {
+    this.incarnation = incarnation ?? randomUUID();
     this.fresh = fresh;
   }
 
-  static async claim(path: string): Promise<Ownership> {
+  static async claim(path: string, incarnation?: string): Promise<Ownership> {
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     const parent = await realpath(dirname(path));
     const scope = join(parent, basename(path));
@@ -84,7 +86,7 @@ export class Ownership {
         if (value.phase === "active") throw new Error("ownership was interrupted; recovery required");
         previous = value;
       }
-      const owner = new Ownership(db, previous, scope, fresh);
+      const owner = new Ownership(db, previous, scope, fresh, incarnation);
       owner.directory = previous?.directory === true;
       const self = (await capture()).find((p) => p.pid === process.pid);
       if (!self) throw new Error("owner birth witness unavailable");

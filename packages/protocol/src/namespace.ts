@@ -1,6 +1,7 @@
+import { isAbsolute, resolve } from "node:path";
 import type { FactoryScope } from "./identity.js";
 
-export const resources = ["port", "socket", "data", "cache", "logs", "cas", "staging", "lock"] as const;
+export const resources = ["port", "socket", "data", "cache", "logs", "cas", "staging", "lock", "installation"] as const;
 
 export type Resource = (typeof resources)[number];
 export type Scope = "factory" | "attempt";
@@ -11,6 +12,7 @@ export interface Request {
   owner?: string;
   scheme?: "http" | "tcp";
   scope: Scope;
+  target?: string;
 }
 
 export interface Grant extends Request {
@@ -36,6 +38,16 @@ function valid(request: Request): boolean {
   if (!resources.includes(request.kind)) return false;
   if (request.scope !== "factory" && request.scope !== "attempt") return false;
   if (!/^[a-z][a-z0-9]*$/.test(request.name)) return false;
+  if (request.kind === "installation") {
+    if (
+      request.scope !== "factory" ||
+      typeof request.target !== "string" ||
+      !isAbsolute(request.target) ||
+      resolve(request.target) !== request.target ||
+      request.target === resolve(request.target, "..")
+    )
+      return false;
+  } else if (request.target !== undefined) return false;
   if (request.kind === "port" && request.scheme !== undefined) {
     if (request.scheme !== "http" && request.scheme !== "tcp") return false;
   } else if (request.scheme !== undefined) return false;
@@ -44,7 +56,7 @@ function valid(request: Request): boolean {
 }
 
 function key(request: Request): string {
-  return [request.kind, request.name, request.owner ?? "", request.scheme ?? ""].join(":");
+  return [request.kind, request.name, request.owner ?? "", request.scheme ?? "", request.target ?? ""].join(":");
 }
 
 export function allocate(state: Registry, grant: Grant): Allocation {

@@ -24,3 +24,20 @@ export function readStamp(command: string): Stamp | undefined {
   return stamp(JSON.parse(Buffer.from(values[0]![1]!, "base64url").toString()));
 }
 export const sameStamp = (a: Stamp, b: Stamp) => argument(a) === argument(b);
+export interface ManagerStamp {
+  root: string;
+  incarnation: string;
+}
+export function readManagerStamp(command: string): ManagerStamp | undefined {
+  const values = [...command.matchAll(/(?:^|\s)--pesuite-manager=([A-Za-z0-9_-]+)(?=\s|$)/g)];
+  if (values.length > 1) throw Error("ambiguous manager stamp");
+  if (!values[0]) return undefined;
+  const v = JSON.parse(Buffer.from(values[0][1]!, "base64url").toString());
+  if (
+    Object.keys(v).sort().join() !== "incarnation,root" ||
+    !/^[a-f0-9]{64}$/.test(v.root) ||
+    !/^[a-f0-9-]{36}$/.test(v.incarnation)
+  )
+    throw Error("invalid manager stamp");
+  return v;
+}

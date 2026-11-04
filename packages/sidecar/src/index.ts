@@ -12,6 +12,14 @@ export type {
   Snapshot,
   Spec,
 } from "./host.js";
+export {
+  type Manager,
+  managerAlive,
+  managerEndpoint,
+  managerReady,
+  observeOwner,
+  startManager,
+} from "./process/manager.js";
 export type { ProcessInstance, ProcessObservation, Witness } from "./process/observe.js";
 export { observeProcesses } from "./process/observe.js";
 export { readBinding, readDirectory } from "./runtime/catalog.js";

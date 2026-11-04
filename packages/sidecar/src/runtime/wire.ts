@@ -132,6 +132,7 @@ function resource(value: unknown): ResourceRequest {
     scope,
   };
   if (data.owner !== undefined) result.owner = text(data.owner, "resource.owner");
+  if (data.target !== undefined) result.target = text(data.target, "resource.target");
   if (data.scheme !== undefined) {
     const scheme = text(data.scheme, "resource.scheme");
     if (scheme !== "http" && scheme !== "tcp") throw new TypeError("resource.scheme is invalid");

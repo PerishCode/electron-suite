@@ -8,6 +8,9 @@ allowBuilds:
   esbuild: true
 
 minimumReleaseAgeExclude:
+  - "yauzl@3.4.0"
+  - "plist@5.0.0"
+  - "@types/yauzl@3.4.0"
   - "@aws-sdk/*"
   - "@smithy/*"
   - "@biomejs/biome@2.6.4"

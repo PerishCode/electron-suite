@@ -1,11 +1,48 @@
 import { randomUUID } from "node:crypto";
 import { type Digest, type Generation, gates } from "@perishcode/protocol";
 import { type Manifest, protocolIdentity } from "@perishcode/release";
-import type { Attachment, Directory, Expose, Factory, FactoryScope, Service } from "@perishcode/sidecar";
+import {
+  type Attachment,
+  type Directory,
+  type Expose,
+  type Factory,
+  type FactoryScope,
+  managerReady,
+  type Service,
+} from "@perishcode/sidecar";
 import { Agent } from "../agent.js";
 import type { Attempt, Generations, Mount } from "../generations.js";
 import { type CapsuleEnvironment, type Composition, Product, type ProductReceipt } from "../lifecycle.js";
 import { unitFile } from "./units.js";
+export function ownerAdapter(onQuit?: () => void) {
+  let trigger: () => void = () => {},
+    active = true;
+  const signal = new Promise<void>((done) => (trigger = done));
+  return {
+    handlers: {
+      quit: () => {
+        if (!onQuit) throw Error("host quit adapter unavailable");
+        trigger();
+        return true;
+      },
+    },
+    lifecycle: {
+      initialize: async (context: import("@perishcode/sidecar").Context) => {
+        context.background(() => {
+          void signal
+            .then(() => {
+              if (active) onQuit?.();
+            })
+            .catch((error) => process.stderr.write(String(error)));
+        });
+      },
+      stop: async () => {
+        active = false;
+        trigger();
+      },
+    },
+  };
+}
 export interface ActivationCheckpoint {
   stage: "prepared" | "capsule-stopped" | "daemon-stopped" | "ready" | "committed";
   target: Digest;
@@ -13,6 +50,7 @@ export interface ActivationCheckpoint {
   previous: Digest;
 }
 export interface SessionOptions {
+  onQuit?: () => void;
   /** Diagnostic observation only; never substitutes for runtime readiness. */
   onActivation?: (checkpoint: Readonly<ActivationCheckpoint>) => Promise<void>;
   carrier: number;
@@ -84,14 +122,16 @@ export class Core {
   bootstrap() {
     if (this.electron) return Promise.resolve(this.electron.context);
     this.booting ??= (async () => {
-      this.electron = await this.host.factory(this.factory.scope).expose({
+      this.electron = await this.host.factory(this.factory.scope).expose<{ quit: { input: null; output: boolean } }>({
         identity: { service: "electron", generation: this.anchor },
-        handlers: {},
-        lifecycle: { initialize: async () => {}, stop: async () => {} },
+        ...ownerAdapter(this.options.onQuit),
       });
       return this.electron.context;
     })();
     return this.booting;
+  }
+  announce() {
+    return managerReady(this.host, this.options.root, this.factory.scope);
   }
   get mount() {
     return this.view;
@@ -117,7 +157,9 @@ export class Core {
   }
   async expose<M>(service: string, options: Omit<Expose<M>, "identity">) {
     if (this.closed || this.closing) throw new Error("session is closed");
-    return this.host.factory(this.factory.scope).expose({ ...options, identity: { service, generation: this.anchor } });
+    return this.host
+      .factory(this.factory.scope)
+      .expose<M>({ ...options, identity: { service, generation: this.anchor } });
   }
   acceptDocument(nonce: unknown) {
     return !this.closed && !this.closing && !this.blocked && !this.documentFenced && nonce === this.docNonce;
@@ -163,7 +205,7 @@ export class Core {
     });
     return this.activation;
   }
-  protected async initializeProduct(environment: CapsuleEnvironment): Promise<Composition> {
+  protected async initializeProduct(_environment: CapsuleEnvironment): Promise<Composition> {
     const generation = (await this.content()).envelope.generation.capsule.digest;
     if (this.closed || this.closing) throw new Error("session is closed");
     await this.bootstrap();
@@ -182,8 +224,9 @@ export class Core {
   }
 
   protected makeProduct(mount: Mount, artifact: Digest, version: string) {
+    if (!this.electron) throw Error("Electron resource owner is not ready");
     return new Product(
-      this.electron!.context,
+      this.electron.context,
       mount,
       randomUUID(),
       artifact,
