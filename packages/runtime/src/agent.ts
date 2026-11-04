@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { Digest } from "@perishcode/protocol";
 import type { Factory, Lease } from "@perishcode/sidecar";
+import { unitFile } from "./control/units.js";
 import type { Mount } from "./generations.js";
-import { unitFile } from "./units.js";
 
 export class Agent {
   private lease?: Lease;

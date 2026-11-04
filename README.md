@@ -347,3 +347,6 @@ Explicit recovery (#56): `pesuite recover inspect --data <root>` reconciles a st
 
 
 Capsule is Electron adaptation code and has no independent sidecar identity. Its create/initialize/ready/stop callbacks arrange loading, product IPC, local Web/Daemon communication, channel OS links and leaf-update tasks. Electron owns the resource Context and stable recovery boundary; Generations owns content selection. #60 supersedes #58's hosted Capsule model. The local acceptance matrix spans actual development/installed starts, IPC/protocols, updates, interruptions and resources; #14/#15/#16 keep their incomplete gates open.
+
+
+Capsule automatic handoff (#62): the stable Electron bootstrap watches Capsule candidates; the Capsule owns only its leaf-update observer. Preflight and adapter/update-call draining precede the exclusive handoff lane; actual new code, loading composition, Web epoch and Daemon evidence precede commit. Capsule-only changes retain the Daemon, and postcommit errors preserve the selected collection. Explicit Capsule-only/coordinated and five-point interruption probes are consumed by slim. No Capsule sidecar identity or ESM-unload claim is introduced.

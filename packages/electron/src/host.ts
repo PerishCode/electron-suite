@@ -13,7 +13,7 @@ export interface HostOptions extends Omit<SessionOptions, "executable"> {
   probe?: boolean;
   automation?: boolean;
   receipt?: string;
-  updates?: Omit<UpdateOptions, "activate"> & { activate?: boolean };
+  updates?: Omit<UpdateOptions, "activate" | "layer"> & { activate?: boolean; capsule?: boolean };
   /** Caller-owned debugging contract; manager credentials are never sent to the renderer. */
   inspect?: (
     session: Session,
@@ -27,6 +27,7 @@ export interface HostReceipt extends Receipt {
   automation: AutomationReceipt;
   adapter: {
     loading: string;
+    title: string;
     internal: string;
     external: string;
     ipcCalls: number;
@@ -57,10 +58,12 @@ export async function startElectron(options: HostOptions): Promise<void> {
   let closing = false;
   let window: BrowserWindow | undefined;
   let completed = false;
+  let capsuleObserver: Awaited<ReturnType<typeof watch>> | undefined;
   let registered: ReturnType<typeof routes> | undefined;
   let screen: ReturnType<typeof rendererAdapter> | undefined;
   const adapter = () => ({
-    loading: payloadLoading,
+    loading: screen?.snapshot().loading ?? payloadLoading,
+    title: window?.getTitle() ?? options.manifest.identity.name,
     internal: identity.internal,
     external: identity.external,
     ...(registered?.snapshot() ?? { ipcCalls: 0, protocolCalls: 0 }),
@@ -71,7 +74,10 @@ export async function startElectron(options: HostOptions): Promise<void> {
     if (closing) return;
     event.preventDefault();
     closing = true;
-    void (session?.close() ?? Promise.resolve({ status: "stopped", survivors: [] }))
+    void (async () => {
+      await capsuleObserver?.close();
+      return session?.close() ?? { status: "stopped", survivors: [] };
+    })()
       .then(async (stop) => {
         registered?.close();
         await links.close();
@@ -96,6 +102,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
             if (!screen) throw new Error("renderer not ready for updates");
             return watch(active, {
               ...options.updates!,
+              layer: "leaf",
               activate: options.updates!.activate ? (release) => active.applyLeaf(release, screen!) : undefined,
             });
           }
@@ -114,6 +121,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
       },
     });
     const automation = observeAutomation(window, automated);
+    window.on("page-title-updated", (event) => event.preventDefault());
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => event.preventDefault());
     registered = routes(ipcMain, protocol, window, active);
@@ -128,6 +136,12 @@ export async function startElectron(options: HostOptions): Promise<void> {
       automation: automation(),
       adapter: adapter(),
     };
+    if (options.updates?.capsule)
+      capsuleObserver = await watch(active, {
+        ...options.updates,
+        layer: "capsule",
+        activate: (release) => active.applyCapsule(release, screen!),
+      });
     links.bind((url) => active.call("open", url));
     await options.inspect?.(
       active,

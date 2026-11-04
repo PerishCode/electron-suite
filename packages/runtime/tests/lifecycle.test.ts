@@ -101,7 +101,6 @@ it("gates readiness, preserves authority on failed drain, and creates a fresh co
     const activation = f.session.activate();
     await assert.rejects(f.session.activate(), /already initialized/);
     while (!f.control.waiting) await new Promise((r) => setTimeout(r, 10));
-    const identity = { service: "electron", generation: f.release.envelope.digest };
     assert.ok((await f.factory.directory()).instances.every((x) => x.service !== "capsule"));
     await assert.rejects(f.session.call("status", null), /not ready/);
     f.control.release();

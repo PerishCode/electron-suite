@@ -4,6 +4,7 @@ import { Feed, type Release } from "@perishcode/publish";
 import type { Attachment, Expose } from "@perishcode/sidecar";
 
 export interface Host {
+  readonly anchor: Digest;
   content(): Promise<Release>;
   expose<M>(service: string, options: Omit<Expose<M>, "identity">): Promise<Attachment>;
 }
@@ -12,13 +13,14 @@ export interface Status {
   phase: "idle" | "checking" | "prepared" | "activating" | "failed" | "stopped";
   checks: number;
   revision?: number;
-  prepared?: { target: Digest; changed: ("web" | "daemon")[] };
+  prepared?: { target: Digest; changed: ("capsule" | "web" | "daemon")[] };
   error?: string;
 }
 export interface Methods {
   status: { input: unknown; output: Status };
 }
 export interface Options {
+  layer?: "leaf" | "capsule";
   endpoint: string;
   publickey: string;
   intervalMs?: number;
@@ -31,6 +33,8 @@ export async function watch(host: Host, options: Options) {
   if (!Number.isSafeInteger(interval) || interval < 50 || interval > 3600000)
     throw new Error("invalid discovery interval");
   const initial = await host.content();
+  let ignored: Digest | undefined;
+  const layer = options.layer ?? "leaf";
   let current = initial;
   const refused = new Map<Digest, string>();
   const feed = new Feed(options.endpoint, options.publickey, options);
@@ -52,6 +56,8 @@ export async function watch(host: Host, options: Options) {
     state = { ...state, phase: "checking", checks: state.checks + 1, error: undefined };
     const execute = async () => {
       try {
+        current = await host.content();
+        state.current = current.envelope.digest;
         const head = await feed.head(lane, abort.signal);
         if (
           observed &&
@@ -68,6 +74,10 @@ export async function watch(host: Host, options: Options) {
           state = { ...state, phase: "idle", prepared: undefined };
           return;
         }
+        if (head.head.generation === ignored) {
+          state = { ...state, phase: "idle", prepared: undefined };
+          return;
+        }
         const release = await feed.release(lane, head.head, {
           signal: abort.signal,
           cached: async (artifact) => ((await store.has(artifact)) ? store.read(artifact) : undefined),
@@ -75,15 +85,21 @@ export async function watch(host: Host, options: Options) {
         const before = current.envelope.generation,
           after = release.envelope.generation;
         if (
-          before.carrier !== after.carrier ||
-          canonical(before.capsule) !== canonical(after.capsule) ||
-          canonical(before.blobs) !== canonical(after.blobs)
+          layer === "leaf" &&
+          (before.carrier !== after.carrier ||
+            canonical(before.capsule) !== canonical(after.capsule) ||
+            canonical(before.blobs) !== canonical(after.blobs))
         )
           throw new Error("candidate requires capsule, blob or carrier update");
-        const changed = (["web", "daemon"] as const).filter(
+        if (layer === "capsule" && canonical(before.capsule) === canonical(after.capsule)) {
+          ignored = release.envelope.digest;
+          state = { ...state, phase: "idle", prepared: undefined };
+          return;
+        }
+        const changed = (["capsule", "web", "daemon"] as const).filter(
           (kind) => canonical(before[kind]) !== canonical(after[kind]),
         );
-        if (!changed.length) throw new Error("leaf candidate has no changed units");
+        if (!changed.length) throw new Error("candidate has no changed units");
         for (const asset of release.assets) {
           abort.signal.throwIfAborted();
           if (!verify(asset.artifact, asset.bytes)) throw new Error("candidate integrity mismatch");
@@ -131,13 +147,17 @@ export async function watch(host: Host, options: Options) {
         void schedule();
       }, interval);
   };
-  const attachment = await host.expose<Methods>("updates", {
+  const disarm = () => {
+    stopped = true;
+    clearTimeout(timer);
+    controller?.abort(new Error("discovery stopped"));
+  };
+  const attachment = await host.expose<Methods>(layer === "capsule" ? "bootstrapupdates" : "updates", {
     handlers: { status },
     lifecycle: {
       initialize: async (context) => {
         lane = context.identity.channel;
-        if (context.identity.generation !== initial.envelope.digest)
-          throw new Error("discovery host generation mismatch");
+        if (context.identity.generation !== host.anchor) throw new Error("discovery host generation mismatch");
         store = await Store.open({ root: context.roots.resource });
         for (const asset of initial.assets) {
           if (!verify(asset.artifact, asset.bytes)) throw new Error("initial content integrity mismatch");
@@ -151,9 +171,7 @@ export async function watch(host: Host, options: Options) {
         );
       },
       stop: async () => {
-        stopped = true;
-        clearTimeout(timer);
-        controller?.abort(new Error("discovery stopped"));
+        disarm();
         await pending;
         state = { ...state, phase: "stopped" };
       },
@@ -162,7 +180,11 @@ export async function watch(host: Host, options: Options) {
   return {
     status,
     check,
-    close: () => attachment.close(),
+    close: async () => {
+      disarm();
+      await pending;
+      await attachment.close();
+    },
     candidate: async (): Promise<Release | undefined> => {
       if (stopped) throw new Error("discovery is stopped");
       const value = prepared ? structuredClone(prepared) : undefined;

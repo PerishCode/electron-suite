@@ -12,6 +12,7 @@ guard:
       - .github
       - .github/workflows
       - .githooks
+      - packages/runtime/src/control
       - packages/guard/src/config
       - packages/guard/src/rules
       - packages/guard/src/scan
