@@ -12,6 +12,7 @@ export class NativeGate {
   private window?: BrowserWindow;
   private observe?: ReturnType<typeof observeAutomation>;
   private retrying = false;
+  private retries = 0;
   constructor(
     private catalog: Catalog,
     private automated: boolean,
@@ -55,6 +56,7 @@ export class NativeGate {
           witness: actual,
           automation: this.observe!(),
           productPreload: false,
+          retries: this.retries,
           installer: "not-yet-implemented",
         }),
       );
@@ -62,6 +64,7 @@ export class NativeGate {
   }
   private async retry() {
     this.retrying = true;
+    this.retries++;
     try {
       await this.catalog.head(this.catalog.options.channel);
       app.relaunch();
