@@ -3,7 +3,15 @@ import { realpath } from "node:fs/promises";
 import { promisify } from "node:util";
 import { type FactoryScope, factoryScope } from "@perishcode/protocol";
 import type { Identity } from "../control/types.js";
-import { stamp as normalizeStamp, readStamp, rootKey, type Stamp, sameStamp } from "./identity.js";
+import {
+  type ManagerStamp,
+  stamp as normalizeStamp,
+  readManagerStamp,
+  readStamp,
+  rootKey,
+  type Stamp,
+  sameStamp,
+} from "./identity.js";
 
 export interface Witness {
   pid: number;
@@ -15,6 +23,7 @@ export interface Process extends Witness {
   command: string;
   stamp?: Stamp;
   invalidStamp?: boolean;
+  manager?: ManagerStamp;
 }
 export interface ProcessInstance {
   root: Witness;
@@ -39,8 +48,10 @@ export async function capture(): Promise<Process[]> {
       const command = match[5]!;
       let value: Stamp | undefined;
       let invalidStamp = false;
+      let manager: ManagerStamp | undefined;
       try {
         value = readStamp(command);
+        manager = readManagerStamp(command);
       } catch {
         invalidStamp = true;
       }
@@ -52,6 +63,7 @@ export async function capture(): Promise<Process[]> {
         command,
         stamp: value,
         invalidStamp,
+        manager,
       };
     })
     .filter((p) => p.pid !== observerPid);
@@ -60,7 +72,9 @@ export const exact = (value: Process, witness: Witness) => value.pid === witness
 export function owned(all: Process[], root: Witness, identity: Stamp): Process[] {
   const found = all.find((p) => exact(p, root));
   if (!found || !found.stamp || !sameStamp(found.stamp, identity)) return [];
-  const excluded = new Set(all.filter((p) => p.stamp && !sameStamp(p.stamp, identity)).map((p) => p.pid));
+  const excluded = new Set(
+    all.filter((p) => p.manager || (p.stamp && !sameStamp(p.stamp, identity))).map((p) => p.pid),
+  );
   for (;;) {
     const next = all.filter(
       (p) => excluded.has(p.ppid) && !excluded.has(p.pid) && !(p.stamp && sameStamp(p.stamp, identity)),
@@ -90,7 +104,7 @@ export function owned(all: Process[], root: Witness, identity: Stamp): Process[]
 export async function signalOwned(values: Witness[], signal: NodeJS.Signals, identity: Stamp) {
   const now = await capture();
   const foreign = new Set(
-    now.filter((p) => p.invalidStamp || (p.stamp && !sameStamp(p.stamp, identity))).map((p) => p.pid),
+    now.filter((p) => p.manager || p.invalidStamp || (p.stamp && !sameStamp(p.stamp, identity))).map((p) => p.pid),
   );
   for (;;) {
     const children = now.filter(

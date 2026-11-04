@@ -1,5 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { chmod, lstat, realpath } from "node:fs/promises";
+import { chmod, lstat, mkdir, realpath } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { basename, dirname, join, resolve } from "node:path";
 import { type Capability, type FactoryScope, factoryKey, factoryScope, type Permit } from "@perishcode/protocol";
@@ -11,6 +11,7 @@ import { Hosted } from "../control/hosted.js";
 import type { SessionScope } from "../control/session.js";
 import type { Attachment, Expose } from "../control/types.js";
 import { Sidecar } from "../host.js";
+import { managerIncarnation } from "../process/manager.js";
 import { observeProcesses } from "../process/observe.js";
 import { Bindings } from "../state/binding.js";
 import { Catalog } from "./catalog.js";
@@ -204,7 +205,9 @@ export async function serve(endpoint: string, options: { authority?: string; roo
       if ((fault as NodeJS.ErrnoException).code !== "ENOENT") throw fault;
     }
   }
-  const ownership = await Ownership.claim(join(root, "manager.sqlite"));
+  await mkdir(root, { recursive: true, mode: 0o700 });
+  root = await realpath(root);
+  const ownership = await Ownership.claim(join(root, "manager.sqlite"), managerIncarnation(root));
   root = await realpath(root);
   const host = new Sidecar(root);
   let catalog: Catalog;

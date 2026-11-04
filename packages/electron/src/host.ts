@@ -7,6 +7,7 @@ import { type Options as UpdateOptions, watch } from "@perishcode/update";
 import { app, BrowserWindow, ipcMain, protocol } from "electron";
 import { type AutomationReceipt, observeAutomation, prepareAutomation } from "./automation.js";
 import { NativeGate } from "./control/gate.js";
+import { type Installation, installation } from "./control/install.js";
 import { renderer as rendererAdapter } from "./control/renderer.js";
 import { Links, loading, routes } from "./routing.js";
 
@@ -20,6 +21,7 @@ export interface HostOptions extends Omit<SessionOptions, "executable"> {
     capsule?: boolean;
   };
   distribution?: Pick<CatalogOptions, "endpoint" | "publickey" | "product">;
+  installation?: Installation;
   /** Caller-owned debugging contract; manager credentials are never sent to the renderer. */
   inspect?: (
     session: Session,
@@ -65,6 +67,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
   let catalog: Catalog | undefined;
   let gate: NativeGate | undefined;
   let blocking: Promise<void> | undefined;
+  let installing: ReturnType<typeof installation> | undefined;
   const updateOptions = () => ({
     ...options.updates,
     endpoint: options.distribution?.endpoint ?? options.updates!.endpoint,
@@ -79,6 +82,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
         await drained;
         await gate!.show(error, { runtime: await session?.snapshot() });
         window?.destroy();
+        if (installing) await installing.start();
       })().catch((error) => {
         process.stderr.write(`${String(error)}\n`);
         app.quit();
@@ -101,8 +105,10 @@ export async function startElectron(options: HostOptions): Promise<void> {
   });
   let payloadLoading = "";
   app.on("before-quit", (event) => {
-    if (closing) return;
+    // Every request stays fenced while asynchronous drain owns shutdown. A
+    // repeated native/remote quit must not bypass the first request's cleanup.
     event.preventDefault();
+    if (closing) return;
     closing = true;
     void (async () => {
       await blocking;
@@ -119,14 +125,19 @@ export async function startElectron(options: HostOptions): Promise<void> {
         }
         app.exit(completed ? 0 : 1);
       })
-      .catch((fault: Error) => {
+      .catch(async (fault: Error) => {
         process.stderr.write(`${fault.stack}\n`);
+        if (options.receipt)
+          await writeFile(
+            `${options.receipt}.stop.json`,
+            JSON.stringify({ status: "failed", error: String(fault), stack: fault.stack }),
+          );
         app.exit(1);
       });
   });
   try {
     await app.whenReady();
-    const runtime = { ...options, root, executable: process.execPath };
+    const runtime = { ...options, root, executable: process.execPath, onQuit: () => app.quit() };
     if (options.distribution) {
       const expectedAppid =
         options.manifest.channel === "stable"
@@ -143,6 +154,20 @@ export async function startElectron(options: HostOptions): Promise<void> {
         root: bootstrap.context.roots.data,
       });
       gate = new NativeGate(catalog, automated, options.receipt);
+      if (options.installation) {
+        installing = installation(
+          catalog,
+          { root, namespace: options.namespace },
+          gate,
+          () => {
+            completed = true;
+            app.quit();
+          },
+          options.installation,
+          options.receipt,
+        );
+        gate.install(installing.start);
+      }
       try {
         await catalog.head(options.manifest.channel);
       } catch (error) {
@@ -150,6 +175,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
           owner: { service: bootstrap.context.identity.service, incarnation: bootstrap.context.incarnation },
           productInitialized: false,
         });
+        if (installing && error instanceof ShellRequired) await installing.start();
         app.on("window-all-closed", () => app.quit());
         if (options.probe) app.quit();
         return;
@@ -157,6 +183,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
     }
     session = await Session.open(runtime, bootstrap);
     bootstrap = undefined;
+    await installing?.register();
     const active = session;
     const payload = await active.activate({
       updates:
@@ -212,6 +239,8 @@ export async function startElectron(options: HostOptions): Promise<void> {
       () => app.quit(),
       async () => ({ ...(await active.snapshot()), automation: automation(), adapter: adapter() }),
     );
+    await active.announce();
+    await installing?.confirm(receipt);
     if (options.receipt) {
       await mkdir(dirname(options.receipt), { recursive: true });
       await writeFile(options.receipt, JSON.stringify(receipt));

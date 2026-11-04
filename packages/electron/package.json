@@ -1,6 +1,6 @@
 {
   "name": "@perishcode/electron",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "type": "module",
   "exports": {
     ".": {
@@ -29,7 +29,8 @@
     "@perishcode/runtime": "workspace:*",
     "@perishcode/release": "workspace:*",
     "@perishcode/update": "workspace:*",
-    "@perishcode/distribution": "workspace:*"
+    "@perishcode/distribution": "workspace:*",
+    "@perishcode/installer": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
@@ -51,5 +52,6 @@
   },
   "peerDependencies": {
     "electron": "41.3.0"
-  }
+  },
+  "sideEffects": false
 }

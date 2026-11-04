@@ -13,12 +13,28 @@ export class NativeGate {
   private observe?: ReturnType<typeof observeAutomation>;
   private retrying = false;
   private retries = 0;
+  private minimum?: string;
+  private installer?: () => Promise<void>;
+  install(operation: () => Promise<void>) {
+    this.installer = operation;
+  }
+  async progress(message: string, installation?: unknown) {
+    await this.render(`Updating application: ${message}`, { installation }, "updating");
+  }
   constructor(
     private catalog: Catalog,
     private automated: boolean,
     private receipt?: string,
   ) {}
   async show(error: unknown, facts: Record<string, unknown> = {}) {
+    if (error instanceof ShellRequired) this.minimum = error.metadata.minShellVersion;
+    const text =
+      error instanceof ShellRequired
+        ? `Update required: shell ${this.catalog.options.shellVersion}, minimum ${this.minimum}`
+        : `Update verification failed: ${String(error)}`;
+    await this.render(text, { ...facts, error: String(error) });
+  }
+  private async render(text: string, facts: Record<string, unknown> = {}, result = "blocked") {
     if (!this.window) {
       this.window = new BrowserWindow({
         title: "Application update required",
@@ -34,10 +50,6 @@ export class NativeGate {
         if (event.url === "pesuite-update://retry" && !this.retrying) void this.retry();
       });
     }
-    const minimum = error instanceof ShellRequired ? error.metadata.minShellVersion : undefined;
-    const text = minimum
-      ? `Update required: shell ${this.catalog.options.shellVersion}, minimum ${minimum}`
-      : `Update verification failed: ${String(error)}`;
     const html = `<html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; navigate-to pesuite-update:"></head><body><h1>Application update required</h1><output>${encodeText(text)}</output><p><a href="pesuite-update://retry">Retry</a> <a href="pesuite-update://quit">Quit</a></p></body></html>`;
     await this.window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
     const actual = await this.window.webContents.executeJavaScript("document.querySelector('output')?.textContent");
@@ -48,16 +60,14 @@ export class NativeGate {
         `${this.receipt}.gate.json`,
         JSON.stringify({
           ...facts,
-          result: "blocked",
+          result,
           pid: process.pid,
           installed: this.catalog.options.shellVersion,
-          minimum,
-          error: String(error),
+          minimum: this.minimum,
           witness: actual,
           automation: this.observe!(),
           productPreload: false,
           retries: this.retries,
-          installer: "not-yet-implemented",
         }),
       );
     }
@@ -70,7 +80,8 @@ export class NativeGate {
       app.relaunch();
       app.quit();
     } catch (error) {
-      await this.show(error);
+      if (error instanceof ShellRequired && this.installer) await this.installer();
+      else await this.show(error);
     } finally {
       this.retrying = false;
     }

@@ -30,7 +30,7 @@ import {
 } from "@perishcode/protocol";
 import { Ownership } from "./ownership.js";
 
-const durable = new Set<Resource>(["cache", "cas", "data", "logs"]);
+const durable = new Set<Resource>(["cache", "cas", "data", "logs", "installation"]);
 const transient = new Set<Resource>(["lock", "port", "socket", "staging"]);
 
 export interface ResourceOptions extends FactoryScope {
@@ -45,11 +45,22 @@ function same(left: Request, right: Request): boolean {
     left.name === right.name &&
     left.owner === right.owner &&
     left.scheme === right.scheme &&
-    left.scope === right.scope
+    left.scope === right.scope &&
+    left.target === right.target
   );
 }
 
 export function path(base: string, request: Request, lease: string): string {
+  if (request.kind === "installation") {
+    if (
+      !request.target ||
+      resolve(request.target) !== request.target ||
+      request.target === resolve(request.target, "..")
+    )
+      throw new Error("invalid installation target");
+    return request.target;
+  }
+  if (request.target !== undefined) throw new Error("target only belongs to installation grants");
   const token = digest(canonical({ lease, owner: request.owner ?? "namespace" })).slice(7, 23);
   if (request.kind === "socket") {
     const root = digest(base).slice(7, 23);
@@ -300,6 +311,17 @@ export class Resources {
   async #create(request: Request, lease: string): Promise<{ handle?: Handle; value: string }> {
     if (request.kind === "port") return reserve(request.scheme);
     const value = path(this.#base, request, lease);
+    if (request.kind === "installation") {
+      const parent = await realpath(resolve(value, ".."));
+      if (join(parent, value.split(/[\\/]/).at(-1)!) !== value)
+        throw new Error("installation parent must be canonical");
+      try {
+        if ((await lstat(value)).isSymbolicLink()) throw new Error("installation target cannot be a symlink");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      return { value };
+    }
     if (request.kind === "lock") {
       await mkdir(resolve(value, ".."), { recursive: true });
       return { handle: { kind: "file", value: await open(value, "wx") }, value };
@@ -318,6 +340,7 @@ export class Resources {
   }
 
   async #remove(grant: Grant): Promise<void> {
+    if (grant.kind === "installation") return;
     if (grant.kind === "port") return;
     if (grant.value !== path(this.#base, grant, grant.lease)) {
       throw new Error("resource escaped namespace");

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +21,29 @@ async function create(name: string, root?: string): Promise<{ host: Resources; r
 }
 
 describe("resources", () => {
+  it("registers a canonical durable installation target without deleting or silently aliasing it", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "installation-grant-"))),
+      target = join(root, "target.app");
+    await mkdir(target);
+    await writeFile(join(target, "keep"), "installation bytes");
+    const { host } = await create("installation", join(root, "authority"));
+    const grant = await host.grant({ kind: "installation", name: "application", scope: "factory", target });
+    expect(grant.value).toBe(target);
+    await expect(host.release(grant.lease)).rejects.toThrow(/persistent/);
+    await expect(host.grant({ kind: "installation", name: "other", scope: "factory", target })).rejects.toThrow(
+      /resource/,
+    );
+    await expect(
+      host.grant({ kind: "installation", name: "relative", scope: "factory", target: "../escape" }),
+    ).rejects.toThrow(/target/);
+    const alias = join(root, "alias.app");
+    await symlink(target, alias);
+    await expect(host.grant({ kind: "installation", name: "alias", scope: "factory", target: alias })).rejects.toThrow(
+      /symlink/,
+    );
+    await host.close();
+    expect(await readFile(join(target, "keep"), "utf8")).toBe("installation bytes");
+  });
   it("keeps a granted port reserved until release", async () => {
     const { host } = await create("first");
     const grant = await host.grant({ kind: "port", name: "daemon", owner: "attempt", scope: "attempt" });

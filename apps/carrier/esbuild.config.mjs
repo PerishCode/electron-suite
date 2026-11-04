@@ -1,3 +1,4 @@
+import { nodeBanner } from "@perishcode/electron/assets";
 import { build } from "esbuild";
 
 const shared = {
@@ -8,7 +9,19 @@ const shared = {
 };
 
 await Promise.all([
-  build({ ...shared, entryPoints: ["src/index.ts"], format: "esm", outfile: "dist/index.mjs" }),
-  build({ ...shared, entryPoints: ["src/main.ts"], format: "esm", outfile: "dist/main.mjs" }),
+  build({
+    ...shared,
+    entryPoints: ["src/index.ts"],
+    format: "esm",
+    banner: { js: nodeBanner },
+    outfile: "dist/index.mjs",
+  }),
+  build({
+    ...shared,
+    entryPoints: ["src/main.ts"],
+    format: "esm",
+    banner: { js: nodeBanner },
+    outfile: "dist/main.mjs",
+  }),
   build({ ...shared, entryPoints: ["src/preload.ts"], format: "cjs", outfile: "dist/preload.cjs" }),
 ]);

@@ -1,10 +1,8 @@
-import { createHash } from "node:crypto";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { channel, namespace } from "@perishcode/protocol";
 import { readProduct } from "@perishcode/release";
-import { type Attachment, Client, type Factory, type Service, serve } from "@perishcode/sidecar";
-import type { SessionOptions } from "./core.js";
+import { type Attachment, Client, type Factory, managerEndpoint, type Service, serve } from "@perishcode/sidecar";
+import { ownerAdapter, type SessionOptions } from "./core.js";
 
 const owners = new WeakMap<
   Bootstrap,
@@ -14,8 +12,7 @@ const owners = new WeakMap<
 export class Bootstrap {
   private constructor(readonly context: Attachment["context"]) {}
   static async open(options: SessionOptions): Promise<Bootstrap> {
-    const key = createHash("sha256").update(options.root).digest("hex").slice(0, 20);
-    const host = await serve(join(tmpdir(), `pesuite-${key}-${process.pid}.sock`), { root: options.root });
+    const host = await serve(managerEndpoint(options.root), { root: options.root });
     try {
       const factory = new Client(host.endpoint, host.authority).factory({
         channel: channel(options.manifest.channel),
@@ -28,10 +25,9 @@ export class Bootstrap {
           ? (await readProduct(options.candidate ?? options.seed)).envelope.digest
           : state.current;
       if (!anchor) throw new Error("no committed generation to recover");
-      const electron = await host.factory(factory.scope).expose({
+      const electron = await host.factory(factory.scope).expose<{ quit: { input: null; output: boolean } }>({
         identity: { service: "electron", generation: anchor },
-        handlers: {},
-        lifecycle: { initialize: async () => {}, stop: async () => {} },
+        ...ownerAdapter(options.onQuit),
       });
       const result = new Bootstrap(electron.context);
       owners.set(result, { host, factory, electron, options, claimed: false });

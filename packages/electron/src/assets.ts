@@ -29,3 +29,5 @@ export async function asset(root: string, request: Request, connect = "'none'"):
     throw fault;
   }
 }
+export const nodeBanner =
+  'import { createRequire as pesuiteRequire } from "node:module";const require=pesuiteRequire(import.meta.url);';

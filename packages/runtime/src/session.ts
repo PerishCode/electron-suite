@@ -1,10 +1,9 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { channel, namespace } from "@perishcode/protocol";
 import { decode, readProduct } from "@perishcode/release";
-import { Client, serve } from "@perishcode/sidecar";
+import { Client, managerEndpoint, serve } from "@perishcode/sidecar";
 import { Activation } from "./control/activation.js";
 import { type Bootstrap, claim } from "./control/bootstrap.js";
 import type { SessionOptions } from "./control/core.js";
@@ -35,8 +34,7 @@ export class Session extends Activation {
   static async open(options: SessionOptions, bootstrap?: Bootstrap): Promise<Session> {
     await mkdir(options.root, { recursive: true, mode: 0o700 });
     // The Electron adapter holds an OS single-instance lock for this root.
-    const key = createHash("sha256").update(options.root).digest("hex").slice(0, 20);
-    const endpoint = join(tmpdir(), `pesuite-${key}-${process.pid}.sock`);
+    const endpoint = managerEndpoint(options.root);
     const prior = bootstrap ? claim(bootstrap, options) : undefined;
     const host = prior?.host ?? (await serve(endpoint, { root: options.root }));
     const client = new Client(host.endpoint, host.authority);
