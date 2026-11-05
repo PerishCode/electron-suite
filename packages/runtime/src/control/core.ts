@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Library, type LibraryOptions } from "@perishcode/blob";
 import { type Digest, type Generation, gates } from "@perishcode/protocol";
 import { type Manifest, protocolIdentity } from "@perishcode/release";
 import {
@@ -91,6 +92,20 @@ export interface Receipt {
   counts: { daemon: number; document: number };
 }
 export class Core {
+  private libraries = new Set<Library>();
+  async blobLibrary(
+    context: import("@perishcode/sidecar").Context,
+    options: Omit<LibraryOptions, "factory" | "context"> = {},
+  ) {
+    if (this.closed || this.closing || this.blocked) throw Error("runtime is not accepting a blob controller");
+    const library = await Library.open({ ...options, factory: this.factory, context });
+    this.libraries.add(library);
+    return library;
+  }
+  protected async drainLibraries() {
+    await Promise.all([...this.libraries].map((library) => library.close()));
+    this.libraries.clear();
+  }
   protected attempt?: Attempt;
   protected agent?: Agent;
   protected closed = false;

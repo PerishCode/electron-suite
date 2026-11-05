@@ -1,6 +1,6 @@
 {
   "name": "@perishcode/blob",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "exports": {
     ".": {
@@ -17,7 +17,9 @@
     "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@perishcode/protocol": "workspace:*"
+    "@perishcode/protocol": "workspace:*",
+    "@perishcode/release": "workspace:*",
+    "@perishcode/sidecar": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

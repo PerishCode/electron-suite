@@ -22,6 +22,7 @@ export class Session extends Activation {
       await this.activation?.catch(() => {});
       await this.product?.drainCalls();
       await this.product?.pauseUpdates();
+      await this.drainLibraries();
       await this.factory.session(async () => {
         await this.product?.close();
         await this.agent?.close();
@@ -102,6 +103,7 @@ export class Session extends Activation {
     await this.handoff?.catch(() => {});
     await this.product?.drainCalls();
     await this.product?.pauseUpdates();
+    await this.drainLibraries();
     await this.factory.session(async () => {
       if (this.attempt && !this.ready) {
         await this.generations.fail(this.attempt, error);

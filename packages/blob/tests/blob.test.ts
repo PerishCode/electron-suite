@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -47,4 +47,21 @@ describe("blob", () => {
     const current = await store();
     await expect(current.store.put("capsule", "../model", "content")).rejects.toThrow("single word");
   });
+});
+
+it.runIf(process.platform !== "win32")("rejects swapped CAS directories and symlink objects", async () => {
+  const current = await store(),
+    foreign = join(current.root, "foreign");
+  await mkdir(foreign);
+  await rm(join(current.root, "objects"), { recursive: true });
+  await symlink(foreign, join(current.root, "objects"), "dir");
+  await expect(current.store.put("blob", "probe", "content")).rejects.toThrow("escaped");
+  expect(await readdir(foreign)).toEqual([]);
+  const other = await store(),
+    artifact = await other.store.put("blob", "probe", "content"),
+    external = join(other.root, "external");
+  await writeFile(external, "content");
+  await rm(join(other.root, "objects", artifact.digest.slice(7)));
+  await symlink(external, join(other.root, "objects", artifact.digest.slice(7)));
+  await expect(other.store.read(artifact)).rejects.toThrow("regular");
 });
