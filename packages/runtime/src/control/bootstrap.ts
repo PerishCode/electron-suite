@@ -39,7 +39,13 @@ export class Bootstrap {
       const electron = await host.factory(factory.scope).expose<{ quit: { input: null; output: boolean } }>({
         identity: { service: "electron", generation: anchor },
         ...ownerAdapter(options.onQuit, async (context) => {
-          library = await Library.open({ factory, context, name: "content", retentionMs: options.blobRetentionMs });
+          library = await Library.open({
+            factory,
+            context,
+            name: "content",
+            retentionMs: options.blobRetentionMs,
+            onCheckpoint: options.onContentCheckpoint,
+          });
         }),
       });
       const result = new Bootstrap(electron.context);

@@ -60,6 +60,8 @@ export interface SessionOptions {
   /** Diagnostic observation only; never substitutes for runtime readiness. */
   onActivation?: (checkpoint: Readonly<ActivationCheckpoint>) => Promise<void>;
   blobRetentionMs?: number;
+  /** Diagnostic fault observation only; cannot provide readiness or GC policy. */
+  onContentCheckpoint?: LibraryOptions["onCheckpoint"];
   carrier: number;
   candidate?: string;
   executable: string;
