@@ -369,3 +369,5 @@ Runtime CAS/view GC does not delete envelope receipts or installation history. T
 Carrier skeleton: `carriers/electron` contains the stable host and `src/capsule`, compiled independently to `dist/main.mjs` and `dist/capsule/index.mjs`. Shared application code stays in `apps/web` and `apps/daemon`. `carriers/standalone`, `carriers/docker` and `carriers/codexplugin` reserve empty `src`/`tests` trees; they have no runtime or packaging implementation.
 
 Carriers will share the product version and coordinated channel release. Existing workflows currently qualify Electron only. Multi-carrier build/release orchestration and standalone behavior remain pending boundary discussion; placeholder test discovery is not functional qualification.
+
+`packages/carrier` reserves the shared carrier-environment contract for definition, registration and propagation. Carrier adapters will supply environment facts and connect transport; release retains product identity and sidecar retains resource authority. This is currently a private empty source/test scaffold with independent TypeScript/Vitest configuration, without public API, implementation or npm publication.
