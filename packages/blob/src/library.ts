@@ -4,6 +4,7 @@ import { canonical, type Digest, valid, verify } from "@perishcode/protocol";
 import type { Directory } from "@perishcode/sidecar";
 import { locate } from "./control/access.js";
 import { Controller } from "./control/controller.js";
+import { eraseView } from "./control/erase.js";
 import { scoped } from "./control/session.js";
 import { anchor, exists, fs, read, save, view } from "./files.js";
 import { compatible, exact, key, materialize, resource } from "./format.js";
@@ -433,7 +434,7 @@ export class Library {
     const entry = state.entries[id]!;
     if (entry.uses.length || entry.operation || state.references.some((r) => r.keys.includes(id)))
       throw Error("blob deletion intent conflicts with protection");
-    await fs.rm(view(this.roots.cache, id), { recursive: true, force: true });
+    await eraseView(this.roots.cache, id, entry.resource.type === "directory", this.options.onCheckpoint);
     if (
       !Object.entries(state.entries).some(
         ([other, e]) => other !== id && e.resource.artifact.digest === entry.resource.artifact.digest,

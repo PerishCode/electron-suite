@@ -14,7 +14,7 @@ export interface Options {
   catalog: Omit<CatalogOptions, "root">;
   env: Record<string, string>;
   /** Diagnostic fault point; never a policy/readiness input. */
-  checkpoint?: "ready" | "vacated" | "displaced" | "installed" | "launched" | "confirmed";
+  checkpoint?: "ready" | "vacated" | "displaced" | "installed" | "launched" | "confirming" | "confirmed";
 }
 export interface Job extends Options {
   schema: 1;

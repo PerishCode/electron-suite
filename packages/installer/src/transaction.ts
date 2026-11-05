@@ -13,7 +13,7 @@ import {
 } from "@perishcode/sidecar";
 import { scope } from "./domain.js";
 import { bundle, hash, save, sync } from "./files.js";
-import type { Confirmation, Job, Journal } from "./types.js";
+import type { Confirmation, Job, Journal, Options } from "./types.js";
 
 async function exists(path: string) {
   try {
@@ -39,7 +39,7 @@ export class Transaction {
     this.record.history.push({ phase, at: Date.now(), pid: process.pid });
     await save(join(this.job.home, "record.json"), this.record);
   }
-  async checkpoint(phase: Journal["phase"]) {
+  async checkpoint(phase: NonNullable<Options["checkpoint"]>) {
     if (this.job.checkpoint === phase) {
       await save(join(this.job.home, "checkpoint.json"), { phase, pid: process.pid, id: this.job.id });
       await new Promise(() => {});
@@ -71,6 +71,7 @@ export class Transaction {
       throw Error("installation launch is not live");
     if ((await hash(this.job.target)) !== this.record.newHash)
       throw Error("installed bytes changed before confirmation");
+    await this.checkpoint("confirming");
     await this.persist("confirmed");
     this.accepted?.();
     return true;

@@ -51,7 +51,11 @@ export interface LibraryOptions {
   intervalMs?: number;
   onError?: (error: unknown) => void;
   /** Diagnostic fault injection only. Do not reenter the library from it. */
-  onCheckpoint?: (event: { phase: "loading" | "materialized" | "deleting"; key: Digest }) => Promise<void>;
+  onCheckpoint?: (event: {
+    phase: "loading" | "materialized" | "deleting" | "pruned";
+    key: Digest;
+    removed?: string;
+  }) => Promise<void>;
 }
 
 export interface LibrarySession {
