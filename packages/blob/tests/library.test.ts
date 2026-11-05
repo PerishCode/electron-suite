@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -329,6 +329,45 @@ it("cancels and drains an accepted prefetch as one lifecycle operation", async (
     assert.equal(state.owner, undefined);
     assert.equal(state.entries[resourceKey(a)].uses.length, 0);
     assert.equal(state.entries[resourceKey(a)].operation, undefined);
+  } finally {
+    await f.close();
+  }
+});
+
+it("refuses a missing established ledger without losing live protection", async () => {
+  const f = await fixture();
+  try {
+    const bytes = Buffer.from("live protected resource"),
+      a = spec(bytes);
+    f.contents.set("/file", bytes);
+    const use = await f.library.acquire(a, source(f.origin + "/file", a));
+    const data = (await f.factory.resources()).grants.find((g) => g.kind === "data" && g.name === "blob")!.value,
+      ledger = join(data, "library.json"),
+      evidence = join(data, "ledger-evidence.json");
+    await rename(ledger, evidence);
+    try {
+      await assert.rejects(f.library.collect(), /metadata missing.*reconciliation/);
+      await assert.rejects(
+        f.factory.expose({
+          identity: { service: "replacement", generation: digest("replacement") },
+          handlers: {},
+          lifecycle: {
+            initialize: async (context) => {
+              await Library.open({ factory: f.factory, context, retentionMs: 0 });
+            },
+            stop: async () => {},
+          },
+        }),
+        /metadata missing.*reconciliation/,
+      );
+      await assert.rejects(readFile(ledger), /ENOENT/);
+      assert.equal(await readFile(use.path, "utf8"), "live protected resource");
+    } finally {
+      await rename(evidence, ledger);
+    }
+    assert.deepEqual(await f.library.collect(), []);
+    await f.library.release(use);
+    await f.library.collect();
   } finally {
     await f.close();
   }
