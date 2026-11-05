@@ -4,30 +4,30 @@ import { dirname, join, resolve } from "node:path";
 
 import { canonical } from "@perishcode/protocol";
 
-interface Entry {
+export interface BundleEntry {
   bytes: string;
   mode: 420 | 493;
   path: string;
 }
 
 interface Bundle {
-  files: Entry[];
+  files: BundleEntry[];
   schema: 1;
 }
 
 const pattern = /^[A-Za-z0-9][A-Za-z0-9./-]*$/;
 
 function path(value: string): string {
-  if (!pattern.test(value) || value.includes("//") || value.split("/").includes("..")) {
+  if (!pattern.test(value) || value.includes("//") || value.split("/").some((part) => part === ".." || part === ".")) {
     throw new TypeError("bundle path is invalid");
   }
   return value;
 }
 
-async function walk(root: string, base = ""): Promise<Entry[]> {
+async function walk(root: string, base = ""): Promise<BundleEntry[]> {
   const entries = await readdir(join(root, base), { withFileTypes: true });
-  const files: Entry[] = [];
-  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+  const files: BundleEntry[] = [];
+  for (const entry of entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))) {
     const name = base ? `${base}/${entry.name}` : entry.name;
     if (entry.isDirectory()) files.push(...(await walk(root, name)));
     else if (entry.isFile()) {
@@ -45,6 +45,7 @@ function parse(input: string | Uint8Array): Bundle {
   const data = value as Record<string, unknown>;
   if (Object.keys(data).sort().join(":") !== "files:schema") throw new TypeError("bundle fields are invalid");
   if (data.schema !== 1 || !Array.isArray(data.files)) throw new TypeError("bundle header is invalid");
+  if (data.files.length > 4096) throw new TypeError("bundle entry limit");
   const files = data.files.map((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new TypeError("bundle file is invalid");
     const file = item as Record<string, unknown>;
@@ -57,7 +58,7 @@ function parse(input: string | Uint8Array): Bundle {
     if (file.mode !== 0o644 && file.mode !== 0o755) {
       throw new TypeError("bundle file is invalid");
     }
-    return { bytes: file.bytes as string, mode: file.mode, path: path(file.path) } as Entry;
+    return { bytes: file.bytes as string, mode: file.mode, path: path(file.path) } as BundleEntry;
   });
   const names = files.map((file) => file.path);
   if (new Set(names).size !== names.length || names.join("\0") !== [...names].sort().join("\0")) {
@@ -79,7 +80,7 @@ export async function bundle(
   for (const [name, bytes] of Object.entries(extra)) {
     files.push({ bytes: Buffer.from(bytes).toString("base64"), mode: 0o644, path: path(name) });
   }
-  files.sort((left, right) => left.path.localeCompare(right.path));
+  files.sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
   return Buffer.from(canonical(parse(canonical({ files, schema: 1 }))));
 }
 
@@ -106,4 +107,8 @@ export function bundleFile(input: string | Uint8Array, name: string): Uint8Array
   const entry = parse(input).files.find((file) => file.path === name);
   if (!entry) throw new Error(`bundle file missing: ${name}`);
   return Buffer.from(entry.bytes, "base64");
+}
+
+export function bundleEntries(input: string | Uint8Array): readonly BundleEntry[] {
+  return parse(input).files;
 }

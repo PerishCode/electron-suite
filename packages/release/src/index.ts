@@ -1,5 +1,8 @@
+export type { BundleEntry } from "./bundle.js";
 export {
   bundle,
+  bundleDestination,
+  bundleEntries,
   bundleFile,
   materialize,
 } from "./bundle.js";
