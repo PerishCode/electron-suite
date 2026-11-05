@@ -15,7 +15,10 @@ import { Agent } from "../agent.js";
 import type { Attempt, Generations, Mount } from "../generations.js";
 import { type CapsuleEnvironment, type Composition, Product, type ProductReceipt } from "../lifecycle.js";
 import { unitFile } from "./units.js";
-export function ownerAdapter(onQuit?: () => void) {
+export function ownerAdapter(
+  onQuit?: () => void,
+  initialize?: (context: import("@perishcode/sidecar").Context) => Promise<void>,
+) {
   let trigger: () => void = () => {},
     active = true;
   const signal = new Promise<void>((done) => (trigger = done));
@@ -29,6 +32,7 @@ export function ownerAdapter(onQuit?: () => void) {
     },
     lifecycle: {
       initialize: async (context: import("@perishcode/sidecar").Context) => {
+        await initialize?.(context);
         context.background(() => {
           void signal
             .then(() => {
@@ -54,6 +58,7 @@ export interface SessionOptions {
   onQuit?: () => void;
   /** Diagnostic observation only; never substitutes for runtime readiness. */
   onActivation?: (checkpoint: Readonly<ActivationCheckpoint>) => Promise<void>;
+  blobRetentionMs?: number;
   carrier: number;
   candidate?: string;
   executable: string;
@@ -166,6 +171,12 @@ export class Core {
     this.docGeneration = mount.target;
     this.docNonce = nonce;
   }
+  blobStatus() {
+    return this.generations.resources.library.status();
+  }
+  collectBlobs() {
+    return this.generations.resources.library.collect();
+  }
   content() {
     if (this.closed || this.closing) throw new Error("session is closed");
     return this.generations.content(this.current.target);
@@ -249,6 +260,7 @@ export class Core {
       this.environment,
       protocolIdentity(this.manifest),
       version,
+      this.generations.resources,
     );
   }
   async start(): Promise<void> {

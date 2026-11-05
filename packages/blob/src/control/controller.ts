@@ -27,6 +27,11 @@ export class Controller {
       });
       this.channel.port2.postMessage(null);
     });
+    return this.track(() => result);
+  }
+  track<T>(operation: () => Promise<T>): Promise<T> {
+    if (!this.accepting) return Promise.reject(Error("blob library is closing"));
+    const result = Promise.resolve().then(operation);
     this.pending.add(result);
     void result.then(
       () => this.pending.delete(result),

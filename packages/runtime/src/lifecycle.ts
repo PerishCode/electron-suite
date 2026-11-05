@@ -1,7 +1,9 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { Use } from "@perishcode/blob";
 import type { Digest } from "@perishcode/protocol";
 import type { Context } from "@perishcode/sidecar";
+import type { ContentResources } from "./control/content.js";
 import type { Mount } from "./generations.js";
 
 export interface Composition {
@@ -39,6 +41,7 @@ export interface ProductReceipt {
 /** Loaded adapter code. The stable Electron owner retains all system resources. */
 export class Product {
   private body?: Capsule;
+  private uses: Use[] = [];
   private phase: "initializing" | "ready" | "stopping" | "failed" | "stopped" = "initializing";
   private calls = new Set<Promise<unknown>>();
   private accepting = true;
@@ -55,6 +58,7 @@ export class Product {
     private environment: CapsuleEnvironment,
     protocols: CapsuleContext["protocols"],
     private version: string,
+    private content: ContentResources,
   ) {
     this.context = Object.freeze({
       blobs: Object.freeze({ ...mount.blobs }),
@@ -92,6 +96,7 @@ export class Product {
   }
   async initialize(): Promise<Composition> {
     try {
+      this.uses = await this.content.use(this.mount.target);
       const module = await import(pathToFileURL(join(this.mount.capsule, "index.mjs")).href);
       if (typeof module.create !== "function") throw new Error("capsule create entry required");
       const body = module.create() as Capsule;
@@ -161,6 +166,8 @@ export class Product {
       await this.drainCalls();
       await this.body?.stop();
       await this.stopUpdates();
+      await this.content.release(this.uses);
+      this.uses = [];
       this.phase = "stopped";
     } catch (error) {
       this.phase = "failed";

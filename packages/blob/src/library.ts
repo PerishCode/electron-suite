@@ -2,11 +2,23 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { canonical, type Digest, valid, verify } from "@perishcode/protocol";
 import type { Directory } from "@perishcode/sidecar";
-import { Controller } from "./controller.js";
+import { Controller } from "./control/controller.js";
+import { scoped } from "./control/session.js";
 import { anchor, exists, fs, read, save, view } from "./files.js";
 import { compatible, exact, key, materialize, resource } from "./format.js";
 import { Store } from "./store.js";
-import type { Consumer, Entry, LibraryOptions, Loader, Owner, Reference, Resource, State, Use } from "./types.js";
+import type {
+  Consumer,
+  Entry,
+  LibraryOptions,
+  LibrarySession,
+  Loader,
+  Owner,
+  Reference,
+  Resource,
+  State,
+  Use,
+} from "./types.js";
 
 function consumer(value: Consumer) {
   if (
@@ -68,6 +80,8 @@ export class Library {
     if (!Number.isSafeInteger(interval) || interval < 1 || interval > 3600000)
       throw Error("invalid blob collection interval");
     if (!Number.isSafeInteger(retention) || retention < 0) throw Error("invalid blob retention");
+    options = { ...options, name: options.name ?? "blob" };
+    if (!/^[a-z][a-z0-9]{0,31}$/.test(options.name!)) throw Error("invalid blob domain");
     const factory = options.factory,
       context = options.context;
     if (factory.scope.channel !== context.identity.channel || factory.scope.namespace !== context.identity.namespace)
@@ -82,10 +96,10 @@ export class Library {
         instance.phase !== "initializing"
       )
         throw Error("open blob library during real owner initialization");
-      const established = (await factory.resources()).grants.some((g) => g.kind === "data" && g.name === "blob");
-      const data = await factory.grant({ kind: "data", name: "blob", scope: "factory" }),
-        cas = await factory.grant({ kind: "cas", name: "blob", scope: "factory" }),
-        cache = await factory.grant({ kind: "cache", name: "blob", scope: "factory" });
+      const established = (await factory.resources()).grants.some((g) => g.kind === "data" && g.name === options.name);
+      const data = await factory.grant({ kind: "data", name: options.name!, scope: "factory" }),
+        cas = await factory.grant({ kind: "cas", name: options.name!, scope: "factory" }),
+        cache = await factory.grant({ kind: "cache", name: options.name!, scope: "factory" });
       for (const root of [data.value, cas.value, cache.value]) await anchor(root);
       if (established && !(await exists(join(data.value, "library.json"))))
         throw Error("blob library metadata missing; reconciliation required");
@@ -150,7 +164,7 @@ export class Library {
     if (grant) {
       if (
         grant.kind !== "staging" ||
-        grant.name !== "blob" ||
+        grant.name !== this.options.name ||
         grant.owner !== operation.id ||
         grant.value !== operation.path
       )
@@ -254,7 +268,12 @@ export class Library {
         if (entry.phase === "loading") throw Error("blob load is unresolved");
         if (entry.phase === "ready") return undefined;
         const attempt = randomUUID(),
-          grant = await this.options.factory.grant({ kind: "staging", name: "blob", scope: "attempt", owner: attempt });
+          grant = await this.options.factory.grant({
+            kind: "staging",
+            name: this.options.name!,
+            scope: "attempt",
+            owner: attempt,
+          });
         entry.phase = "loading";
         delete entry.error;
         entry.operation = { id: attempt, lease: grant.lease, path: grant.value, owner: this.owner };
@@ -336,38 +355,65 @@ export class Library {
     });
   }
   prefetch(value: Resource, load: Loader) {
+    return this.controller.run(() => this.prefetchWithin(value, load));
+  }
+  private async prefetchWithin(value: Resource, load: Loader) {
     const spec = resource(value);
     compatible(spec);
-    return this.controller.run(async () => {
-      const use = await this.acquireWithin(spec, load, this.owner);
-      try {
-        return { key: use.key, type: spec.type, bytes: spec.artifact.bytes };
-      } finally {
-        await this.releaseWithin(use);
-      }
-    });
+    const use = await this.acquireWithin(spec, load, this.owner);
+    try {
+      return { key: use.key, type: spec.type, bytes: spec.artifact.bytes };
+    } finally {
+      await this.releaseWithin(use);
+    }
   }
   retain(kind: Reference["kind"], name: string, values: Resource[]) {
+    return this.controller.run(() => this.retainWithin(kind, name, values));
+  }
+  private retainWithin(kind: Reference["kind"], name: string, values: Resource[]) {
+    this.reference(kind, name);
+    const specs = values.map(resource);
+    return this.mutate(async (state) => {
+      const keys = [...new Set(specs.map((s) => this.entry(state, s).id))].sort();
+      if (keys.some((id) => state.entries[id]!.phase === "deleting")) throw Error("blob deletion is pending recovery");
+      state.references = state.references.filter((r) => r.kind !== kind || r.name !== name);
+      state.references.push({ kind, name, keys });
+    });
+  }
+  private reference(kind: Reference["kind"], name: string) {
     if (!["current", "prepared", "recovery"].includes(kind) || !/^[-A-Za-z0-9:_.]{1,128}$/.test(name))
       throw Error("invalid blob reference");
-    const specs = values.map(resource);
-    return this.controller.run(() =>
-      this.mutate(async (state) => {
-        const keys = [...new Set(specs.map((s) => this.entry(state, s).id))].sort();
-        if (keys.some((id) => state.entries[id]!.phase === "deleting"))
-          throw Error("blob deletion is pending recovery");
-        state.references = state.references.filter((r) => r.kind !== kind || r.name !== name);
-        state.references.push({ kind, name, keys });
-      }),
-    );
   }
   unretain(kind: Reference["kind"], name: string) {
-    if (!["current", "prepared", "recovery"].includes(kind) || !/^[-A-Za-z0-9:_.]{1,128}$/.test(name))
-      throw Error("invalid blob reference");
-    return this.controller.run(() =>
-      this.mutate(async (state) => {
-        state.references = state.references.filter((r) => r.kind !== kind || r.name !== name);
-      }),
+    return this.controller.run(() => this.unretainWithin(kind, name));
+  }
+  private unretainWithin(kind: Reference["kind"], name: string) {
+    this.reference(kind, name);
+    return this.mutate(async (state) => {
+      state.references = state.references.filter((r) => r.kind !== kind || r.name !== name);
+    });
+  }
+  /** Execute within the caller's factory lane; never dispatch a competing controller. */
+  session<T>(operation: (library: LibrarySession) => Promise<T>): Promise<T> {
+    return this.controller.track(() =>
+      this.options.factory.session(() =>
+        scoped(
+          {
+            status: async () => structuredClone(await this.state()),
+            acquire: (value, load, who = this.owner) => {
+              const spec = resource(value);
+              compatible(spec);
+              consumer(who);
+              return this.acquireWithin(spec, load, who);
+            },
+            prefetch: (value, load) => this.prefetchWithin(value, load),
+            release: (use) => this.releaseWithin(use),
+            retain: (kind, name, values) => this.retainWithin(kind, name, values),
+            unretain: (kind, name) => this.unretainWithin(kind, name),
+          },
+          operation,
+        ),
+      ),
     );
   }
   status() {

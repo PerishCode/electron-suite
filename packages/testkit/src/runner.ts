@@ -6,9 +6,10 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve as resolvepath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { Library } from "@perishcode/blob";
 import { asset } from "@perishcode/carrier";
 import { guard } from "@perishcode/guard";
-import { type Channel, channel, type Digest, gates, namespace, startup } from "@perishcode/protocol";
+import { type Channel, channel, type Digest, digest, gates, namespace, startup } from "@perishcode/protocol";
 import { Authority, Feed, type Service as Publisher, serve as publish } from "@perishcode/publish";
 import { compose, type Product, resolve as release } from "@perishcode/release";
 import { Generations } from "@perishcode/runtime";
@@ -249,6 +250,7 @@ export async function run(options: Options): Promise<Report> {
   const output = resolvepath(root, options.output);
   const temporary = await mkdtemp(join(tmpdir(), "qualification-"));
   const scenarios: Evidence[] = [];
+  const libraries: Library[] = [];
   let host: Sidecar | undefined;
   let server: Publisher | undefined;
   let failure: Error | undefined;
@@ -282,6 +284,22 @@ export async function run(options: Options): Promise<Report> {
     const endpoint = join(temporary, "sidecar.sock");
     host = await sidecar(endpoint);
     let client = new Client(host.endpoint, host.authority);
+    const managed = async (scope: string, lane: Channel) => {
+      const factory = host!.factory({ namespace: namespace(scope), channel: lane });
+      let library!: Library;
+      await factory.expose({
+        identity: { service: "electron", generation: digest(scope + lane) },
+        handlers: {},
+        lifecycle: {
+          initialize: async (context) => {
+            library = await Library.open({ factory, context, name: "content" });
+          },
+          stop: async () => {},
+        },
+      });
+      libraries.push(library);
+      return new Generations(client, namespace(scope), lane, library);
+    };
     const release = namespace("release");
     const data = await client.grant(
       { namespace: release, channel: channel("stable") },
@@ -314,8 +332,8 @@ export async function run(options: Options): Promise<Report> {
     const published = await timed(async () => {
       await authority.publish(stable, 0, built.value.first.envelope, built.value.first.assets);
       await authority.publish(beta, 0, built.value.preview.envelope, built.value.preview.assets);
-      const primary = new Generations(client, namespace("primary"), stable);
-      const secondary = new Generations(client, namespace("secondary"), beta);
+      const primary = await managed("primary", stable);
+      const secondary = await managed("secondary", beta);
       const current = await commit(primary, feed);
       const preview = await commit(secondary, feed);
       return { current, preview, primary, secondary };
@@ -350,6 +368,7 @@ export async function run(options: Options): Promise<Report> {
     if (!attempt) throw new Error("upgrade attempt missing");
     await server.close();
     server = undefined;
+    await Promise.all(libraries.splice(0).map((library) => library.close()));
     await host.close();
     host = undefined;
     host = await sidecar(endpoint);
@@ -368,12 +387,13 @@ export async function run(options: Options): Promise<Report> {
       ),
     );
     const recovered = await timed(async () => {
-      const capsule = new Generations(client, namespace("primary"), stable);
+      const capsule = await managed("primary", stable);
       let recovery = await capsule.recover(published.value.current);
       for (const gate of gates) recovery = await capsule.ready(recovery, gate);
-      return capsule.commit(recovery);
+      await capsule.commit(recovery);
+      return capsule;
     });
-    const restored = recovered.value.state.current === published.value.current;
+    const restored = (await recovered.value.factory.binding()).state.current === published.value.current;
     scenarios.push(
       evidence("REC-07", restored ? "passed" : "failed", "explicit old generation recovered", recovered.milliseconds, {
         artifacts: [published.value.current],
@@ -382,14 +402,15 @@ export async function run(options: Options): Promise<Report> {
       }),
     );
     if (options.packaged) {
-      const primary = new Generations(client, namespace("primary"), stable);
-      const secondary = new Generations(client, namespace("secondary"), beta);
+      const primary = recovered.value;
+      const secondary = await managed("secondary", beta);
       scenarios.push(...(await qualification(client, temporary, primary, secondary, update)));
     }
   } catch (fault) {
     failure = fault as Error;
   } finally {
     if (server) await server.close();
+    await Promise.all(libraries.splice(0).map((library) => library.close()));
     if (host) await host.close();
     await rm(temporary, { force: true, recursive: true });
   }

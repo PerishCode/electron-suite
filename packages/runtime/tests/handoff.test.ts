@@ -17,7 +17,7 @@ async function fixture(baselineMode = "normal") {
     await mkdir(path);
     await writeFile(
       join(path, "index.mjs"),
-      `export const mode=${JSON.stringify(mode)};export const control={failStop:mode==="stop-fail",entered:false,release:()=>{}};export function create(){let c;return {handlers:{version:()=>({version:c.version}),health:()=>c.daemon.request('health'),work:async()=>{control.entered=true;await new Promise(r=>control.release=r);await c.resources.allocate({kind:'lock',name:'method'});return 'allocated';}},async initialize(x){c=x;${mode === "init-fail" ? "throw Error('injected init failure');" : ""}return{window:{title:'capsule-${version}'},loading:'loading-${version}',witness:'capsule-${version}'}},async ready(){await c.updates.start();},async stop(){await c.updates.stop();if(control.failStop)throw Error('injected stop failure');}};}`,
+      `import{readFile}from"node:fs/promises";export const mode=${JSON.stringify(mode)};export const control={failStop:mode==="stop-fail",entered:false,release:()=>{}};export function create(){let c;return {handlers:{resource:async()=>({pid:process.pid,path:c.blobs.model,value:await readFile(c.blobs.model,"utf8")}),version:()=>({version:c.version}),health:()=>c.daemon.request('health'),work:async()=>{control.entered=true;await new Promise(r=>control.release=r);await c.resources.allocate({kind:'lock',name:'method'});return 'allocated';}},async initialize(x){c=x;${mode === "init-fail" ? "throw Error('injected init failure');" : ""}return{window:{title:'capsule-${version}'},loading:'loading-${version}',witness:'capsule-${version}'}},async ready(){await c.updates.start();},async stop(){await c.updates.stop();if(control.failStop)throw Error('injected stop failure');}};}`,
     );
     return path;
   };
@@ -40,13 +40,23 @@ async function fixture(baselineMode = "normal") {
   };
   let w = await web("0.1.0"),
     d = await daemon("0.1.0");
-  const product = async (version: string, mode = "normal", carrier = 1) =>
-    compose(manifest(version), { carrier, capsule: await capsule(version, mode), web: w, daemon: d });
+  const product = async (version: string, mode = "normal", carrier = 1) => {
+    const model = join(root, `model-${version}-${mode}`);
+    await writeFile(model, `model-${version}`);
+    return compose(manifest(version), {
+      carrier,
+      capsule: await capsule(version, mode),
+      web: w,
+      daemon: d,
+      blobs: [{ slot: "model", path: model }],
+    });
+  };
   const baseline = await product("0.1.0", baselineMode);
   await writeProduct(join(root, "seed"), baseline);
   let commitFault = false;
   let stoppedDocument: { nonce: string; accepted: boolean } | undefined;
   const options = {
+    blobRetentionMs: 0,
     root: join(root, "state"),
     seed: join(root, "seed"),
     carrier: 1,
@@ -121,6 +131,11 @@ async function fixture(baselineMode = "normal") {
 it("executes Capsule-only then coordinated candidates under one Electron owner and preserves data", async () => {
   const f = await fixture();
   try {
+    const initialResource = (await f.session.call("resource", null)) as { path: string; value: string; pid: number };
+    assert.equal(initialResource.value, "model-0.1.0");
+    assert.equal(initialResource.pid, process.pid);
+    const initialState = await f.session.blobStatus();
+    assert.equal(Object.values(initialState.entries)[0]?.uses[0]?.owner.service, "electron");
     const before = await f.session.snapshot(),
       nonce = f.session.documentNonce();
     await f.session.request("write", { retained: true });
@@ -135,12 +150,23 @@ it("executes Capsule-only then coordinated candidates under one Electron owner a
     assert.equal(receipt.counts.document, before.counts.document + 1);
     assert.deepEqual(await f.session.call("version", null), { version: "0.2.0" });
     assert.deepEqual(f.counts(), { starts: 2, stops: 1 });
+    const nextResource = (await f.session.call("resource", null)) as { path: string; value: string; pid: number };
+    assert.equal(nextResource.value, "model-0.2.0");
+    assert.deepEqual(await f.session.collectBlobs(), []);
+    assert.equal(await readFile(initialResource.path, "utf8"), "model-0.1.0");
     await f.coordinated();
     const combined = await f.product("0.3.0");
     const swapped = await f.session.applyCapsule(combined, f.renderer);
     assert.notEqual(swapped.daemon.pid, receipt.daemon.pid);
     assert.equal(swapped.units.web.version, "0.2.0");
     assert.ok(swapped.directory.instances.every((i) => i.service !== "capsule"));
+    const state = await f.session.blobStatus();
+    assert.deepEqual(state.references.map((r) => r.kind).sort(), ["current", "recovery"]);
+    assert.equal(Object.values(state.entries).flatMap((e) => e.uses).length, 1);
+    assert.equal((await f.session.collectBlobs()).length, 1);
+    await assert.rejects(readFile(initialResource.path), /ENOENT/);
+    assert.equal(await readFile(nextResource.path, "utf8"), "model-0.2.0");
+    assert.equal(((await f.session.call("resource", null)) as { value: string }).value, "model-0.3.0");
     assert.deepEqual(await f.session.request("read"), { retained: true });
     await f.session.close();
     const cold = await Session.open(f.options);
@@ -150,6 +176,8 @@ it("executes Capsule-only then coordinated candidates under one Electron owner a
     const ready = await cold.confirm(c, "web");
     assert.equal(ready.generation, combined.envelope.digest);
     assert.equal(ready.product?.version, "0.3.0");
+    assert.equal(((await cold.call("resource", null)) as { value: string }).value, "model-0.3.0");
+    assert.deepEqual(await cold.collectBlobs(), []);
   } finally {
     await f.close();
   }
@@ -321,3 +349,33 @@ it("fences a running product immediately and drains accepted resource work befor
     await f.close();
   }
 }, 15000);
+
+it("preserves the last distinct recovery resource across same-generation recovery commits", async () => {
+  const f = await fixture();
+  try {
+    const old = (await f.session.call("resource", null)) as { path: string };
+    const next = await f.product("0.2.0");
+    await f.session.applyCapsule(next, f.renderer);
+    const broken = await f.product("0.3.0", "init-fail");
+    await assert.rejects(f.session.applyCapsule(broken, f.renderer), /baseline restored=true/);
+    await f.session.close();
+    const cold = await Session.open({ ...f.options, recover: true });
+    f.replace(cold);
+    const composition = await cold.activate();
+    await cold.start();
+    await cold.confirm(composition, "web");
+    const state = await cold.blobStatus();
+    assert.deepEqual(
+      state.references.map((r) => [r.kind, r.name]).sort(),
+      [
+        ["current", next.envelope.digest],
+        ["recovery", f.baseline.envelope.digest],
+      ].sort(),
+    );
+    assert.equal((await cold.collectBlobs()).length, 1);
+    assert.equal(await readFile(old.path, "utf8"), "model-0.1.0");
+    assert.equal(((await cold.call("resource", null)) as { value: string }).value, "model-0.2.0");
+  } finally {
+    await f.close();
+  }
+}, 20000);

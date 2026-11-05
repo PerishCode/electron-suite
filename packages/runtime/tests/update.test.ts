@@ -3,8 +3,9 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Library } from "@perishcode/blob";
 
-import { type Channel, channel, gates, namespace } from "@perishcode/protocol";
+import { type Channel, channel, digest, gates, namespace } from "@perishcode/protocol";
 import { Authority, Feed, type Service, serve } from "@perishcode/publish";
 import { compose, resolve } from "@perishcode/release";
 import { Client, type Service as Sidecar, serve as sidecar } from "@perishcode/sidecar";
@@ -12,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { Generations } from "@";
 
+const libraries: Library[] = [];
 const roots: string[] = [];
 const services: Service[] = [];
 const sidecars: Sidecar[] = [];
@@ -34,6 +36,7 @@ async function commit(capsule: Generations, feed: Feed): Promise<void> {
 }
 
 afterEach(async () => {
+  await Promise.all(libraries.splice(0).map((library) => library.close()));
   await Promise.all(services.splice(0).map((service) => service.close()));
   await Promise.all(sidecars.splice(0).map((service) => service.close()));
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
@@ -86,8 +89,24 @@ describe("update", () => {
     const preview = await product(beta, "1.0.0-beta.1", model);
     await authority.publish(stable, 0, first.envelope, first.assets);
     await authority.publish(beta, 0, preview.envelope, preview.assets);
-    const primary = new Generations(client, namespace("primary"), stable);
-    const secondary = new Generations(client, namespace("primary"), beta);
+    const managed = async (lane: Channel) => {
+      const factory = host.factory({ namespace: namespace("primary"), channel: lane });
+      let library!: Library;
+      await factory.expose({
+        identity: { service: "electron", generation: digest(lane) },
+        handlers: {},
+        lifecycle: {
+          initialize: async (context) => {
+            library = await Library.open({ factory, context, name: "content" });
+          },
+          stop: async () => {},
+        },
+      });
+      libraries.push(library);
+      return new Generations(client, namespace("primary"), lane, library);
+    };
+    const primary = await managed(stable);
+    const secondary = await managed(beta);
 
     await commit(primary, feed);
     await commit(secondary, feed);
