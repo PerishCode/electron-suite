@@ -18,10 +18,10 @@ session=await Session.open({...options,onActivation:async checkpoint=>{
  process.send({checkpoint,snapshot:await session.snapshot()});
  await new Promise(()=>{});
 }});
-const composition=await session.activate();await session.start();session.documentStart();await session.confirm(composition,'baseline');
+const composition=await session.activate();await session.start();await session.documentStart(async()=>{});await session.documentReady();await session.confirm(composition,'baseline');
 await session.request('write',{retained:'factory-data'});
 await session.applyLeaf(await readProduct(options.candidatePath),{
- reload:async()=>{session.documentStart();return 'candidate';},probe:async()=> 'baseline'
+ reload:async()=>{await session.documentStart(async()=>{});await session.documentReady();return 'candidate';},probe:async()=> 'baseline'
 });`;
 
 it.each(["prepared", "daemon-stopped", "ready", "committed"] as const)(

@@ -57,11 +57,13 @@ it("activates only changed units, fences compatibility and leaves failed binding
   try {
     const payload = await session.activate();
     await session.start();
-    session.documentStart();
+    await session.documentStart(async () => {});
+    await session.documentReady();
     let witness = "web:0.1.0";
     const renderer = {
       reload: async () => {
-        session.documentStart();
+        await session.documentStart(async () => {});
+        await session.documentReady();
         const value = JSON.parse(await readFile(join(session.mount.web, "unit.json"), "utf8"));
         if (value.version === "0.4.0") throw new Error("injected web failure");
         witness = `web:${value.version}`;
@@ -112,7 +114,8 @@ it("activates only changed units, fences compatibility and leaves failed binding
     session = await Session.open({ ...options, recover: true });
     const restoredComposition = await session.activate();
     await session.start();
-    session.documentStart();
+    await session.documentStart(async () => {});
+    await session.documentReady();
     const restored = await session.confirm(restoredComposition, "web:0.3.0");
     assert.equal(restored.generation, coordinated.envelope.digest);
     assert.equal(restored.units.daemon.version, "0.3.0");
@@ -127,7 +130,8 @@ it("activates only changed units, fences compatibility and leaves failed binding
     session = await Session.open(options);
     const committedComposition = await session.activate();
     await session.start();
-    session.documentStart();
+    await session.documentStart(async () => {});
+    await session.documentReady();
     const coldCommitted = await session.confirm(committedComposition, "web:0.6.0");
     assert.equal(coldCommitted.generation, committedDespiteFault.envelope.digest);
     assert.deepEqual(await session.request("read"), { retained: "yes" });

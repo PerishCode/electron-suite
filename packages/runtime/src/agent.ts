@@ -1,12 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import type { Use } from "@perishcode/blob";
 import type { Digest } from "@perishcode/protocol";
 import type { Factory, Lease } from "@perishcode/sidecar";
+import type { ContentResources } from "./control/content.js";
 import { unitFile } from "./control/units.js";
 import type { Mount } from "./generations.js";
 
 export class Agent {
   private lease?: Lease;
+  private guards: Use[] = [];
+  private uses: Use[] = [];
   private token?: Awaited<ReturnType<Factory["issue"]>>;
   private transient: string[] = [];
   private endpoint = "";
@@ -20,6 +24,7 @@ export class Agent {
     private factory: Factory,
     mount: Mount,
     digest: Digest,
+    private resources: ContentResources,
     nonce?: string,
   ) {
     this.generation = mount.target;
@@ -32,10 +37,12 @@ export class Agent {
     digest: Digest,
     executable: string,
     origin: string,
+    resources: ContentResources,
     nonce?: string,
   ) {
-    const agent = new Agent(factory, mount, digest, nonce);
+    const agent = new Agent(factory, mount, digest, resources, nonce);
     try {
+      agent.guards = await resources.use(mount.target, ["daemon"]);
       const meta = await unitFile(mount.daemon, "daemon");
       agent.version = meta?.version;
       const owner = `n${agent.nonce.replaceAll("-", "")}`;
@@ -64,6 +71,9 @@ export class Agent {
           ...(meta ? { PERISH_VERSION: meta.version } : {}),
         },
       });
+      agent.uses = await resources.use(mount.target, ["daemon"], agent.lease);
+      await resources.release(agent.guards);
+      agent.guards = [];
       await factory.forward(port.lease, socket.lease);
       agent.endpoint = port.value;
       const health = await agent.send("health");
@@ -119,6 +129,13 @@ export class Agent {
       const stopped = await this.factory.release(this.lease);
       if (stopped.status !== "stopped" || stopped.survivors.length) throw new Error("daemon retirement incomplete");
     }
+    if (!this.lease && this.guards.length) {
+      const subject = (await this.factory.directory()).instances.find((i) => i.service === "daemon");
+      if (subject && subject.phase !== "retired") throw Error("daemon startup retirement unresolved");
+    }
+    await this.resources.release([...this.uses, ...this.guards]);
+    this.uses = [];
+    this.guards = [];
     if (this.token) await this.factory.retire(this.token);
     for (const lease of this.transient) await this.factory.revoke(lease);
     this.phase = "stopped";

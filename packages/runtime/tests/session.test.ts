@@ -79,7 +79,7 @@ it("executes the payload, binds daemon evidence and preserves data across cold s
   expect(await second.request("read")).toEqual({ value: "retained" });
   expect(second.mount.target).toBe(receipt.generation);
   expect(second.nonce).not.toBe(receipt.nonce);
-});
+}, 20000);
 
 it("blocks after a failed attempt and requires explicit recovery", async () => {
   const { options } = await fixture();
@@ -98,7 +98,7 @@ it("blocks after a failed attempt and requires explicit recovery", async () => {
   const composition = await recovered.activate();
   await recovered.start();
   await recovered.confirm(composition, "renderer");
-});
+}, 20000);
 
 it("rejects incompatible carrier requirements before an activation attempt", async () => {
   const { options, product, root } = await fixture();

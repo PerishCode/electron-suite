@@ -426,3 +426,58 @@ it("aborts and drains accepted in-lane loads before controller shutdown", async 
     await f.close();
   }
 });
+
+it("reads typed unit archives within the GC lane and exposes paths only under retained roots", async () => {
+  const f = await fixture();
+  let release = () => {};
+  try {
+    const directory = join(f.context.roots.runtime, "unit");
+    await mkdir(directory);
+    await writeFile(join(directory, "module.mjs"), "export const value=42;");
+    const archive = await bundle(directory),
+      unit: Resource = {
+        type: "directory",
+        artifact: { kind: "web", slot: "main", digest: digest(archive), bytes: archive.length },
+      };
+    assert.throws(() => resourceKey({ ...unit, type: "file" }), /directory type/);
+    await f.library.prefetch(unit, async () => archive);
+    await assert.rejects(
+      f.library.session((l) => l.referencedPath(unit)),
+      /retained reference/,
+    );
+    await f.library.retain("prepared", "unit", [unit]);
+    const path = await f.library.session((l) => l.referencedPath(unit));
+    assert.equal(await readFile(join(path, "module.mjs"), "utf8"), "export const value=42;");
+    await f.library.unretain("prepared", "unit");
+    let entered = () => {};
+    const started = new Promise<void>((done) => {
+      entered = done;
+    });
+    const gate = new Promise<void>((done) => {
+      release = done;
+    });
+    const reading = f.library.session(async (l) => {
+      assert.deepEqual(Buffer.from(await l.read(unit)), archive);
+      entered();
+      await gate;
+    });
+    await started;
+    let collected = false;
+    const gc = f.library.collect().then((v) => {
+      collected = true;
+      return v;
+    });
+    await new Promise((done) => setImmediate(done));
+    assert.equal(collected, false);
+    release();
+    await reading;
+    assert.deepEqual(await gc, [resourceKey(unit)]);
+    await assert.rejects(
+      f.library.session((l) => l.read(unit)),
+      /cached content missing/,
+    );
+  } finally {
+    release();
+    await f.close();
+  }
+});

@@ -4,10 +4,6 @@ import { loading } from "../routing.js";
 
 export function renderer(window: BrowserWindow, session: Session) {
   let lastLoading: string | undefined;
-  window.webContents.on("did-start-navigation", (event) => {
-    if (event.isMainFrame && !event.isSameDocument && event.url.startsWith(`${session.browser().origin}/_web/`))
-      session.documentStart();
-  });
   const probe = async () => {
     const until = Date.now() + 10000;
     while (Date.now() < until) {
@@ -48,8 +44,13 @@ export function renderer(window: BrowserWindow, session: Session) {
     },
     probe,
     reload: async () => {
+      await session.documentStart(async () => {
+        if (!window.isDestroyed()) await window.loadURL(loading("Stopped"));
+      });
       await window.loadURL(session.webURL());
-      return probe();
+      const witness = await probe();
+      await session.documentReady();
+      return witness;
     },
   };
 }

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { canonical, type Digest, valid, verify } from "@perishcode/protocol";
 import type { Directory } from "@perishcode/sidecar";
+import { locate } from "./control/access.js";
 import { Controller } from "./control/controller.js";
 import { scoped } from "./control/session.js";
 import { anchor, exists, fs, read, save, view } from "./files.js";
@@ -195,10 +196,11 @@ export class Library {
       const state = await this.state(),
         directory = await this.options.factory.directory();
       if (alive(this.owner, directory) !== "live") throw Error("blob controller is not live");
+      const before = canonical(state);
       await this.reconcile(state, directory);
       const value = await operation(state, directory);
       settle(state);
-      await this.write(state);
+      if (canonical(state) !== before) await this.write(state);
       return value;
     });
   }
@@ -396,9 +398,17 @@ export class Library {
   /** Execute within the caller's factory lane; never dispatch a competing controller. */
   session<T>(operation: (library: LibrarySession) => Promise<T>): Promise<T> {
     return this.controller.track(() =>
-      this.options.factory.session(() =>
-        scoped(
+      this.options.factory.session(async () => {
+        if (alive(this.owner, await this.options.factory.directory()) !== "live")
+          throw Error("blob controller is not live");
+        return scoped(
           {
+            referencedPath: async (value) => locate(value, this.roots.cache, await this.state(), true),
+            read: async (value) => {
+              const spec = resource(value);
+              await locate(spec, this.roots.cache, await this.state());
+              return this.store.read(spec.artifact);
+            },
             status: async () => structuredClone(await this.state()),
             acquire: (value, load, who = this.owner) => {
               const spec = resource(value);
@@ -412,8 +422,8 @@ export class Library {
             unretain: (kind, name) => this.unretainWithin(kind, name),
           },
           operation,
-        ),
-      ),
+        );
+      }),
     );
   }
   status() {

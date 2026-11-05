@@ -26,6 +26,7 @@ export class Session extends Activation {
       await this.factory.session(async () => {
         await this.product?.close();
         await this.agent?.close();
+        await this.documentsController.stop();
         this.phase = "blocked";
         this.documentFenced = true;
       });
@@ -97,6 +98,7 @@ export class Session extends Activation {
     return this.closing;
   }
   private async closeWithin(error: string) {
+    this.documentFenced = true;
     await this.blocking;
     await this.activation?.catch(() => {});
     await this.handoff?.catch(() => {});
@@ -110,6 +112,7 @@ export class Session extends Activation {
       }
       await this.product?.close();
       await this.agent?.close();
+      await this.documentsController.stop();
       await this.electron?.close();
     });
     await this.generations.resources.library.close();

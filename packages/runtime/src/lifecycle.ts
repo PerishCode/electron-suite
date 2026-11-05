@@ -96,7 +96,7 @@ export class Product {
   }
   async initialize(): Promise<Composition> {
     try {
-      this.uses = await this.content.use(this.mount.target);
+      this.uses = await this.content.use(this.mount.target, ["capsule", "blob"]);
       const module = await import(pathToFileURL(join(this.mount.capsule, "index.mjs")).href);
       if (typeof module.create !== "function") throw new Error("capsule create entry required");
       const body = module.create() as Capsule;

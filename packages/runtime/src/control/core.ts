@@ -14,6 +14,7 @@ import {
 import { Agent } from "../agent.js";
 import type { Attempt, Generations, Mount } from "../generations.js";
 import { type CapsuleEnvironment, type Composition, Product, type ProductReceipt } from "../lifecycle.js";
+import { Documents } from "./documents.js";
 import { unitFile } from "./units.js";
 export function ownerAdapter(
   onQuit?: () => void,
@@ -98,6 +99,7 @@ export interface Receipt {
 }
 export class Core {
   private libraries = new Set<Library>();
+  protected documentsController: Documents;
   async blobLibrary(
     context: import("@perishcode/sidecar").Context,
     options: Omit<LibraryOptions, "factory" | "context"> = {},
@@ -165,6 +167,10 @@ export class Core {
     readonly manifest: Manifest,
     readonly nonce: string,
   ) {
+    this.documentsController = new Documents(generations.resources, () => {
+      const context = this.electron!.context;
+      return { ...context.identity, incarnation: context.incarnation };
+    });
     this.current = mount;
     this.view = mount;
     this.anchor = mount.target;
@@ -176,6 +182,22 @@ export class Core {
   }
   collectBlobs() {
     return this.generations.resources.library.collect();
+  }
+  cachedContent(artifact: import("@perishcode/protocol").Artifact) {
+    return this.generations.resources.cached(artifact);
+  }
+  cacheContent(name: string, release: import("@perishcode/publish").Release) {
+    if (!/^observer:(updates|bootstrapupdates):[a-f0-9-]{36}$/.test(name)) throw Error("invalid observer reference");
+    return this.generations.cache(name, release);
+  }
+  cachedRelease(value: import("@perishcode/protocol").Envelope) {
+    return this.generations.resources.bytes(value).then((assets) => ({ envelope: value, assets }));
+  }
+  releaseContent(name: string) {
+    return this.generations.resources.library.session((library) => library.unretain("prepared", name));
+  }
+  get currentTarget() {
+    return this.current.target;
   }
   content() {
     if (this.closed || this.closing) throw new Error("session is closed");
@@ -190,12 +212,25 @@ export class Core {
   acceptDocument(nonce: unknown) {
     return !this.closed && !this.closing && !this.blocked && !this.documentFenced && nonce === this.docNonce;
   }
-  documentStart() {
-    this.documentFenced = false;
-    this.docGeneration = this.view.target;
-    this.docNonce = this.documents === 0 ? this.nonce : randomUUID();
+  async documentStart(stop: () => Promise<void>) {
+    if (this.closed || this.closing || this.blocked) throw Error("runtime is not accepting a document");
+    this.documentFenced = true;
+    const nonce = this.documents === 0 ? this.nonce : randomUUID(),
+      target = this.view.target;
+    await this.documentsController.open(target, nonce, stop);
+    this.docGeneration = target;
+    this.docNonce = nonce;
     this.documents++;
     this.witness = "";
+    this.documentFenced = false;
+  }
+  documentReady() {
+    return this.documentsController.ready(this.docNonce);
+  }
+  webAsset<T>(operation: (root: string) => Promise<T>) {
+    if (!this.acceptDocument(this.docNonce)) return Promise.reject(Error("document is fenced"));
+    const path = this.view.web;
+    return this.documentsController.read(this.docNonce, () => operation(path));
   }
   browser() {
     return {
@@ -284,6 +319,7 @@ export class Core {
       generation.daemon.digest,
       this.options.executable,
       protocolIdentity(this.manifest).origin,
+      this.generations.resources,
       nonce,
     );
     this.starts++;

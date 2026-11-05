@@ -55,6 +55,9 @@ export interface LibraryOptions {
 }
 
 export interface LibrarySession {
+  /** Path remains valid only while the caller keeps its durable reference. */
+  referencedPath(value: Resource): Promise<string>;
+  read(value: Resource): Promise<Uint8Array>;
   status(): Promise<State>;
   acquire(value: Resource, load: Loader, who?: Consumer): Promise<Use>;
   prefetch(value: Resource, load: Loader): Promise<{ key: Digest; type: Resource["type"]; bytes: number }>;

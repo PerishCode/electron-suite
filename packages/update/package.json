@@ -1,6 +1,6 @@
 {
   "name": "@perishcode/update",
-  "version": "0.6.4",
+  "version": "0.7.0",
   "type": "module",
   "exports": {
     ".": {
@@ -17,7 +17,6 @@
     "build": "node esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly && tsc -p tsconfig.tests.json"
   },
   "dependencies": {
-    "@perishcode/blob": "workspace:*",
     "@perishcode/protocol": "workspace:*",
     "@perishcode/publish": "workspace:*",
     "@perishcode/sidecar": "workspace:*"
@@ -27,7 +26,8 @@
     "esbuild": "0.28.0",
     "typescript": "7.0.2",
     "vitest": "4.1.6",
-    "@perishcode/serve": "workspace:*"
+    "@perishcode/serve": "workspace:*",
+    "@perishcode/blob": "workspace:*"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"

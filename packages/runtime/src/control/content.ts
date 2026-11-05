@@ -1,23 +1,41 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Library, LibrarySession, Resource, Use } from "@perishcode/blob";
-import { type Binding, type Digest, type Envelope, envelope } from "@perishcode/protocol";
-import type { Factory } from "@perishcode/sidecar";
+import {
+  type Consumer,
+  type Library,
+  type LibrarySession,
+  type Resource,
+  resourceKey,
+  type Use,
+} from "@perishcode/blob";
+import { type Artifact, type Binding, type Digest, type Envelope, envelope, type Kind } from "@perishcode/protocol";
+import type { Directory, Factory } from "@perishcode/sidecar";
 import type { Content } from "../generations.js";
 
-const resources = (value: Envelope): Resource[] =>
-  value.generation.blobs.map((artifact) => ({ artifact, type: "file" }));
-const unavailable = async (): Promise<Uint8Array> => {
-  throw Error("committed blob bytes missing; reconciliation required");
+export const resource = (artifact: Artifact): Resource => ({
+  artifact,
+  type: artifact.kind === "blob" ? "file" : "directory",
+});
+export const resources = (value: Envelope): Resource[] => {
+  const g = value.generation;
+  return [g.capsule, g.daemon, g.web, ...g.blobs].map(resource);
 };
-
-/** Binding is authoritative; references are written first and retired last. */
+const unavailable = async (): Promise<Uint8Array> => {
+  throw Error("committed content missing; reconciliation required");
+};
+function observed(name: string, directory: Directory) {
+  const match = /^observer:(updates|bootstrapupdates):([a-f0-9-]{36})$/.exec(name);
+  if (!match) return false;
+  const entry = directory.instances.find((i) => i.service === match[1]);
+  return !entry || (entry.incarnation === match[2] && entry.phase !== "retired");
+}
+/** Binding and actual subjects are authoritative; references retire last. */
 export class ContentResources {
   constructor(
     readonly library: Library,
     private factory: Factory,
   ) {}
-  private async manifest(target: Digest) {
+  async manifest(target: Digest) {
     const data = await this.factory.grant({ kind: "data", name: "capsule", scope: "factory" });
     const value = envelope(
       JSON.parse(await readFile(join(data.value, "generations", `${target.slice(7)}.json`), "utf8")),
@@ -25,20 +43,25 @@ export class ContentResources {
     if (value.digest !== target) throw Error("generation receipt mismatch");
     return value;
   }
-  async prepare(value: Envelope, contents: Content[]) {
+  async prepare(value: Envelope, contents: Content[], name: string = value.digest) {
     await this.library.session(async (library) => {
-      await library.retain("prepared", value.digest, resources(value));
+      await library.retain("prepared", name, resources(value));
+      const cached = await library.status();
       for (const spec of resources(value)) {
-        const asset = contents.find((c) => c.artifact.kind === "blob" && c.artifact.slot === spec.artifact.slot);
-        if (!asset) throw Error("generation blob missing");
-        await library.prefetch(spec, async () => Buffer.from(asset.bytes));
+        const asset = contents.find(
+          (c) => c.artifact.kind === spec.artifact.kind && c.artifact.slot === spec.artifact.slot,
+        );
+        if (!asset) throw Error("generation content missing");
+        if (cached.entries[resourceKey(spec)]?.phase === "ready") await library.referencedPath(spec);
+        else await library.prefetch(spec, async () => Buffer.from(asset.bytes));
       }
     });
   }
   async synchronize(state: Binding, recovery?: Digest) {
     await this.library.session(async (library) => {
-      const retained = await library.status();
-      const wanted = new Set<string>();
+      const retained = await library.status(),
+        directory = await this.factory.directory(),
+        wanted = new Set<string>();
       const keep = async (kind: "current" | "prepared" | "recovery", target: Digest) => {
         await library.retain(kind, target, resources(await this.manifest(target)));
         wanted.add(`${kind}:${target}`);
@@ -48,8 +71,8 @@ export class ContentResources {
       if (pending) await keep("prepared", pending);
       if (recovery && recovery !== state.current) await keep("recovery", recovery);
       for (const ref of retained.references) {
-        // After a crash, retaining extra recovery generations is conservative.
         if (ref.kind === "recovery" && recovery === undefined) continue;
+        if (ref.kind === "prepared" && observed(ref.name, directory)) continue;
         if (!wanted.has(`${ref.kind}:${ref.name}`)) await library.unretain(ref.kind, ref.name);
       }
     });
@@ -60,13 +83,19 @@ export class ContentResources {
         await library.retain("recovery", state.current!, resources(await this.manifest(state.current!)));
       });
   }
-  async use(target: Digest) {
-    return this.library.session(async (library) => this.acquire(library, await this.manifest(target)));
+  async use(target: Digest, roles: readonly Kind[], who?: Consumer) {
+    return this.library.session(async (library) =>
+      this.acquire(
+        library,
+        resources(await this.manifest(target)).filter((s) => roles.includes(s.artifact.kind)),
+        who,
+      ),
+    );
   }
-  private async acquire(library: LibrarySession, value: Envelope) {
+  private async acquire(library: LibrarySession, specs: Resource[], who?: Consumer) {
     const uses: Use[] = [];
     try {
-      for (const spec of resources(value)) uses.push(await library.acquire(spec, unavailable));
+      for (const spec of specs) uses.push(await library.acquire(spec, unavailable, who));
       return uses;
     } catch (error) {
       for (const use of uses) await library.release(use);
@@ -79,21 +108,34 @@ export class ContentResources {
     });
   }
   async paths(value: Envelope) {
-    const uses = await this.use(value.digest);
-    try {
-      return Object.fromEntries(resources(value).map((spec, i) => [spec.artifact.slot, uses[i]!.path]));
-    } finally {
-      await this.release(uses);
-    }
+    return this.library.session(async (library) => {
+      const specs = resources(value),
+        paths: string[] = [];
+      for (const spec of specs) paths.push(await library.referencedPath(spec));
+      const path = (kind: Kind) => paths[specs.findIndex((s) => s.artifact.kind === kind)]!;
+      return {
+        capsule: path("capsule"),
+        daemon: path("daemon"),
+        web: path("web"),
+        blobs: Object.fromEntries(
+          specs.flatMap((s, i) => (s.artifact.kind === "blob" ? [[s.artifact.slot, paths[i]!]] : [])),
+        ),
+      };
+    });
   }
   async bytes(value: Envelope): Promise<Content[]> {
-    const uses = await this.use(value.digest);
-    try {
-      return await Promise.all(
-        resources(value).map(async (spec, i) => ({ artifact: spec.artifact, bytes: await readFile(uses[i]!.path) })),
-      );
-    } finally {
-      await this.release(uses);
-    }
+    return this.library.session(async (library) => {
+      const assets: Content[] = [];
+      for (const spec of resources(value)) assets.push({ artifact: spec.artifact, bytes: await library.read(spec) });
+      return assets;
+    });
+  }
+  async cached(artifact: Artifact) {
+    return this.library.session(async (library) => {
+      const spec = resource(artifact),
+        state = await library.status();
+      if (state.entries[resourceKey(spec)]?.phase !== "ready") return undefined;
+      return library.read(spec);
+    });
   }
 }

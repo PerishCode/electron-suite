@@ -86,12 +86,14 @@ async function fixture(baselineMode = "normal") {
   };
   const composition = await session.activate(environment);
   await session.start();
-  session.documentStart();
+  await session.documentStart(async () => {});
+  await session.documentReady();
   await session.confirm(composition, "web");
   const renderer = {
     compose: async () => {},
     reload: async () => {
-      session.documentStart();
+      await session.documentStart(async () => {});
+      await session.documentReady();
       return "web";
     },
     probe: async () => "web",
@@ -162,8 +164,8 @@ it("executes Capsule-only then coordinated candidates under one Electron owner a
     assert.ok(swapped.directory.instances.every((i) => i.service !== "capsule"));
     const state = await f.session.blobStatus();
     assert.deepEqual(state.references.map((r) => r.kind).sort(), ["current", "recovery"]);
-    assert.equal(Object.values(state.entries).flatMap((e) => e.uses).length, 1);
-    assert.equal((await f.session.collectBlobs()).length, 1);
+    assert.equal(Object.values(state.entries).flatMap((e) => e.uses).length, 4);
+    assert.equal((await f.session.collectBlobs()).length, 2);
     await assert.rejects(readFile(initialResource.path), /ENOENT/);
     assert.equal(await readFile(nextResource.path, "utf8"), "model-0.2.0");
     assert.equal(((await f.session.call("resource", null)) as { value: string }).value, "model-0.3.0");
@@ -372,7 +374,7 @@ it("preserves the last distinct recovery resource across same-generation recover
         ["recovery", f.baseline.envelope.digest],
       ].sort(),
     );
-    assert.equal((await cold.collectBlobs()).length, 1);
+    assert.equal((await cold.collectBlobs()).length, 2);
     assert.equal(await readFile(old.path, "utf8"), "model-0.1.0");
     assert.equal(((await cold.call("resource", null)) as { value: string }).value, "model-0.2.0");
   } finally {

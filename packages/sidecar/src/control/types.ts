@@ -30,6 +30,9 @@ export interface Expose<M> {
   handlers: { [K in keyof M]: (input: Input<M, K>, context: Context) => Output<M, K> | Promise<Output<M, K>> };
   lifecycle: {
     initialize(context: Context): Promise<void>;
+    /** Cancel/drain background controllers before acquiring the stop lane. Callers
+     * already inside a lifecycle session must drain dependent controllers first. */
+    quiesce?(): Promise<void>;
     stop(): Promise<void>;
   };
 }

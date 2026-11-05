@@ -65,6 +65,7 @@ export class Hosted {
     });
     let stopping: Promise<void> | undefined;
     let draining: Promise<void> | undefined;
+    let quiescing: Promise<void> | undefined;
     let retired = false;
     let claimed = false;
     let resources: Resources | undefined;
@@ -84,6 +85,13 @@ export class Hosted {
       },
       close: () => {
         if (retired) return Promise.resolve();
+        const quiesce = (): Promise<void> => {
+          quiescing ??= (async () => {
+            await initialization;
+            await options.lifecycle.quiesce?.();
+          })();
+          return quiescing;
+        };
         const drain = (): Promise<void> => {
           if (draining) return draining;
           draining = (async () => {
@@ -92,6 +100,7 @@ export class Hosted {
             await initialization;
             await Promise.allSettled([...entry.calls]);
             await Promise.allSettled([...allocations]);
+            await quiesce();
             await options.lifecycle.stop();
             for (const [value, grant] of grants) {
               await resources?.release(grant.lease, []);
@@ -108,13 +117,24 @@ export class Hosted {
           })().catch((fault) => {
             entry.phase = "failed";
             draining = undefined;
+            quiescing = undefined;
             if (claimed) this.catalog?.change(scope, incarnation, "failed");
             throw fault;
           });
           return draining;
         };
         if (this.sessions?.current(scope)) return drain();
-        stopping ??= (this.sessions ? this.sessions.cleanup(scope, drain) : drain()).catch((fault) => {
+        stopping ??= (
+          options.lifecycle.quiesce
+            ? (async () => {
+                // Record any quiesce failure as failed ownership in the stop lane.
+                await quiesce().catch(() => {});
+                return this.sessions ? this.sessions.cleanup(scope, drain) : drain();
+              })()
+            : this.sessions
+              ? this.sessions.cleanup(scope, drain)
+              : drain()
+        ).catch((fault) => {
           stopping = undefined;
           throw fault;
         });
