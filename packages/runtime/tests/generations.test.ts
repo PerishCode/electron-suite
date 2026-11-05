@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Library } from "@perishcode/blob";
 
 import {
   type Artifact,
@@ -18,6 +19,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { type Content, Generations } from "@";
 
+const libraries: Library[] = [];
 const roots: string[] = [];
 const services: Service[] = [];
 
@@ -54,6 +56,7 @@ function fixture(seed: string): { contents: Content[]; envelope: Envelope } {
 }
 
 afterEach(async () => {
+  await Promise.all(libraries.splice(0).map((library) => library.close()));
   await Promise.all(services.splice(0).map((service) => service.close()));
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
@@ -67,7 +70,23 @@ describe("capsule", () => {
     const client = new Client(service.endpoint, service.authority);
     const scope = namespace("main");
     const lane = channel("stable");
-    const capsule = new Generations(client, scope, lane);
+    let library!: Library;
+    await service.factory({ namespace: scope, channel: lane }).expose({
+      identity: { service: "electron", generation: digest("test") },
+      handlers: {},
+      lifecycle: {
+        initialize: async (context) => {
+          library = await Library.open({
+            factory: service.factory({ namespace: scope, channel: lane }),
+            context,
+            name: "content",
+          });
+        },
+        stop: async () => {},
+      },
+    });
+    libraries.push(library);
+    const capsule = new Generations(client, scope, lane, library);
     const first = fixture("first");
     let attempt = await capsule.stage(first.envelope, first.contents);
 
@@ -99,10 +118,14 @@ describe("capsule", () => {
     for (const gate of gates) attempt = await capsule.ready(attempt, gate);
     const recovered = await capsule.commit(attempt);
     expect(recovered.state).toEqual({ channel: lane, current: first.envelope.digest, namespace: scope });
-    expect((await client.resources({ namespace: scope, channel: lane })).grants.map((grant) => grant.kind)).toEqual([
-      "cas",
-      "data",
-    ]);
+    const grantsAfter = (await client.resources({ namespace: scope, channel: lane })).grants;
+    expect(grantsAfter.some((g) => g.kind === "staging" && g.name === "capsule")).toBe(false);
+    expect(
+      grantsAfter
+        .filter((g) => g.name === "content")
+        .map((g) => g.kind)
+        .sort(),
+    ).toEqual(["cache", "cas", "data"]);
   });
 
   it("rejects content before arming a generation", async () => {
@@ -113,7 +136,23 @@ describe("capsule", () => {
     const client = new Client(service.endpoint, service.authority);
     const scope = namespace("preview");
     const lane = channel("beta");
-    const capsule = new Generations(client, scope, lane);
+    let library!: Library;
+    await service.factory({ namespace: scope, channel: lane }).expose({
+      identity: { service: "electron", generation: digest("test") },
+      handlers: {},
+      lifecycle: {
+        initialize: async (context) => {
+          library = await Library.open({
+            factory: service.factory({ namespace: scope, channel: lane }),
+            context,
+            name: "content",
+          });
+        },
+        stop: async () => {},
+      },
+    });
+    libraries.push(library);
+    const capsule = new Generations(client, scope, lane, library);
     const value = fixture("broken");
     const first = value.contents[0];
     if (!first) throw new Error("fixture missing");
@@ -121,8 +160,10 @@ describe("capsule", () => {
 
     await expect(capsule.stage(value.envelope, value.contents)).rejects.toThrow("verification");
     expect(await client.binding(scope, lane)).toMatchObject({ revision: 0, state: { channel: lane } });
-    expect((await client.resources({ namespace: scope, channel: lane })).grants.map((grant) => grant.kind)).toEqual([
-      "cas",
-    ]);
+    expect(
+      (await client.resources({ namespace: scope, channel: lane })).grants.some(
+        (g) => g.kind === "staging" && g.name === "capsule",
+      ),
+    ).toBe(false);
   });
 });

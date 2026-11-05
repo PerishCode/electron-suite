@@ -3,9 +3,9 @@ import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { channel, namespace } from "@perishcode/protocol";
 import { decode, readProduct } from "@perishcode/release";
-import { Client, managerEndpoint, serve } from "@perishcode/sidecar";
+import { Client } from "@perishcode/sidecar";
 import { Activation } from "./control/activation.js";
-import { type Bootstrap, claim } from "./control/bootstrap.js";
+import { Bootstrap, claim } from "./control/bootstrap.js";
 import type { SessionOptions } from "./control/core.js";
 import { type Attempt, Generations } from "./generations.js";
 
@@ -35,17 +35,17 @@ export class Session extends Activation {
   static async open(options: SessionOptions, bootstrap?: Bootstrap): Promise<Session> {
     await mkdir(options.root, { recursive: true, mode: 0o700 });
     // The Electron adapter holds an OS single-instance lock for this root.
-    const endpoint = managerEndpoint(options.root);
-    const prior = bootstrap ? claim(bootstrap, options) : undefined;
-    const host = prior?.host ?? (await serve(endpoint, { root: options.root }));
+    const prior = claim(bootstrap ?? (await Bootstrap.open(options)), options);
+    const host = prior.host;
     const client = new Client(host.endpoint, host.authority);
     const scope = namespace(options.namespace);
     const lane = channel(options.manifest.channel);
-    const generations = new Generations(client, scope, lane, options.carrier);
+    const generations = new Generations(client, scope, lane, prior.library, options.carrier);
     const factory = generations.factory;
     let attempt: Attempt | undefined;
     try {
       const current = (await factory.binding()).state;
+      await generations.resources.synchronize(current);
       if (options.recover) {
         if (!current.current) throw new Error("no committed generation to recover");
         attempt = await generations.recover(current.current);
@@ -70,15 +70,14 @@ export class Session extends Activation {
       )
         throw new Error("mounted identity mismatch");
       const session = new Session(options, host, factory, generations, mount, manifest, attempt?.nonce ?? randomUUID());
-      if (prior) {
-        if (prior.electron.context.identity.generation !== mount.target)
-          throw new Error("bootstrap selected content changed");
-        session.electron = prior.electron;
-      }
+      if (prior.electron.context.identity.generation !== mount.target)
+        throw new Error("bootstrap selected content changed");
+      session.electron = prior.electron;
       session.attempt = attempt;
       return session;
     } catch (fault) {
       if (attempt) await generations.fail(attempt, String(fault));
+      await prior.library.close();
       await host.close();
       throw fault;
     }
@@ -113,6 +112,7 @@ export class Session extends Activation {
       await this.agent?.close();
       await this.electron?.close();
     });
+    await this.generations.resources.library.close();
     await this.host.close();
     this.closed = true;
     this.phase = "stopped";

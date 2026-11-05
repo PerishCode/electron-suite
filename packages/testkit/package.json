@@ -26,7 +26,8 @@
     "@perishcode/publish": "workspace:*",
     "@perishcode/release": "workspace:*",
     "@perishcode/sidecar": "workspace:*",
-    "@perishcode/runtime": "workspace:*"
+    "@perishcode/runtime": "workspace:*",
+    "@perishcode/blob": "workspace:*"
   },
   "devDependencies": {
     "@perishcode/daemon": "workspace:*",

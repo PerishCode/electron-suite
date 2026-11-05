@@ -606,6 +606,9 @@ importers:
 
   packages/testkit:
     dependencies:
+      '@perishcode/blob':
+        specifier: workspace:*
+        version: link:../blob
       '@perishcode/capsule':
         specifier: workspace:*
         version: link:../../apps/capsule

@@ -42,6 +42,8 @@ export interface State {
   references: Reference[];
 }
 export interface LibraryOptions {
+  /** Independent content domain within the same factory. */
+  name?: string;
   factory: Factory;
   /** Call open during this real subject's initialize callback. */
   context: Context;
@@ -50,4 +52,13 @@ export interface LibraryOptions {
   onError?: (error: unknown) => void;
   /** Diagnostic fault injection only. Do not reenter the library from it. */
   onCheckpoint?: (event: { phase: "loading" | "materialized" | "deleting"; key: Digest }) => Promise<void>;
+}
+
+export interface LibrarySession {
+  status(): Promise<State>;
+  acquire(value: Resource, load: Loader, who?: Consumer): Promise<Use>;
+  prefetch(value: Resource, load: Loader): Promise<{ key: Digest; type: Resource["type"]; bytes: number }>;
+  release(use: Use): Promise<boolean>;
+  retain(kind: Reference["kind"], name: string, values: Resource[]): Promise<void>;
+  unretain(kind: Reference["kind"], name: string): Promise<void>;
 }

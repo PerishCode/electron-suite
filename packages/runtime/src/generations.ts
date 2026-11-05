@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import type { Library } from "@perishcode/blob";
 import { Store } from "@perishcode/blob";
 import {
   type Artifact,
@@ -20,6 +21,7 @@ import {
 import type { Feed } from "@perishcode/publish";
 import { bundle, decode, materialize } from "@perishcode/release";
 import type { Change, Client, Factory, Journal } from "@perishcode/sidecar";
+import { ContentResources } from "./control/content.js";
 
 export interface Content {
   artifact: Artifact;
@@ -104,6 +106,7 @@ async function restore(store: Store, artifact: Artifact, root: string): Promise<
 
 export class Generations {
   readonly factory: Factory;
+  readonly resources: ContentResources;
   async content(target: Digest): Promise<{ envelope: Envelope; assets: Content[] }> {
     return this.factory.session(async () => {
       const data = await this.factory.grant({ kind: "data", name: "capsule", scope: "factory" });
@@ -115,9 +118,14 @@ export class Generations {
       const store = await Store.open({ root: cas.value });
       return {
         envelope: manifest,
-        assets: await Promise.all(
-          list(manifest).map(async (artifact) => ({ artifact, bytes: await store.read(artifact) })),
-        ),
+        assets: [
+          ...(await this.resources.bytes(manifest)),
+          ...(await Promise.all(
+            [manifest.generation.capsule, manifest.generation.daemon, manifest.generation.web].map(
+              async (artifact) => ({ artifact, bytes: await store.read(artifact) }),
+            ),
+          )),
+        ],
       };
     });
   }
@@ -125,9 +133,11 @@ export class Generations {
     readonly client: Client,
     readonly namespace: Namespace,
     readonly channel: Channel,
+    library: Library,
     readonly carrier = 1,
   ) {
     this.factory = client.factory({ namespace, channel });
+    this.resources = new ContentResources(library, this.factory);
   }
 
   async update(feed: Feed): Promise<Attempt | undefined> {
@@ -172,6 +182,7 @@ export class Generations {
         const artifact = expected.get(key(content.artifact));
         if (!artifact || !verify(artifact, content.bytes)) throw new Error("artifact verification failed");
         expected.delete(key(artifact));
+        if (artifact.kind === "blob") continue;
         const path = join(staging.value, artifact.digest.slice(7));
         await write(path, content.bytes);
         const stored = await store.put(artifact.kind, artifact.slot, await readFile(path));
@@ -184,6 +195,7 @@ export class Generations {
         scope: "factory",
       });
       await persist(join(data.value, "generations", `${manifest.digest.slice(7)}.json`), canonical(manifest));
+      await this.resources.prepare(manifest, contents);
       const initial = await this.factory.binding();
       const armed = changed(
         await this.factory.transit(initial.revision, {
@@ -237,12 +249,18 @@ export class Generations {
   }
 
   private async commitWithin(attempt: Attempt): Promise<Journal> {
+    const before = (await this.factory.binding()).state;
+    await this.resources.beforeCommit(before);
     const journal = changed(
       await this.factory.transit(attempt.revision, {
         nonce: attempt.nonce,
         target: attempt.target,
         type: "commit",
       }),
+    );
+    await this.resources.synchronize(
+      journal.state,
+      before.current === journal.state.current ? undefined : before.current,
     );
     await this.factory.revoke(attempt.lease);
     return journal;
@@ -262,6 +280,7 @@ export class Generations {
         type: "fail",
       }),
     );
+    await this.resources.synchronize(journal.state);
     await this.factory.revoke(attempt.lease);
     return journal;
   }
@@ -361,12 +380,7 @@ export class Generations {
     const root = join(runtime.value, target.slice(7));
     const store = await Store.open({ root: cas.value });
     await mkdir(root, { mode: 0o700, recursive: true });
-    const blobs: Record<string, string> = {};
-    for (const artifact of manifest.generation.blobs) {
-      const path = join(root, "blobs", artifact.slot);
-      await persist(path, await store.read(artifact));
-      blobs[artifact.slot] = path;
-    }
+    const blobs = await this.resources.paths(manifest);
     const capsule = await restore(store, manifest.generation.capsule, root);
     const release = decode(await readFile(join(capsule, "release.json"), "utf8"));
     if (release.channel !== this.channel) throw new Error("capsule release channel mismatch");

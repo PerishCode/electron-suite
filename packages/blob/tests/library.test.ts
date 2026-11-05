@@ -372,3 +372,57 @@ it("refuses a missing established ledger without losing live protection", async 
     await f.close();
   }
 });
+
+it("composes inside an existing factory lane, serializes parallel mutations and expires scoped handles", async () => {
+  const f = await fixture();
+  try {
+    let escaped!: import("@").LibrarySession;
+    const a = spec(Buffer.from("inline A")),
+      b = spec(Buffer.from("inline B"));
+    await f.factory.session(async () =>
+      f.library.session(async (library) => {
+        escaped = library;
+        await Promise.all([library.retain("prepared", "a", [a]), library.retain("prepared", "b", [b])]);
+        await library.prefetch(a, async () => Buffer.from("inline A"));
+        const use = await library.acquire(a, async () => {
+          throw Error("cache must be reused");
+        });
+        assert.equal(await readFile(use.path, "utf8"), "inline A");
+        await library.release(use);
+      }),
+    );
+    await assert.rejects(escaped.unretain("prepared", "a"), /expired/);
+    assert.equal((await f.library.status()).references.length, 2);
+    await f.library.unretain("prepared", "a");
+    await f.library.unretain("prepared", "b");
+    assert.equal((await f.library.collect()).length, 2);
+  } finally {
+    await f.close();
+  }
+});
+
+it("aborts and drains accepted in-lane loads before controller shutdown", async () => {
+  const f = await fixture();
+  let entered!: () => void;
+  const loading = new Promise<void>((done) => {
+    entered = done;
+  });
+  try {
+    const pending = f.factory.session(() =>
+      f.library.session(async (library) => {
+        await library.prefetch(spec(Buffer.from("interrupted inline")), (signal) => {
+          entered();
+          return new Promise((_done, reject) =>
+            signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+          );
+        });
+      }),
+    );
+    const refused = assert.rejects(pending, /stopped/);
+    await loading;
+    await f.library.close();
+    await refused;
+  } finally {
+    await f.close();
+  }
+});

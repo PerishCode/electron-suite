@@ -68,7 +68,6 @@ export function capsulePlan(current: Release, incoming: Release, channel: string
     after = envelope(incoming.envelope).generation;
   if (before.capsule.digest === after.capsule.digest) throw new Error("capsule candidate has no changed entry");
   if (after.carrier > carrier) throw new Error("incompatible carrier ABI");
-  if (canonical(before.blobs) !== canonical(after.blobs)) throw new Error("capsule update requires identical blobs");
   const previous = capsuleManifest(current),
     next = capsuleManifest(incoming);
   if (
