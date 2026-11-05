@@ -193,42 +193,42 @@ export class Library {
     const spec = resource(value);
     compatible(spec);
     consumer(who);
-    return this.controller.run(async () => {
-      const use = await this.mutate(async (state, directory) => {
-        const instance = directory.instances.find(
-          (i) => i.service === who.service && i.generation === who.generation && i.incarnation === who.incarnation,
-        );
-        if (instance?.phase !== "ready") throw Error("blob consumer is not a ready sidecar subject");
-        const { id, entry } = this.entry(state, spec);
-        if (entry.phase === "deleting") throw Error("blob deletion is pending recovery");
-        const use: Use = {
-          id: randomUUID(),
-          key: id,
-          path: join(view(this.roots.cache, id), "value"),
-          owner: {
-            service: who.service,
-            generation: who.generation,
-            incarnation: who.incarnation,
-            ...(who.epoch === undefined ? {} : { epoch: who.epoch }),
-            manager: directory.manager.incarnation,
-          },
-        };
-        entry.uses.push(use);
-        return use;
-      });
-      try {
-        await this.ensure(spec, load);
-        await this.mutate(async (state, directory) => {
-          if (alive(use.owner, directory) !== "live") throw Error("blob consumer retired during load");
-          if (!state.entries[use.key]?.uses.some((u) => u.id === use.id))
-            throw Error("blob use was retired during load");
-        });
-        return use;
-      } catch (error) {
-        await this.releaseWithin(use);
-        throw error;
-      }
+    return this.controller.run(() => this.acquireWithin(spec, load, who));
+  }
+  private async acquireWithin(spec: Resource, load: Loader, who: Consumer): Promise<Use> {
+    const use = await this.mutate(async (state, directory) => {
+      const instance = directory.instances.find(
+        (i) => i.service === who.service && i.generation === who.generation && i.incarnation === who.incarnation,
+      );
+      if (instance?.phase !== "ready") throw Error("blob consumer is not a ready sidecar subject");
+      const { id, entry } = this.entry(state, spec);
+      if (entry.phase === "deleting") throw Error("blob deletion is pending recovery");
+      const use: Use = {
+        id: randomUUID(),
+        key: id,
+        path: join(view(this.roots.cache, id), "value"),
+        owner: {
+          service: who.service,
+          generation: who.generation,
+          incarnation: who.incarnation,
+          ...(who.epoch === undefined ? {} : { epoch: who.epoch }),
+          manager: directory.manager.incarnation,
+        },
+      };
+      entry.uses.push(use);
+      return use;
     });
+    try {
+      await this.ensure(spec, load);
+      await this.mutate(async (state, directory) => {
+        if (alive(use.owner, directory) !== "live") throw Error("blob consumer retired during load");
+        if (!state.entries[use.key]?.uses.some((u) => u.id === use.id)) throw Error("blob use was retired during load");
+      });
+      return use;
+    } catch (error) {
+      await this.releaseWithin(use);
+      throw error;
+    }
   }
   private ensure(spec: Resource, load: Loader) {
     const id = key(spec),
@@ -331,10 +331,17 @@ export class Library {
       return true;
     });
   }
-  async prefetch(value: Resource, load: Loader) {
-    const use = await this.acquire(value, load);
-    await this.release(use);
-    return { key: use.key, type: value.type, bytes: value.artifact.bytes };
+  prefetch(value: Resource, load: Loader) {
+    const spec = resource(value);
+    compatible(spec);
+    return this.controller.run(async () => {
+      const use = await this.acquireWithin(spec, load, this.owner);
+      try {
+        return { key: use.key, type: spec.type, bytes: spec.artifact.bytes };
+      } finally {
+        await this.releaseWithin(use);
+      }
+    });
   }
   retain(kind: Reference["kind"], name: string, values: Resource[]) {
     if (!["current", "prepared", "recovery"].includes(kind) || !/^[-A-Za-z0-9:_.]{1,128}$/.test(name))

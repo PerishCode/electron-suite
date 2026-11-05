@@ -302,3 +302,34 @@ it("refuses malformed directory archives before any path escapes its staging gra
     await f.close();
   }
 });
+
+it("cancels and drains an accepted prefetch as one lifecycle operation", async () => {
+  const f = await fixture();
+  try {
+    const bytes = Buffer.from("pending prefetch"),
+      a = spec(bytes);
+    let loading = false;
+    const work = f.library.prefetch(a, async (signal) => {
+      loading = true;
+      await new Promise<void>((_done, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+      return bytes;
+    });
+    void work.catch(() => {});
+    const deadline = Date.now() + 2000;
+    while (!loading) {
+      if (Date.now() > deadline) throw Error("prefetch did not start");
+      await new Promise((done) => setTimeout(done, 10));
+    }
+    await f.library.close();
+    await assert.rejects(work, /stopped/);
+    const data = (await f.factory.resources()).grants.find((g) => g.kind === "data" && g.name === "blob")!.value;
+    const state = JSON.parse(await readFile(join(data, "library.json"), "utf8"));
+    assert.equal(state.owner, undefined);
+    assert.equal(state.entries[resourceKey(a)].uses.length, 0);
+    assert.equal(state.entries[resourceKey(a)].operation, undefined);
+  } finally {
+    await f.close();
+  }
+});
