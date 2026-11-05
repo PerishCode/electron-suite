@@ -1,4 +1,5 @@
 packages:
+  - carriers/*
   - apps/*
   - packages/*
 

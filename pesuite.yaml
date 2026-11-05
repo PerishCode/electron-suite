@@ -2,6 +2,10 @@ schemaVersion: 1
 guard:
   directories:
     repository:
+      - carriers
+      - carriers/*
+      - carriers/electron/src/capsule
+      - carriers/electron/tests/capsule
       - apps
       - packages
       - apps/*

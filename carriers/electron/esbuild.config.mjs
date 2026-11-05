@@ -25,3 +25,13 @@ await Promise.all([
   }),
   build({ ...shared, entryPoints: ["src/preload.ts"], format: "cjs", outfile: "dist/preload.cjs" }),
 ]);
+
+await build({
+  bundle: true,
+  entryPoints: ["src/capsule/index.ts"],
+  format: "esm",
+  platform: "node",
+  target: "node24",
+  outfile: "dist/capsule/index.mjs",
+  packages: "external",
+});

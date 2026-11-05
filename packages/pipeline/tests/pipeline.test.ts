@@ -51,7 +51,7 @@ async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "pipeline-")));
   roots.push(root);
   await writeFile(join(root, "package.json"), JSON.stringify({ private: true, packageManager: "pnpm@11.13.0" }));
-  await writeFile(join(root, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n");
+  await writeFile(join(root, "pnpm-workspace.yaml"), "packages:\n  - carriers/*\n  - apps/*\n");
   await writeFile(join(root, ".gitignore"), "node_modules/\n.artifacts/\n.state/\ndist/\npnpm-lock.yaml\n");
   await writeFile(
     join(root, "pesuite.yaml"),
@@ -65,7 +65,7 @@ runtime:
   namespace: fixture
   carrier: 1
 pipeline:
-  carrier: apps/carrier
+  carrier: carriers/electron
   capsule: apps/capsule
   daemon: apps/daemon
   web: apps/web
@@ -74,7 +74,7 @@ pipeline:
 `,
   );
   for (const name of ["carrier", "capsule", "daemon", "web"]) {
-    const dir = join(root, "apps", name);
+    const dir = name === "carrier" ? join(root, "carriers", "electron") : join(root, "apps", name);
     await mkdir(dir, { recursive: true });
     await writeFile(
       join(dir, "package.json"),
@@ -137,6 +137,20 @@ it("versions independently of product layout and rejects inconsistent channel se
   await expect(selectedVersion({ root: "/missing", channel: "local", base: "1.2.3" })).rejects.toThrow("reserved");
   await expect(selectedVersion({ root: "/missing", channel: "qa2", version: "1.2.3" })).rejects.toThrow("mismatch");
 });
+it("routes two outputs from one carrier module and rejects escaping output paths", async () => {
+  const root = await fixture();
+  const file = join(root, "pesuite.yaml");
+  const original = await readFile(file, "utf8");
+  const declared = original
+    .replace("capsule: apps/capsule", "capsule: carriers/electron")
+    .replace("  blobs:", "  outputs:\n    capsule: dist/capsule\n  blobs:");
+  await writeFile(file, declared);
+  const config = await configuration(root, "stable");
+  expect(config.units.capsule).toBe(config.units.carrier);
+  expect(config.outputs.capsule).toBe("dist/capsule");
+  await writeFile(file, declared.replace("dist/capsule", "../escape"));
+  await expect(configuration(root, "stable")).rejects.toThrow("bounded dist path");
+});
 it("builds immutable product-owned channel content without rewriting source configuration", async () => {
   const root = await fixture(),
     before = await readFile(join(root, "pesuite.yaml"));
@@ -156,11 +170,11 @@ it("builds immutable product-owned channel content without rewriting source conf
 it("rejects failed builds and escaped sources instead of reusing successful evidence", async () => {
   const root = await fixture();
   await build({ root, channel: "stable" });
-  await writeFile(join(root, "apps/carrier/build.mjs"), "throw new Error('injected build failure');");
+  await writeFile(join(root, "carriers/electron/build.mjs"), "throw new Error('injected build failure');");
   await expect(build({ root, channel: "stable" })).rejects.toThrow();
   await expect(loadBuild(root, "stable")).rejects.toThrow();
   const config = await readFile(join(root, "pesuite.yaml"), "utf8");
-  await writeFile(join(root, "pesuite.yaml"), config.replace("carrier: apps/carrier", "carrier: ../outside"));
+  await writeFile(join(root, "pesuite.yaml"), config.replace("carrier: carriers/electron", "carrier: ../outside"));
   await expect(configuration(root, "stable")).rejects.toThrow();
 }, 30000);
 it("records independent quality failures and checks both archived and materialized bytes", async () => {

@@ -260,7 +260,7 @@ pipeline:
   daemon: apps/daemon
   web: apps/web
   blobs:
-    probe: apps/capsule/dist/probe.bin
+    probe: carriers/electron/dist/capsule/probe.bin
 ```
 
 runtime 声明 stable 基础身份和版本；--channel 从基础产品派生安装身份，其他渠道通过 --number 或完整 --version 选择版本。version 也可用 --base 脱离仓库计算。build 运行各模块自有 build 工具，将 carrier、host.json 与经验证的 content 固化到 .artifacts/distribution/<channel>/versions/<version>/<fingerprint>，不会改源码配置。源码 Git 提交必须属于当前根，不能把外层仓库的提交记为嵌套消费者来源。产物/配置改变或失败构建不得复用旧成功证据。
@@ -365,3 +365,7 @@ The #73 increment unifies runtime unit directories, blob files and observer prep
 Local closeout is tracked by [#75](https://github.com/PerishCode/electron-suite/issues/75). Executable-directory GC is resumable from a durable deleting intent, including interruption after a child was actually removed. Installation fault probes distinguish old-host vacated and new-host confirming windows. These diagnostic checkpoints do not change product readiness policy.
 
 Runtime CAS/view GC does not delete envelope receipts or installation history. Transactions, signed policy/downloads, content, backups and independent executors are retained long term for audit and explicit recovery in this phase. Their disk cost belongs in the next continuous product-journey receipt; cleanup is not implicit in confirmation or shutdown. See AGENTS.md for the retention and recovery contract.
+
+Carrier skeleton: `carriers/electron` contains the stable host and `src/capsule`, compiled independently to `dist/main.mjs` and `dist/capsule/index.mjs`. Shared application code stays in `apps/web` and `apps/daemon`. `carriers/standalone`, `carriers/docker` and `carriers/codexplugin` reserve empty `src`/`tests` trees; they have no runtime or packaging implementation.
+
+Carriers will share the product version and coordinated channel release. Existing workflows currently qualify Electron only. Multi-carrier build/release orchestration and standalone behavior remain pending boundary discussion; placeholder test discovery is not functional qualification.

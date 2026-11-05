@@ -19,7 +19,7 @@
 - Authorized patterns permit routine expansion within their declared scope. For a new responsibility or pattern, obtain scope authorization, declare bounded patterns in pesuite.yaml, and update regression coverage and the relevant index. Do not widen patterns, excludes or exceptions just to silence findings. The structure may evolve through this process.
 - Generated/dependency/runtime directories have fixed owned boundaries; exclusions do not authorize source or resource trees. Source resources must follow the declared resource lifecycle.
 
-- apps contains runnable reference units; packages contains reusable capabilities. Source belongs in src, tests in sibling tests/**/*.test.ts.
+- carriers contains delivery hosts; apps contains shared Web/Daemon reference units; packages contains reusable capabilities. Electron Capsule source is carriers/electron/src/capsule and emits an independent dist/capsule artifact. Source belongs in src, tests in sibling tests/**/*.test.ts.
 - Brief scale: source <=500 lines; module depth <=5 and width <=8; only configured components paths have a width exemption; styles only in packages/components/**/*.less.
 - Modules own source/test tsconfigs and esbuild/Vitest configs. Pin external dependencies to x.y.z and local dependencies to workspace:*; use TS7, Vitest and Biome.
 - These summaries aid navigation; the actual guard findings and configuration determine compliance. Root AGENTS.md and README.md are the repository prose entry points.
@@ -56,7 +56,7 @@
 | packages/sidecar/src/control/connection.ts                      | private manager rendezvous; online identity verification, no inventory authority     |
 | packages/inspect/src / packages/serve/src                       | scoped inspection and managed local static sources                                   |
 | packages/testkit/src/runner.ts / schema.ts                      | reference qualification API and evidence schema                                      |
-| apps/carrier / capsule / web / daemon                           | reference runtime units, not product business code                                   |
+| carriers/electron / capsule / web / daemon                      | reference runtime units, not product business code                                   |
 | .github/workflows / .githooks/pre-commit                        | CI verification and optional local direct guard hook                                 |
 
 ## Iteration workflows
@@ -76,7 +76,7 @@ Use Service.factory/Client.factory with explicit channel+namespace for product r
 Online inventory uses Service.directory or factory.directory; after interruption use readDirectory(root). These are last committed facts, not PID liveness proof. FactoryEntry.phase describes resource authority. There is no legacy reader or migration adapter.
 Group lifecycle writes with Service.session(scope, callback) or Client.session(scope, scopedClient => ...). The manager root plus namespace/channel is the lane; same-scope nesting reenters, cross-scope nesting fails. A scoped Client/Factory expires after its callback. Ordinary business handlers need an already-held controller session before lifecycle writes; business payloads remain caller-owned. Factory grant/revoke/forward/resources/binding entries participate in lifecycle sessions; hosted allocations also require controller sessions from business handlers. These do not provide multi-factory transactions or a resource-use graph.
 An unclean controller connection loss blocks its lane as interrupted after accepted operations drain. No timeout steals ownership; shutdown reports recovery required and retains authority. Do not clear records to resume.
-Hosted control tests are `pnpm --filter @perishcode/sidecar test`; the real Chromium probe is `PERISH_GUI=1 pnpm --filter @perishcode/carrier test` after building.
+Hosted control tests are `pnpm --filter @perishcode/sidecar test`; the real Chromium probe is `PERISH_GUI=1 pnpm --filter @perishcode/reference-electron test` after building.
 Automated Electron runs use HostOptions.automation (probe implies it); retain automation for long-running crash injection. macOS uses accessory policy before ready and non-focusable hidden windows. HostReceipt includes actual show/focus evidence.
 inspect/serve increments are tracked by #44 under #11/#12. Use the published CLI/APIs, never root shortcuts.
 
@@ -107,8 +107,8 @@ Use pipeline module tests and independent slim registry CLI execution for accept
 After module builds, prepare reference content through the formal capability:
 
 ```sh
-pnpm exec pesuite release --capsule apps/capsule/dist --daemon apps/daemon/dist --web apps/web/dist --output .artifacts/seed
-pnpm exec pesuite pack --carrier apps/carrier/dist --seed .artifacts/seed --output .artifacts/package --receipt .artifacts/package.json
+pnpm exec pesuite release --capsule carriers/electron/dist/capsule --daemon apps/daemon/dist --web apps/web/dist --output .artifacts/seed
+pnpm exec pesuite pack --carrier carriers/electron/dist --seed .artifacts/seed --output .artifacts/package --receipt .artifacts/package.json
 ```
 
 These commands do not implicitly compile sources. pack is currently unsigned macOS. The reference carrier is driven by the testkit runtime harness.
@@ -223,3 +223,10 @@ Library.session.read buffers verified content while holding the factory lane, so
 Runtime CAS/views are collected only after references and actual Uses retire. Interrupted deletion remains recorded and resumes only after explicit sidecar recovery; never reset authority or the Library ledger.
 Envelope receipts under the Capsule data grant and installation transaction history are retained long term in this phase. Retained installation materials include job/record/policy, archive, content, old application backup and the independently granted executor/worker. Confirmed status and normal shutdown do not delete them. Failed/unknown transactions, current/recovery content, active executors and user data remain protective. There is no automatic history/backup/cache cleanup entry point; do not invent a time-based purge. Measure retained disk cost during the continuous journey before defining a later maintenance policy.
 After these finite risks pass, proceed to one continuous install/debug/three-level-update/forced-shell/recovery/cold-start/GC journey with channel+namespace isolation and timing/download/disk receipts. Historical matrix cells must retain their original source/package identities rather than being relabelled as current regression runs.
+
+### Carrier skeleton boundary
+
+carriers/electron owns the stable host and src/capsule code. One module emits separate host and Capsule artifacts; never inline Capsule into the stable main bundle. Capsule has no sidecar process identity. apps/web and apps/daemon remain shared application units.
+standalone/docker/codexplugin are private workspace placeholders with empty src/tests trees. They have no build/runtime/packaging implementation and are not qualified or published carriers. Their no-test Vitest result is only discovery of an empty scaffold.
+All carriers will share one product version/channel and one coordinated release. The current workflows still exercise the existing Electron delivery only. Carrier selection, aggregate release receipts, pack/release adapters, compatibility naming and standalone runtime closure remain under discussion; do not implement them or dispatch publication for placeholder carriers.
+The existing pipeline supports explicit per-unit outputs under dist, so host and Capsule can share a module without sharing an artifact. This is build-location plumbing, not multi-carrier release support. Historical receipts keep their original paths and qualification scope. The continuous journey in #77 must wait for the remaining carrier boundary discussion.

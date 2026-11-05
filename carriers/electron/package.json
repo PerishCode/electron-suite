@@ -1,5 +1,5 @@
 {
-  "name": "@perishcode/carrier",
+  "name": "@perishcode/reference-electron",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
+    },
+    "./capsule": {
+      "types": "./dist/capsule/index.d.ts",
+      "default": "./dist/capsule/index.mjs"
     }
   },
   "files": [
@@ -31,6 +35,7 @@
     "electron": "41.3.0",
     "esbuild": "0.28.0",
     "typescript": "7.0.2",
-    "vitest": "4.1.6"
+    "vitest": "4.1.6",
+    "@perishcode/runtime": "workspace:*"
   }
 }
