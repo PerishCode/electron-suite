@@ -33,6 +33,7 @@
 | packages/guard/src/rules/tree.ts / scan/files.ts                | directory allowlists and inspected/pruned boundaries                                 |
 | packages/guard/src/config/defaults.ts                           | policy defaults and rule index                                                       |
 | packages/cli/src/index.ts / lifecycle.ts / pipeline.ts          | sole public bin and legacy/short distribution entry routing                          |
+| packages/carrier                                                | reserved carrier environment contract; definition/registration/propagation only      |
 | packages/pipeline/src                                           | channel identity, immutable build/package receipts, checks and publication           |
 | packages/pack/src/platform.ts                                   | matching native platform/architecture layout and safe output separation              |
 | packages/sidecar/src/runtime/catalog.ts / control/directory.ts  | factory inventory, instance phases and read-only interrupted views                   |
@@ -230,3 +231,8 @@ carriers/electron owns the stable host and src/capsule code. One module emits se
 standalone/docker/codexplugin are private workspace placeholders with empty src/tests trees. They have no build/runtime/packaging implementation and are not qualified or published carriers. Their no-test Vitest result is only discovery of an empty scaffold.
 All carriers will share one product version/channel and one coordinated release. The current workflows still exercise the existing Electron delivery only. Carrier selection, aggregate release receipts, pack/release adapters, compatibility naming and standalone runtime closure remain under discussion; do not implement them or dispatch publication for placeholder carriers.
 The existing pipeline supports explicit per-unit outputs under dist, so host and Capsule can share a module without sharing an artifact. This is build-location plumbing, not multi-carrier release support. Historical receipts keep their original paths and qualification scope. The continuous journey in #77 must wait for the remaining carrier boundary discussion.
+
+### Carrier environment package boundary
+
+packages/carrier reserves the shared contract for defining, registering and propagating carrier environment facts, such as operating-system and runtime versions. Carrier adapters own collection and transport wiring; consumers should eventually receive a stable read-only snapshot, with unknown facts absent. Product version/channel remains release-owned; process identity, ports, paths and lifecycle remain sidecar-owned.
+The package is currently a private workspace scaffold with empty src/tests and independent tool configs. No environment fields, public exports, collectors, registry, global singleton or transport are implemented. No build/publication or downstream dependency is added before the contract is agreed. Its empty test discovery is not functional qualification.
