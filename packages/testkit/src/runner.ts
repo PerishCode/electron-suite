@@ -7,10 +7,10 @@ import { dirname, join, resolve as resolvepath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { Library } from "@perishcode/blob";
-import { asset } from "@perishcode/carrier";
 import { guard } from "@perishcode/guard";
 import { type Channel, channel, type Digest, digest, gates, namespace, startup } from "@perishcode/protocol";
 import { Authority, Feed, type Service as Publisher, serve as publish } from "@perishcode/publish";
+import { asset } from "@perishcode/reference-electron";
 import { compose, type Product, resolve as release } from "@perishcode/release";
 import { Generations } from "@perishcode/runtime";
 import { Client, type Service as Sidecar, serve as sidecar } from "@perishcode/sidecar";
@@ -75,7 +75,17 @@ function pem() {
 }
 
 function path(name: "capsule" | "carrier" | "daemon" | "web"): string {
-  return dirname(fileURLToPath(import.meta.resolve(`@perishcode/${name}`)));
+  return dirname(
+    fileURLToPath(
+      import.meta.resolve(
+        name === "capsule"
+          ? "@perishcode/reference-electron/capsule"
+          : name === "carrier"
+            ? "@perishcode/reference-electron"
+            : `@perishcode/${name}`,
+      ),
+    ),
+  );
 }
 
 async function installation(client: Client, temporary: string, selections: Selections): Promise<Evidence> {

@@ -36,67 +36,6 @@ importers:
         specifier: 4.1.6
         version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
 
-  apps/capsule:
-    devDependencies:
-      '@perishcode/daemon':
-        specifier: workspace:*
-        version: link:../daemon
-      '@perishcode/runtime':
-        specifier: workspace:*
-        version: link:../../packages/runtime
-      '@perishcode/web':
-        specifier: workspace:*
-        version: link:../web
-      '@types/node':
-        specifier: 24.12.2
-        version: 24.12.2
-      esbuild:
-        specifier: 0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: 4.1.6
-        version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
-
-  apps/carrier:
-    dependencies:
-      '@perishcode/electron':
-        specifier: workspace:*
-        version: link:../../packages/electron
-      '@perishcode/release':
-        specifier: workspace:*
-        version: link:../../packages/release
-    devDependencies:
-      '@perishcode/daemon':
-        specifier: workspace:*
-        version: link:../daemon
-      '@perishcode/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@perishcode/sidecar':
-        specifier: workspace:*
-        version: link:../../packages/sidecar
-      '@perishcode/web':
-        specifier: workspace:*
-        version: link:../web
-      '@types/node':
-        specifier: 24.12.2
-        version: 24.12.2
-      electron:
-        specifier: 41.3.0
-        version: 41.3.0
-      esbuild:
-        specifier: 0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: 4.1.6
-        version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
-
   apps/daemon:
     devDependencies:
       '@perishcode/protocol':
@@ -132,6 +71,82 @@ importers:
       jsdom:
         specifier: 29.1.1
         version: 29.1.1
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
+
+  carriers/codexplugin:
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
+
+  carriers/docker:
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
+
+  carriers/electron:
+    dependencies:
+      '@perishcode/electron':
+        specifier: workspace:*
+        version: link:../../packages/electron
+      '@perishcode/release':
+        specifier: workspace:*
+        version: link:../../packages/release
+    devDependencies:
+      '@perishcode/daemon':
+        specifier: workspace:*
+        version: link:../../apps/daemon
+      '@perishcode/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@perishcode/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      '@perishcode/sidecar':
+        specifier: workspace:*
+        version: link:../../packages/sidecar
+      '@perishcode/web':
+        specifier: workspace:*
+        version: link:../../apps/web
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      electron:
+        specifier: 41.3.0
+        version: 41.3.0
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@types/node@24.12.2)(jsdom@29.1.1)(vite@8.3.0(@types/node@24.12.2)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.1))
+
+  carriers/standalone:
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -609,12 +624,6 @@ importers:
       '@perishcode/blob':
         specifier: workspace:*
         version: link:../blob
-      '@perishcode/capsule':
-        specifier: workspace:*
-        version: link:../../apps/capsule
-      '@perishcode/carrier':
-        specifier: workspace:*
-        version: link:../../apps/carrier
       '@perishcode/guard':
         specifier: workspace:*
         version: link:../guard
@@ -627,6 +636,9 @@ importers:
       '@perishcode/publish':
         specifier: workspace:*
         version: link:../publish
+      '@perishcode/reference-electron':
+        specifier: workspace:*
+        version: link:../../carriers/electron
       '@perishcode/release':
         specifier: workspace:*
         version: link:../release

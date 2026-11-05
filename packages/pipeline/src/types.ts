@@ -16,6 +16,7 @@ export interface Configuration {
   namespace: string;
   product: { appid: string; name: string; scheme: string };
   units: Record<"carrier" | "capsule" | "daemon" | "web", string>;
+  outputs: Record<"carrier" | "capsule" | "daemon" | "web", string>;
   blobs: Record<string, string>;
 }
 export interface BuildReceipt {

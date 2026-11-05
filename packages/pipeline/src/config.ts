@@ -34,10 +34,23 @@ export async function configuration(root: string, lane: string): Promise<Configu
   for (const key of ["appid", "name", "scheme", "namespace"])
     if (typeof runtime[key] !== "string") throw new Error(`runtime.${key} is required`);
   if (!Number.isSafeInteger(runtime.carrier) || Number(runtime.carrier) < 1) throw new Error("invalid carrier ABI");
-  const pipeline = record(data.pipeline, ["carrier", "capsule", "daemon", "web", "blobs"]);
+  const pipeline = record(data.pipeline, ["carrier", "capsule", "daemon", "web", "outputs", "blobs"]);
   const units = {} as Configuration["units"];
   for (const key of ["carrier", "capsule", "daemon", "web"] as const) units[key] = await located(root, pipeline[key]);
-  if (new Set(Object.values(units)).size !== 4) throw new Error("pipeline units must have distinct roots");
+  const declared =
+    pipeline.outputs === undefined ? {} : record(pipeline.outputs, ["carrier", "capsule", "daemon", "web"]);
+  const outputs = {} as Configuration["outputs"];
+  for (const key of ["carrier", "capsule", "daemon", "web"] as const) {
+    const value = declared[key] ?? "dist";
+    if (typeof value !== "string" || !/^dist(?:\/[a-z][a-z0-9-]*)*$/.test(value))
+      throw Error("pipeline output must be a bounded dist path");
+    outputs[key] = value;
+  }
+  if (
+    new Set(Object.keys(units).map((k) => join(units[k as keyof typeof units], outputs[k as keyof typeof outputs])))
+      .size !== 4
+  )
+    throw Error("pipeline units must have distinct outputs");
   const blobs: Record<string, string> = {};
   if (pipeline.blobs !== undefined) {
     if (!pipeline.blobs || typeof pipeline.blobs !== "object" || Array.isArray(pipeline.blobs))
@@ -57,6 +70,7 @@ export async function configuration(root: string, lane: string): Promise<Configu
     namespace: namespace(String(runtime.namespace)),
     product: { appid: String(runtime.appid), name: String(runtime.name), scheme: String(runtime.scheme) },
     units,
+    outputs,
     blobs,
   };
 }

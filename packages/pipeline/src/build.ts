@@ -42,7 +42,7 @@ export async function build(selection: Selection): Promise<BuildReceipt> {
     const carrier = join(temporary, "carrier"),
       content = join(temporary, "content");
     const source = async (key: keyof typeof config.units) =>
-      located(config.root, relative(config.root, join(config.units[key], "dist")));
+      located(config.root, relative(config.root, join(config.units[key], config.outputs[key])));
     const blobs = await Promise.all(
       Object.entries(config.blobs).map(async ([slot, path]) => ({ slot, path: await located(config.root, path) })),
     );
