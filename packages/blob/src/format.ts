@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { canonical, digest, valid, verify } from "@perishcode/protocol";
+import { canonical, digest, kinds, valid, verify } from "@perishcode/protocol";
 import { bundleDestination, bundleEntries } from "@perishcode/release";
 import { fs } from "./files.js";
 import type { Resource } from "./types.js";
@@ -14,7 +14,7 @@ export function resource(input: Resource): Resource {
   const a = input.artifact;
   if (
     !a ||
-    a.kind !== "blob" ||
+    !kinds.includes(a.kind) ||
     !valid(a.digest) ||
     !Number.isSafeInteger(a.bytes) ||
     a.bytes < 0 ||
@@ -26,6 +26,7 @@ export function resource(input: Resource): Resource {
   if (input.platform !== undefined && !["darwin", "linux", "win32"].includes(input.platform))
     throw Error("invalid blob platform");
   if (input.arch !== undefined && !["arm64", "x64"].includes(input.arch)) throw Error("invalid blob architecture");
+  if (a.kind !== "blob" && input.type !== "directory") throw Error("executable content requires directory type");
   return structuredClone(input);
 }
 export const key = (value: Resource) => digest(canonical(resource(value)));

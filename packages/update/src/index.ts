@@ -1,5 +1,4 @@
-import { Store } from "@perishcode/blob";
-import { canonical, type Digest, type Envelope, type Pointer, verify } from "@perishcode/protocol";
+import { type Artifact, canonical, type Digest, type Envelope, type Pointer, verify } from "@perishcode/protocol";
 import { Feed, type Release } from "@perishcode/publish";
 import type { Attachment, Expose } from "@perishcode/sidecar";
 
@@ -9,7 +8,12 @@ export interface Source {
 }
 
 export interface Host {
+  cachedContent(artifact: Artifact): Promise<Uint8Array | undefined>;
+  cacheContent(name: string, release: Release): Promise<void>;
+  cachedRelease(value: Envelope): Promise<Release>;
+  releaseContent(name: string): Promise<void>;
   readonly anchor: Digest;
+  readonly currentTarget: Digest;
   content(): Promise<Release>;
   expose<M>(service: string, options: Omit<Expose<M>, "identity">): Promise<Attachment>;
 }
@@ -51,7 +55,7 @@ export async function watch(host: Host, options: Options) {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let controller: AbortController | undefined;
-  let store: Store;
+  let reference: string;
   let lane: Parameters<Feed["head"]>[0];
   let observed: { revision: number; head?: Pointer } | undefined;
   let prepared: Envelope | undefined;
@@ -64,7 +68,7 @@ export async function watch(host: Host, options: Options) {
     state = { ...state, phase: "checking", checks: state.checks + 1, error: undefined };
     const execute = async () => {
       try {
-        current = await host.content();
+        if (host.currentTarget !== current.envelope.digest) current = await host.content();
         state.current = current.envelope.digest;
         const head = await feed.head(lane, abort.signal);
         if (
@@ -73,11 +77,13 @@ export async function watch(host: Host, options: Options) {
             (head.revision === observed.revision && canonical(head.head ?? null) !== canonical(observed.head ?? null)))
         )
           throw new Error("distribution revision regressed or conflicted");
+        const samePrepared = prepared?.digest === head.head?.generation && observed?.head?.proof === head.head?.proof;
         observed = head;
         state.revision = head.revision;
         if (head.head && refused.has(head.head.generation))
           throw new Error(`candidate activation refused: ${refused.get(head.head.generation)}`);
         if (!head.head || head.head.generation === current.envelope.digest) {
+          await host.releaseContent(reference);
           prepared = undefined;
           state = { ...state, phase: "idle", prepared: undefined };
           return;
@@ -86,9 +92,13 @@ export async function watch(host: Host, options: Options) {
           state = { ...state, phase: "idle", prepared: undefined };
           return;
         }
+        if (samePrepared && !options.activate) {
+          state = { ...state, phase: "prepared" };
+          return;
+        }
         const release = await feed.release(lane, head.head, {
           signal: abort.signal,
-          cached: async (artifact) => ((await store.has(artifact)) ? store.read(artifact) : undefined),
+          cached: (artifact) => host.cachedContent(artifact),
         });
         const before = current.envelope.generation,
           after = release.envelope.generation;
@@ -100,6 +110,7 @@ export async function watch(host: Host, options: Options) {
         )
           throw new Error("candidate requires capsule, blob or carrier update");
         if (layer === "capsule" && canonical(before.capsule) === canonical(after.capsule)) {
+          await host.releaseContent(reference);
           ignored = release.envelope.digest;
           state = { ...state, phase: "idle", prepared: undefined };
           return;
@@ -111,9 +122,9 @@ export async function watch(host: Host, options: Options) {
         for (const asset of release.assets) {
           abort.signal.throwIfAborted();
           if (!verify(asset.artifact, asset.bytes)) throw new Error("candidate integrity mismatch");
-          await store.put(asset.artifact.kind, asset.artifact.slot, asset.bytes);
         }
         abort.signal.throwIfAborted();
+        await host.cacheContent(reference, release);
         prepared = release.envelope;
         state = { ...state, phase: "prepared", prepared: { target: prepared.digest, changed: [...changed] } };
         if (options.activate) {
@@ -122,6 +133,7 @@ export async function watch(host: Host, options: Options) {
             const result = await options.activate(release);
             if (result.generation !== release.envelope.digest) throw new Error("activation receipt target mismatch");
             current = release;
+            await host.releaseContent(reference);
             prepared = undefined;
             state = { ...state, phase: "idle", current: result.generation, prepared: undefined };
           } catch (error) {
@@ -167,10 +179,9 @@ export async function watch(host: Host, options: Options) {
       initialize: async (context) => {
         lane = context.identity.channel;
         if (context.identity.generation !== host.anchor) throw new Error("discovery host generation mismatch");
-        store = await Store.open({ root: context.roots.resource });
+        reference = `observer:${context.identity.service}:${context.incarnation}`;
         for (const asset of initial.assets) {
           if (!verify(asset.artifact, asset.bytes)) throw new Error("initial content integrity mismatch");
-          await store.put(asset.artifact.kind, asset.artifact.slot, asset.bytes);
         }
         // Start after initialize returns, so service publication precedes polling.
         timer = context.background(() =>
@@ -179,9 +190,12 @@ export async function watch(host: Host, options: Options) {
           }, 0),
         );
       },
-      stop: async () => {
+      quiesce: async () => {
         disarm();
         await pending;
+      },
+      stop: async () => {
+        await host.releaseContent(reference);
         state = { ...state, phase: "stopped" };
       },
     },
@@ -197,17 +211,8 @@ export async function watch(host: Host, options: Options) {
     candidate: async (): Promise<Release | undefined> => {
       if (stopped) throw new Error("discovery is stopped");
       const value = prepared ? structuredClone(prepared) : undefined;
-      if (!value || state.phase !== "prepared") return undefined;
-      const g = value.generation;
-      return {
-        envelope: value,
-        assets: await Promise.all(
-          [g.capsule, g.daemon, g.web, ...g.blobs].map(async (artifact) => ({
-            artifact,
-            bytes: await store.read(artifact),
-          })),
-        ),
-      };
+      if (!value || !["prepared", "checking"].includes(state.phase)) return undefined;
+      return host.cachedRelease(value);
     },
   };
 }

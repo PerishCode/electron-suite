@@ -5,6 +5,7 @@ import { Library } from "@perishcode/blob";
 
 import {
   type Artifact,
+  canonical,
   channel,
   digest,
   type Envelope,
@@ -28,11 +29,13 @@ function artifact(kind: Kind, slot: string, bytes: string): Artifact {
 }
 
 function fixture(seed: string): { contents: Content[]; envelope: Envelope } {
+  const archive = (value: string) =>
+    canonical({ files: [{ path: "fixture", bytes: Buffer.from(value).toString("base64"), mode: 0o644 }], schema: 1 });
   const values = {
     blob: `${seed}blob`,
-    capsule: `${seed}capsule`,
-    daemon: `${seed}daemon`,
-    web: `${seed}web`,
+    capsule: archive(`${seed}capsule`),
+    daemon: archive(`${seed}daemon`),
+    web: archive(`${seed}web`),
   };
   const generation: Generation = {
     blobs: [artifact("blob", "model", values.blob)],

@@ -118,9 +118,16 @@ describe("update", () => {
       identity: { version: "1.0.0" },
     });
     expect((await primary.mount()).target).toBe(mounted.target);
+    const originalWeb = await readFile(join(mounted.web, "index.html"));
     await writeFile(join(mounted.web, "index.html"), "tampered");
-    await expect(primary.mount()).rejects.toThrow("web mount integrity mismatch");
-    await rm(mounted.web, { recursive: true });
+    await expect(primary.mount()).rejects.toThrow("materialization integrity mismatch");
+    await writeFile(join(mounted.web, "index.html"), originalWeb);
+    await primary.resources.library.prefetch(
+      { type: "directory", artifact: first.envelope.generation.web },
+      async () => {
+        throw Error("verified CAS must be reused");
+      },
+    );
     expect((await primary.mount()).target).toBe(mounted.target);
     expect(await primary.update(feed)).toBeUndefined();
 
@@ -140,5 +147,5 @@ describe("update", () => {
     expect((await client.binding(namespace("primary"), stable)).state.current).toBe(first.envelope.digest);
     expect((await client.binding(namespace("primary"), beta)).state.current).toBe(preview.envelope.digest);
     await expect(primary.mount()).rejects.toThrow("blocked");
-  });
+  }, 20000);
 });

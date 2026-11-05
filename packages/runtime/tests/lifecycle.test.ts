@@ -225,3 +225,66 @@ it("waits for adapter initialization before host cleanup when quit arrives durin
     await f.close();
   }
 }, 15000);
+
+it("drains old Web reads across epochs and preserves occupancy after renderer stop failure", async () => {
+  const f = await fixture();
+  let release = () => {},
+    failedStop = false,
+    stops = 0;
+  const stop = async () => {
+    stops++;
+    if (failedStop) throw Error("renderer stop failed");
+  };
+  try {
+    await f.session.activate();
+    await f.session.start();
+    await f.session.documentStart(stop);
+    await f.session.documentReady();
+    const old = f.session.documentNonce();
+    let entered = () => {};
+    const started = new Promise<void>((done) => {
+        entered = done;
+      }),
+      gate = new Promise<void>((done) => {
+        release = done;
+      });
+    const reading = f.session.webAsset(async (root) => {
+      entered();
+      await gate;
+      return readFile(join(root, "index.html"), "utf8");
+    });
+    await started;
+    await f.session.documentStart(stop);
+    const next = f.session.documentNonce();
+    assert.notEqual(old, next);
+    let ready = false;
+    const drain = f.session.documentReady().then(() => {
+      ready = true;
+    });
+    await new Promise((done) => setImmediate(done));
+    assert.equal(ready, false);
+    const before = await f.session.blobStatus(),
+      web = Object.values(before.entries).find((e) => e.resource.artifact.kind === "web")!;
+    assert.deepEqual(web.uses.map((u) => u.owner.epoch).sort(), [`web:${old}`, `web:${next}`].sort());
+    assert.ok(web.uses.every((u) => u.owner.service === "electron"));
+    release();
+    assert.equal(await reading, "probe");
+    await drain;
+    const live = Object.values((await f.session.blobStatus()).entries).find((e) => e.resource.artifact.kind === "web")!;
+    assert.equal(live.uses.length, 1);
+    failedStop = true;
+    await assert.rejects(f.session.close(), /renderer stop failed/);
+    assert.equal(f.session.acceptDocument(next), false);
+    const retained = Object.values((await f.session.blobStatus()).entries).find(
+      (e) => e.resource.artifact.kind === "web",
+    )!;
+    assert.equal(retained.uses.length, 1);
+    failedStop = false;
+    await f.session.close();
+    assert.equal(stops, 2);
+  } finally {
+    failedStop = false;
+    release();
+    await f.close();
+  }
+}, 20000);

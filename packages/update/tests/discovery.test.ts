@@ -3,10 +3,20 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { channel, digest, type Generation, identify, namespace } from "@perishcode/protocol";
+import { Library, type Resource, resourceKey } from "@perishcode/blob";
+import {
+  type Artifact,
+  canonical,
+  channel,
+  digest,
+  type Envelope,
+  type Generation,
+  identify,
+  namespace,
+} from "@perishcode/protocol";
 import { Authority, Feed, type Release, writeFeed } from "@perishcode/publish";
 import { Sources } from "@perishcode/serve";
-import type { Context } from "@perishcode/sidecar";
+import type { Context, Factory } from "@perishcode/sidecar";
 import { serve } from "@perishcode/sidecar";
 import { it } from "vitest";
 import { type Status, watch } from "@/index.js";
@@ -17,8 +27,26 @@ function release(web: string, daemon = "daemon", capsule = "capsule"): Release {
     { kind: "web", value: web },
     { kind: "daemon", value: daemon },
   ].map(({ kind, value }) => ({
-    artifact: { kind, slot: "main", bytes: Buffer.byteLength(value), digest: digest(value) },
-    bytes: value,
+    artifact: {
+      kind,
+      slot: "main",
+      bytes: Buffer.byteLength(
+        canonical({
+          schema: 1,
+          files: [{ path: "fixture", mode: 0o644, bytes: Buffer.from(value).toString("base64") }],
+        }),
+      ),
+      digest: digest(
+        canonical({
+          schema: 1,
+          files: [{ path: "fixture", mode: 0o644, bytes: Buffer.from(value).toString("base64") }],
+        }),
+      ),
+    },
+    bytes: canonical({
+      schema: 1,
+      files: [{ path: "fixture", mode: 0o644, bytes: Buffer.from(value).toString("base64") }],
+    }),
   }));
   const generation = {
     schema: 1,
@@ -29,6 +57,53 @@ function release(web: string, daemon = "daemon", capsule = "capsule"): Release {
     blobs: [],
   } as Generation;
   return { envelope: { schema: 1, generation, digest: identify(generation) }, assets: assets as Release["assets"] };
+}
+async function contentHost(factory: Factory, initial: Release) {
+  let library!: Library;
+  const attachment = await factory.expose({
+    identity: { service: "electron", generation: initial.envelope.digest },
+    handlers: {},
+    lifecycle: {
+      initialize: async (context) => {
+        library = await Library.open({ factory, context, name: "content", retentionMs: 0 });
+      },
+      stop: async () => {},
+    },
+  });
+  const spec = (artifact: Artifact): Resource => ({ artifact, type: artifact.kind === "blob" ? "file" : "directory" });
+  const list = (value: Envelope) => {
+    const g = value.generation;
+    return [g.capsule, g.daemon, g.web, ...g.blobs];
+  };
+  await library.retain("current", initial.envelope.digest, list(initial.envelope).map(spec));
+  for (const a of initial.assets) await library.prefetch(spec(a.artifact), async () => Buffer.from(a.bytes));
+  return {
+    library,
+    close: async () => {
+      await library.close();
+      await attachment.close();
+    },
+    host: {
+      cacheContent: async (name: string, release: Release) =>
+        library.session(async (l) => {
+          await l.retain("prepared", name, list(release.envelope).map(spec));
+          for (const a of release.assets) await l.prefetch(spec(a.artifact), async () => Buffer.from(a.bytes));
+        }),
+      releaseContent: (name: string) => library.session((l) => l.unretain("prepared", name)),
+      cachedContent: (artifact: Artifact) =>
+        library.session(async (l) =>
+          (await l.status()).entries[resourceKey(spec(artifact))]?.phase === "ready"
+            ? l.read(spec(artifact))
+            : undefined,
+        ),
+      cachedRelease: (value: Envelope) =>
+        library.session(async (l) => {
+          const assets: Release["assets"] = [];
+          for (const artifact of list(value)) assets.push({ artifact, bytes: await l.read(spec(artifact)) });
+          return { envelope: value, assets };
+        }),
+    },
+  };
 }
 async function until(read: () => Status, accept: (value: Status) => boolean) {
   const end = Date.now() + 5000;
@@ -57,9 +132,14 @@ it("automatically prepares signed leaf candidates, rejects faults/regressions an
   const manager = await serve(join(root, "manager.sock"), { root: join(root, "manager") });
   const factory = manager.factory(scope),
     before = await factory.binding();
+  const cache = await contentHost(factory, initial);
   const observer = await watch(
     {
+      ...cache.host,
       anchor: initial.envelope.digest,
+      get currentTarget() {
+        return initial.envelope.digest;
+      },
       content: async () => initial,
       expose: (name, options) =>
         factory.expose({ ...options, identity: { service: name, generation: initial.envelope.digest } }),
@@ -125,11 +205,13 @@ it("automatically prepares signed leaf candidates, rejects faults/regressions an
     await observer.close();
     assert.ok(Date.now() - began < 1000);
     assert.equal(observer.status().phase, "stopped");
+    assert.ok((await cache.library.status()).references.every((r) => r.kind !== "prepared"));
     await assert.rejects(observer.check(), /stopped/);
     assert.deepEqual(await factory.binding(), before);
     assert.ok(!(await readFile(join(content, "channels", lane), "utf8")).includes("PRIVATE KEY"));
   } finally {
     await observer.close();
+    await cache.close();
     await source.close();
     await manager.close();
     await rm(root, { recursive: true, force: true });
@@ -157,9 +239,14 @@ it("starts a fresh controller for background activation without retaining the in
   let context: Context | undefined;
   let applied = 0;
   let actual = initial;
+  const cache = await contentHost(factory, initial);
   const observer = await watch(
     {
+      ...cache.host,
       anchor: initial.envelope.digest,
+      get currentTarget() {
+        return actual.envelope.digest;
+      },
       content: async () => actual,
       expose: (name, options) =>
         factory.expose({
@@ -206,6 +293,7 @@ it("starts a fresh controller for background activation without retaining the in
     assert.notEqual(observer.status().phase, "idle");
   } finally {
     await observer.close();
+    await cache.close();
     await source.close();
     await manager.close();
     await rm(root, { recursive: true, force: true });
@@ -235,9 +323,14 @@ it("keeps the stable Capsule observer separate and drains an accepted activation
   const sources = await Sources.open({ data: join(root, "sources"), scope, sources: { feed: { directory: content } } });
   const manager = await serve(join(root, "manager.sock"), { root: join(root, "state") }),
     factory = manager.factory(scope);
+  const cache = await contentHost(factory, initial);
   const observer = await watch(
     {
+      ...cache.host,
       anchor: initial.envelope.digest,
+      get currentTarget() {
+        return actual.envelope.digest;
+      },
       content: async () => actual,
       expose: (name, options) =>
         factory.expose({ ...options, identity: { service: name, generation: initial.envelope.digest } }),
@@ -279,6 +372,7 @@ it("keeps the stable Capsule observer separate and drains an accepted activation
     ]);
     assert.equal(actual.envelope.digest, candidate.envelope.digest);
     assert.equal(observer.status().phase, "stopped");
+    assert.ok((await cache.library.status()).references.every((r) => r.kind !== "prepared"));
     const directory = await factory.directory();
     assert.equal(directory.instances.find((i) => i.service === "bootstrapupdates")?.phase, "retired");
     assert.ok(directory.instances.every((i) => i.service !== "capsule"));

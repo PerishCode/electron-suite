@@ -81,7 +81,7 @@ export async function startElectron(options: HostOptions): Promise<void> {
         await capsuleObserver?.close();
         await drained;
         await gate!.show(error, { runtime: await session?.snapshot() });
-        window?.destroy();
+        if (window && !window.isDestroyed()) window.destroy();
         if (installing) await installing.start();
       })().catch((error) => {
         process.stderr.write(`${String(error)}\n`);

@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { mkdir, open, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { Library } from "@perishcode/blob";
-import { Store } from "@perishcode/blob";
 import {
   type Artifact,
   type Channel,
@@ -19,7 +18,7 @@ import {
   verify,
 } from "@perishcode/protocol";
 import type { Feed } from "@perishcode/publish";
-import { bundle, decode, materialize } from "@perishcode/release";
+import { decode } from "@perishcode/release";
 import type { Change, Client, Factory, Journal } from "@perishcode/sidecar";
 import { ContentResources } from "./control/content.js";
 
@@ -80,30 +79,6 @@ async function persist(path: string, bytes: string | Uint8Array): Promise<void> 
   }
 }
 
-async function exact(path: string, artifact: Artifact): Promise<boolean> {
-  try {
-    return verify(artifact, await bundle(path));
-  } catch (fault) {
-    if ((fault as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw fault;
-  }
-}
-
-async function restore(store: Store, artifact: Artifact, root: string): Promise<string> {
-  const destination = join(root, artifact.kind);
-  if (await exact(destination, artifact)) return destination;
-  const temporary = `${destination}.${randomUUID()}.tmp`;
-  await materialize(await store.read(artifact), temporary);
-  try {
-    await rename(temporary, destination);
-  } catch (fault) {
-    await rm(temporary, { force: true, recursive: true });
-    if (!["EEXIST", "ENOTEMPTY"].includes((fault as NodeJS.ErrnoException).code ?? "")) throw fault;
-  }
-  if (!(await exact(destination, artifact))) throw new Error(`${artifact.kind} mount integrity mismatch`);
-  return destination;
-}
-
 export class Generations {
   readonly factory: Factory;
   readonly resources: ContentResources;
@@ -114,19 +89,7 @@ export class Generations {
         JSON.parse(await readFile(join(data.value, "generations", `${target.slice(7)}.json`), "utf8")),
       );
       if (manifest.digest !== target) throw new Error("generation receipt mismatch");
-      const cas = await this.factory.grant({ kind: "cas", name: "artifact", scope: "factory" });
-      const store = await Store.open({ root: cas.value });
-      return {
-        envelope: manifest,
-        assets: [
-          ...(await this.resources.bytes(manifest)),
-          ...(await Promise.all(
-            [manifest.generation.capsule, manifest.generation.daemon, manifest.generation.web].map(
-              async (artifact) => ({ artifact, bytes: await store.read(artifact) }),
-            ),
-          )),
-        ],
-      };
+      return { envelope: manifest, assets: await this.resources.bytes(manifest) };
     });
   }
   constructor(
@@ -140,6 +103,14 @@ export class Generations {
     this.resources = new ContentResources(library, this.factory);
   }
 
+  async cache(name: string, release: { envelope: Envelope; assets: Content[] }) {
+    return this.factory.session(async () => {
+      const manifest = envelope(release.envelope);
+      const data = await this.factory.grant({ kind: "data", name: "capsule", scope: "factory" });
+      await persist(join(data.value, "generations", `${manifest.digest.slice(7)}.json`), canonical(manifest));
+      await this.resources.prepare(manifest, release.assets, name);
+    });
+  }
   async update(feed: Feed): Promise<Attempt | undefined> {
     return this.factory.session(() => this.updateWithin(feed));
   }
@@ -171,24 +142,12 @@ export class Generations {
     });
 
     try {
-      const cas = await this.factory.grant({
-        kind: "cas",
-        name: "artifact",
-        scope: "factory",
-      });
-      const store = await Store.open({ root: cas.value });
-      await mkdir(staging.value, { mode: 0o700, recursive: true });
       for (const content of contents) {
         const artifact = expected.get(key(content.artifact));
-        if (!artifact || !verify(artifact, content.bytes)) throw new Error("artifact verification failed");
+        if (!artifact || !verify(artifact, content.bytes)) throw Error("artifact verification failed");
         expected.delete(key(artifact));
-        if (artifact.kind === "blob") continue;
-        const path = join(staging.value, artifact.digest.slice(7));
-        await write(path, content.bytes);
-        const stored = await store.put(artifact.kind, artifact.slot, await readFile(path));
-        if (key(stored) !== key(artifact)) throw new Error("artifact identity mismatch");
       }
-      if (expected.size > 0) throw new Error("generation content missing");
+      if (expected.size) throw Error("generation content missing");
       const data = await this.factory.grant({
         kind: "data",
         name: "capsule",
@@ -367,29 +326,9 @@ export class Generations {
     const manifest = envelope(JSON.parse(await readFile(receipt, "utf8")));
     if (manifest.digest !== target) throw new Error("generation receipt mismatch");
     if (manifest.generation.carrier > this.carrier) throw new Error("incompatible carrier ABI");
-    const cas = await this.factory.grant({
-      kind: "cas",
-      name: "artifact",
-      scope: "factory",
-    });
-    const runtime = await this.factory.grant({
-      kind: "data",
-      name: "runtime",
-      scope: "factory",
-    });
-    const root = join(runtime.value, target.slice(7));
-    const store = await Store.open({ root: cas.value });
-    await mkdir(root, { mode: 0o700, recursive: true });
-    const blobs = await this.resources.paths(manifest);
-    const capsule = await restore(store, manifest.generation.capsule, root);
-    const release = decode(await readFile(join(capsule, "release.json"), "utf8"));
+    const paths = await this.resources.paths(manifest);
+    const release = decode(await readFile(join(paths.capsule, "release.json"), "utf8"));
     if (release.channel !== this.channel) throw new Error("capsule release channel mismatch");
-    return {
-      blobs,
-      capsule,
-      daemon: await restore(store, manifest.generation.daemon, root),
-      target,
-      web: await restore(store, manifest.generation.web, root),
-    };
+    return { ...paths, target };
   }
 }

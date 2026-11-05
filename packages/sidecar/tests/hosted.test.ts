@@ -280,3 +280,57 @@ it("retries partial grant retirement without releasing an already retired grant 
     spy.mockRestore();
   }
 });
+
+it("drains a background controller before the remote stop lane and runs quiesce once", async () => {
+  const { server, client, options } = await fixture();
+  const gate = deferred();
+  let work: Promise<void> = Promise.resolve(),
+    quiesces = 0,
+    stops = 0;
+  const factory = client.factory(identity);
+  options.lifecycle.initialize = async (context) => {
+    work = context.background(() =>
+      gate.promise.then(() =>
+        factory.session(async (f) => {
+          await f.grant({ kind: "data", name: "drained", scope: "factory" });
+        }),
+      ),
+    );
+  };
+  options.lifecycle.quiesce = async () => {
+    quiesces++;
+    gate.done();
+    await work;
+  };
+  options.lifecycle.stop = async () => {
+    stops++;
+    expect((await factory.resources()).grants.some((g) => g.name === "drained")).toBe(true);
+  };
+  const attached = await server.expose(options),
+    peer = await client.connect(identity);
+  await Promise.all([peer.stop(), attached.close(), attached.closed]);
+  expect(quiesces).toBe(1);
+  expect(stops).toBe(1);
+});
+
+it("preserves ownership after quiesce failure and retries before retiring resources", async () => {
+  const { server, client, options } = await fixture();
+  let fail = true,
+    stops = 0;
+  options.lifecycle.quiesce = async () => {
+    if (fail) throw Error("background still owns work");
+  };
+  options.lifecycle.stop = async () => {
+    stops++;
+  };
+  const attached = await server.expose(options),
+    peer = await client.connect(identity);
+  await expect(peer.stop()).rejects.toThrow("background still owns work");
+  expect((await peer.probe()).phase).toBe("failed");
+  expect(stops).toBe(0);
+  expect((await stat(attached.context.roots.runtime)).isDirectory()).toBe(true);
+  fail = false;
+  await attached.close();
+  await attached.closed;
+  expect(stops).toBe(1);
+});

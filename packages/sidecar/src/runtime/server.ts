@@ -161,11 +161,11 @@ function accept(server: Server, runtime: Runtime, authority: string, endpoint: s
           socket.once("close", () => controller.abort());
           return {
             value: await ambient.run({ ...ambient.getStore(), endpoint, actor: request.actor }, () =>
-              scope
+              scope && !(request.type === "invoke" && request.operation === "stop" && !request.session)
                 ? (cleanup
                     ? runtime.sessions.cleanup.bind(runtime.sessions)
                     : runtime.sessions.run.bind(runtime.sessions))(scope, operation, request.session, controller.signal)
-                : dispatch(runtime, authority, request),
+                : operation(),
             ),
           };
         })

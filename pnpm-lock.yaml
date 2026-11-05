@@ -661,9 +661,6 @@ importers:
 
   packages/update:
     dependencies:
-      '@perishcode/blob':
-        specifier: workspace:*
-        version: link:../blob
       '@perishcode/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -674,6 +671,9 @@ importers:
         specifier: workspace:*
         version: link:../sidecar
     devDependencies:
+      '@perishcode/blob':
+        specifier: workspace:*
+        version: link:../blob
       '@perishcode/serve':
         specifier: workspace:*
         version: link:../serve

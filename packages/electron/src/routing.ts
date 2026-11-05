@@ -117,7 +117,7 @@ export async function local(request: Request, session: Session): Promise<Respons
   }
   if (!url.pathname.startsWith(prefix)) return new Response("not found", { status: 404 });
   url.pathname = `/${url.pathname.slice(prefix.length)}`;
-  return asset(session.mount.web, new Request(url, request), "'self'");
+  return session.webAsset((root) => asset(root, new Request(url, request), "'self'"));
 }
 export function routes(ipc: IpcMain, protocol: Protocol, window: BrowserWindow, session: Session) {
   let ipcCalls = 0,
