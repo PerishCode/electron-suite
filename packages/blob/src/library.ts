@@ -82,10 +82,13 @@ export class Library {
         instance.phase !== "initializing"
       )
         throw Error("open blob library during real owner initialization");
+      const established = (await factory.resources()).grants.some((g) => g.kind === "data" && g.name === "blob");
       const data = await factory.grant({ kind: "data", name: "blob", scope: "factory" }),
         cas = await factory.grant({ kind: "cas", name: "blob", scope: "factory" }),
         cache = await factory.grant({ kind: "cache", name: "blob", scope: "factory" });
       for (const root of [data.value, cas.value, cache.value]) await anchor(root);
+      if (established && !(await exists(join(data.value, "library.json"))))
+        throw Error("blob library metadata missing; reconciliation required");
       await fs.mkdir(join(cache.value, "views"), { recursive: true, mode: 0o700 });
       await anchor(join(cache.value, "views"));
       const state = await read(join(data.value, "library.json"));
@@ -129,6 +132,7 @@ export class Library {
   private async state() {
     for (const path of [this.roots.data, this.roots.cas, this.roots.cache, join(this.roots.cache, "views")])
       await anchor(path);
+    if (!(await exists(this.path()))) throw Error("blob library metadata missing; reconciliation required");
     const state = await read(this.path());
     if (canonical(state.owner) !== canonical(this.owner)) throw Error("blob library owner changed");
     for (const [id, entry] of Object.entries(state.entries)) {

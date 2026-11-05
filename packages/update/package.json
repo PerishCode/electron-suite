@@ -1,6 +1,6 @@
 {
   "name": "@perishcode/update",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "type": "module",
   "exports": {
     ".": {
