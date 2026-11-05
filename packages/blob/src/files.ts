@@ -47,7 +47,7 @@ function owner(value: Owner) {
   )
     throw Error("invalid blob owner witness");
 }
-export async function read(path: string): Promise<State> {
+export async function read(path: string, fresh = false): Promise<State> {
   try {
     const info = await fs.lstat(path);
     if (!info.isFile() || info.isSymbolicLink()) throw Error("blob state must be a regular file");
@@ -112,6 +112,7 @@ export async function read(path: string): Promise<State> {
     return state;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (!fresh) throw Error("blob library metadata missing; reconciliation required");
     return { schema: 1, entries: {}, references: [] };
   }
 }

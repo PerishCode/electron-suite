@@ -91,7 +91,7 @@ export class Library {
         throw Error("blob library metadata missing; reconciliation required");
       await fs.mkdir(join(cache.value, "views"), { recursive: true, mode: 0o700 });
       await anchor(join(cache.value, "views"));
-      const state = await read(join(data.value, "library.json"));
+      const state = await read(join(data.value, "library.json"), !established);
       if (state.owner && alive(state.owner, directory) !== "retired")
         throw Error("blob library already owned or unresolved");
       const owner: Owner = {
